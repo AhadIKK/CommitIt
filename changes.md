@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-09-30 — Render live (API-driven setup)
+- Postgres `commitit-db` (dpg-..., free, v16, singapore) + web service `commitit` (srv-..., free, Node 22, singapore) at `https://commitit-brqq.onrender.com`.
+- `DATABASE_URL` (internal string) set via API; `GITHUB_WEBHOOK_SECRET=change-me-in-dashboard` placeholder. Deploy `dep-dauda0...` live, `/health` → `{ok:true}`.
+- Note: free Postgres expires 2026-10-30 (Render policy); free web sleeps when idle (~30s cold start).
+- API key used via env var only, never committed (verified clean).
+
 ## 2026-09-30 — Revert hybrid, single-stack Node (per Downloads/plan.md)
 - Dropped: Python service, `PYTHON_URL`, private HTTP contract, dual test suites, compose `python` service.
 - Now: `src/brain/` in-process TS functions, PG job table with `status/attempts/next_retry_at` polled via `SKIP LOCKED`, all enqueueing via `enqueueJob()` for future BullMQ swap.
