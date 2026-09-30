@@ -1,8 +1,10 @@
-# Render Blueprint — CommitIt (single-stack Node API + Postgres)
+# Render Blueprint — CommitIt (single-stack Node API + Supabase Postgres)
 # Dashboard: Render → New → Blueprint → select AhadIKK/CommitIt repo.
 # Env vars to set in dashboard (never commit secrets):
+#   DATABASE_URL (Supabase pooled 6543 + ?pgbouncer=true),
+#   DIRECT_URL (Supabase direct 5432, for `prisma migrate deploy`),
 #   GITHUB_WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_DEFAULT_CHAT_ID,
-#   AI_PROVIDER, AI_API_KEY (Phase 4+). DATABASE_URL + PORT are auto-injected.
+#   AI_PROVIDER, AI_API_KEY (Phase 4+). PORT is set below.
 
 services:
   - type: web
@@ -19,16 +21,12 @@ services:
       - key: PORT
         value: "3000"
       - key: DATABASE_URL
-        fromDatabase:
-          name: commitit-db
-          property: connectionString
+        sync: false
+      - key: DIRECT_URL
+        sync: false
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_DEFAULT_CHAT_ID
         sync: false
-
-databases:
-  - name: commitit-db
-    plan: free
