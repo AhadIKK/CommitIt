@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  telegramUserId String   @unique
+  repos          Repo[]
+  createdAt      DateTime @default(now())
+}
+
+model Chat {
+  id             String         @id @default(cuid())
+  telegramChatId String         @unique
+  type           String // dm | group
+  subscriptions  Subscription[]
+  createdAt      DateTime       @default(now())
+}
+
+model Repo {
+  id            String   @id @default(cuid())
+  fullName      String   @unique
+  webhookSecret String?
+  ownerUserId   String?
+  owner         User?    @relation(fields: [ownerUserId], references: [id])
+  aiEnabled     Boolean  @default(true)
+  defaultBranch String?
+  subscriptions Subscription[]
+  commits       Commit[]
+  issues        Issue[]
+  milestones    Milestone[]
+  pullRequests  PullRequest[]
+  builds        Build[]
+  createdAt     DateTime @default(now())
+}
+
+model Subscription {
+  id               String    @id @default(cuid())
+  chatId           String
+  chat             Chat      @relation(fields: [chatId], references: [id])
+  repoId           String
+  repo             Repo      @relation(fields: [repoId], references: [id])
+  digestMode       String    @default("daily") // instant | hourly | daily | weekly
+  quietHoursStart  String?
+  quietHoursEnd    String?
+  filterBranches   String[]  @default([])
+  filterAuthors    String[]  @default([])
+  filterEventTypes String[]  @default([])
+  isMuted          Boolean   @default(false)
+  notifications    Notification[]
+  createdAt        DateTime  @default(now())
+
+  @@unique([chatId, repoId])
+}
+
+model Author {
+  id          String   @id @default(cuid())
+  githubLogin String   @unique
+  displayName String?
+  commits     Commit[]
+  pullRequests PullRequest[]
+}
+
+model Commit {
+  id                 String   @id @default(cuid())
+  sha                String
+  repoId             String
+  repo               Repo     @relation(fields: [repoId], references: [id])
+  authorId           String?
+  author             Author?  @relation(fields: [authorId], references: [id])
+  message            String
+  category           String?
+  aiSummary          String?
+  branch             String?
+  additions          Int?
+  deletions          Int?
+  isMerge            Boolean  @default(false)
+  isForcePushContext Boolean  @default(false)
+  secretFlag         Boolean  @default(false)
+  issueId            String?
+  issue              Issue?   @relation(fields: [issueId], references: [id])
+  committedAt        DateTime?
+  createdAt          DateTime @default(now())
+
+  @@unique([repoId, sha])
+}
+
+model Issue {
+  id         String    @id @default(cuid())
+  repoId     String
+  repo       Repo      @relation(fields: [repoId], references: [id])
+  number     Int
+  title      String
+  sizeWeight Int       @default(1)
+  state      String    @default("open") // open | closed
+  milestoneId String?
+  milestone  Milestone? @relation(fields: [milestoneId], references: [id])
+  closedByPrId String?
+  commits    Commit[]
+  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+
+  @@unique([repoId, number])
+}
+
+model Milestone {
+  id        String   @id @default(cuid())
+  repoId    String
+  repo      Repo     @relation(fields: [repoId], references: [id])
+  githubId  Int?
+  title     String
+  dueDate   DateTime?
+  state     String   @default("open") // open | closed
+  issues    Issue[]
+  createdAt DateTime @default(now())
+
+  @@unique([repoId, githubId])
+}
+
+model PullRequest {
+  id             String    @id @default(cuid())
+  repoId         String
+  repo           Repo      @relation(fields: [repoId], references: [id])
+  number         Int
+  title          String
+  state          String    @default("open") // open | closed | merged
+  authorId       String?
+  author         Author?   @relation(fields: [authorId], references: [id])
+  baseBranch     String?
+  headBranch     String?
+  mergedAt       DateTime?
+  linkedIssueIds Int[]     @default([])
+  createdAt      DateTime  @default(now())
+
+  @@unique([repoId, number])
+}
+
+model Build {
+  id         String   @id @default(cuid())
+  repoId     String
+  repo       Repo     @relation(fields: [repoId], references: [id])
+  commitSha  String
+  prNumber   Int?
+  branch     String?
+  status     String // success | failure | pending
+  buildNumber String?
+  runUrl     String?
+  createdAt  DateTime @default(now())
+}
+
+model Event {
+  deliveryId  String   @id // X-GitHub-Delivery
+  type        String
+  repoId      String?
+  status      String   @default("received") // received | processed | failed
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model Notification {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  type           String
+  body           String
+  status         String       @default("queued") // queued | sent | skipped_quiet_hours | failed
+  scheduledFor   DateTime?
+  createdAt      DateTime     @default(now())
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  deliveryId  String    @unique // idempotency key
+  type        String
+  payload     Json
+  status      String    @default("queued") // queued | processing | done | failed
+  attempts    Int       @default(0)
+  nextRetryAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

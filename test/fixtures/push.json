@@ -1,0 +1,14 @@
+{
+  "ref": "refs/heads/main",
+  "before": "0000000000000000000000000000000000000000",
+  "after": "abc1234",
+  "repository": { "full_name": "AhadIKK/CommitIt" },
+  "pusher": { "name": "ahadikk" },
+  "commits": [
+    {
+      "id": "abc1234",
+      "message": "feat: add webhook logger",
+      "author": { "username": "ahadikk" }
+    }
+  ]
+}
