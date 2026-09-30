@@ -1,5 +1,6 @@
 .vercel
-.env*
+.env
+.env.local
 node_modules/
 dist/
 *.log
