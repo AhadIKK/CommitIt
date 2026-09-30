@@ -1,0 +1,34 @@
+# Render Blueprint — CommitIt (single-stack Node API + Postgres)
+# Dashboard: Render → New → Blueprint → select AhadIKK/CommitIt repo.
+# Env vars to set in dashboard (never commit secrets):
+#   GITHUB_WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_DEFAULT_CHAT_ID,
+#   AI_PROVIDER, AI_API_KEY (Phase 4+). DATABASE_URL + PORT are auto-injected.
+
+services:
+  - type: web
+    name: commitit
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx prisma generate && npm run build && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: commitit-db
+          property: connectionString
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_DEFAULT_CHAT_ID
+        sync: false
+
+databases:
+  - name: commitit-db
+    plan: free
