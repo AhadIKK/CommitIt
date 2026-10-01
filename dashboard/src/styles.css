@@ -1,0 +1,106 @@
+/* CommitIt dashboard — theme.md V2: system stack, dark, no gradients. */
+:root {
+  --bg: #0f1419;
+  --card: #1a222c;
+  --blue: #1f6feb;
+  --green: #1a7f37;
+  --red: #cf222e;
+  --amber: #9a6700;
+  --text: #e6edf3;
+  --muted: #8b949e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.muted { color: var(--muted); }
+.error { color: var(--red); }
+
+.app { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+header h1 { margin: 0; font-size: 24px; }
+
+header form { display: flex; gap: 8px; }
+
+header input {
+  background: var(--card);
+  border: 1px solid #30363d;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  width: 220px;
+}
+
+header button {
+  background: var(--blue);
+  border: 0;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+section {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+section h2 { margin: 0 0 12px; font-size: 16px; }
+
+.miles { display: flex; gap: 24px; flex-wrap: wrap; }
+.mile { display: flex; gap: 12px; align-items: center; }
+.mile-meta { display: flex; flex-direction: column; gap: 4px; }
+
+.bars { display: flex; flex-direction: column; gap: 8px; }
+.bar-row { display: flex; align-items: center; gap: 10px; }
+.bar-login { width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { flex: 1; height: 12px; background: #2a3441; border-radius: 6px; overflow: hidden; display: flex; }
+.bar-fill.commits { background: var(--blue); height: 100%; }
+.bar-fill.prs { background: var(--green); height: 100%; }
+.bar-nums { width: 90px; text-align: right; font-size: 12px; }
+
+table.issues { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.issues th, table.issues td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #30363d; }
+
+.badge {
+  display: inline-block;
+  min-width: 22px;
+  text-align: center;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.pill {
+  display: inline-block;
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 12px;
+  margin-right: 6px;
+}
+.pill.open, .pill.queued { background: var(--blue); color: #fff; }
+.pill.closed, .pill.sent { background: var(--green); color: #fff; }
+.pill.failed { background: var(--red); color: #fff; }
+.pill.skipped_quiet_hours { background: var(--amber); color: #fff; }
+
+ul.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+ul.timeline p { margin: 4px 0 0; font-size: 14px; }

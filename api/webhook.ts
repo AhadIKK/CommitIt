@@ -9,6 +9,22 @@ const PushSchema = z.object({
   commits: z.array(z.object({ id: z.string(), message: z.string() })).optional(),
 });
 
+const PullRequestSchema = z.object({
+  action: z.string().optional(),
+  pull_request: z
+    .object({ number: z.number(), title: z.string(), state: z.string() })
+    .optional(),
+  repository: z.object({ full_name: z.string() }).optional(),
+});
+
+const CheckRunSchema = z.object({
+  action: z.string().optional(),
+  check_run: z
+    .object({ name: z.string(), head_sha: z.string() })
+    .optional(),
+  repository: z.object({ full_name: z.string() }).optional(),
+});
+
 /**
  * POST /api/webhook — Vercel serverless GitHub webhook endpoint.
  * Mirrors `POST /webhook` in `src/webhook.ts` (used by Render/local):
@@ -90,7 +106,15 @@ export default async function handler(
   }
 
   // Light validation mirrors src/webhook.ts; storage/queue run in src path.
-  if (event === "push" && !PushSchema.safeParse(parsed).success) {
+  const schema =
+    event === "pull_request"
+      ? PullRequestSchema
+      : event === "check_run"
+        ? CheckRunSchema
+        : event === "push"
+          ? PushSchema
+          : null;
+  if (schema && !schema.safeParse(parsed).success) {
     sendJson(res, 400, { ok: false, error: "invalid_payload" });
     return;
   }

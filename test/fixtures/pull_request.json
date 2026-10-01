@@ -1,0 +1,16 @@
+{
+  "action": "closed",
+  "number": 15,
+  "pull_request": {
+    "number": 15,
+    "title": "feat: add JWT middleware",
+    "state": "closed",
+    "merged": true,
+    "merged_at": "2026-09-30T10:00:00Z",
+    "body": "Closes #14",
+    "user": { "login": "ahadikk" },
+    "base": { "ref": "main" },
+    "head": { "ref": "feat/jwt-middleware" }
+  },
+  "repository": { "full_name": "AhadIKK/CommitIt" }
+}

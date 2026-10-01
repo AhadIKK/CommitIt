@@ -3,9 +3,18 @@ import { scan } from "./brain/scan.js";
 import { summarize } from "./brain/summarize.js";
 import { trim } from "./brain/trim.js";
 import { prisma } from "./db.js";
-import { formatPush, type FormatCommit } from "./formatter.js";
+import {
+  formatCIFailed,
+  formatCIFixed,
+  formatPRMerged,
+  formatPush,
+  formatSecretAlert,
+  formatStaleAlert,
+  type FormatCommit,
+} from "./formatter.js";
 import { linkCommit } from "./linker.js";
 import { claimNextJob, completeJob, failJob } from "./queue.js";
+import { findStaleBranches } from "./stale.js";
 import { sendMessage } from "./telegram.js";
 import type { JobRow } from "./queue.js";
 
@@ -21,23 +30,61 @@ type PushCommit = {
   modified?: string[];
 };
 
-export async function processJob(job: JobRow): Promise<void> {
-  if (job.type !== "push") {
-    await completeJob(job.id);
-    return;
-  }
-  const payload = job.payload as {
-    repository?: { full_name?: string };
-    ref?: string;
-    compare?: string;
-    forced?: boolean;
-    commits?: PushCommit[];
+type PushPayload = {
+  repository?: { full_name?: string };
+  ref?: string;
+  compare?: string;
+  forced?: boolean;
+  commits?: PushCommit[];
+};
+
+type PullRequestPayload = {
+  action?: string;
+  number?: number;
+  pull_request?: {
+    number: number;
+    title: string;
+    state: string;
+    merged?: boolean;
+    merged_at?: string | null;
+    body?: string | null;
+    user?: { login?: string };
+    base?: { ref?: string };
+    head?: { ref?: string };
   };
+  repository?: { full_name?: string };
+};
+
+type CheckRunPayload = {
+  action?: string;
+  check_run?: {
+    id?: number;
+    name: string;
+    head_sha: string;
+    status?: string;
+    conclusion?: string | null;
+    html_url?: string;
+    check_suite?: { head_branch?: string };
+  };
+  repository?: { full_name?: string };
+};
+
+function chatId(): string {
+  return process.env.TELEGRAM_DEFAULT_CHAT_ID ?? "";
+}
+
+function isProtectedBranch(branch: string): boolean {
+  return branch === "main" || branch === "master";
+}
+
+async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
   const repo = payload.repository?.full_name ?? "unknown";
   const branch = (payload.ref ?? "").replace("refs/heads/", "") || "main";
   const commits = payload.commits ?? [];
+  const chat = chatId();
 
   const formatted: FormatCommit[] = [];
+  let directToMain = false;
   for (const c of commits.slice(0, 20)) {
     const files = [...(c.added ?? []), ...(c.modified ?? [])].map((p) => ({
       path: p,
@@ -53,6 +100,21 @@ export async function processJob(job: JobRow): Promise<void> {
     const isMerge = category === "merge";
     const link = linkCommit({ message: c.message, branch });
     void link;
+    const author = c.author?.username ?? c.author?.name ?? "unknown";
+    if (!isMerge && isProtectedBranch(branch)) directToMain = true;
+    if (secretFlag && chat) {
+      // First-class secret notification: path only, never the value.
+      await sendMessage(
+        chat,
+        formatSecretAlert({
+          repo,
+          branch,
+          sha: c.id,
+          file: "<message>",
+          author,
+        }),
+      );
+    }
     let aiSummary: string | undefined;
     let degraded = false;
     if (!isMerge && !secretFlag) {
@@ -68,7 +130,7 @@ export async function processJob(job: JobRow): Promise<void> {
     formatted.push({
       sha: c.id,
       message: c.message,
-      author: c.author?.username ?? c.author?.name ?? "unknown",
+      author,
       category,
       aiSummary,
       degraded,
@@ -83,7 +145,13 @@ export async function processJob(job: JobRow): Promise<void> {
       });
       await prisma.commit.upsert({
         where: { repoId_sha: { repoId: repoRow.id, sha: c.id } },
-        update: { message: c.message.slice(0, 2000), category, secretFlag, isMerge },
+        update: {
+          message: c.message.slice(0, 2000),
+          category,
+          secretFlag,
+          isMerge,
+          isForcePushContext: payload.forced ?? false,
+        },
         create: {
           repoId: repoRow.id,
           sha: c.id,
@@ -91,6 +159,7 @@ export async function processJob(job: JobRow): Promise<void> {
           category,
           secretFlag,
           isMerge,
+          isForcePushContext: payload.forced ?? false,
           aiSummary: aiSummary?.slice(0, 2000),
         },
       });
@@ -99,18 +168,221 @@ export async function processJob(job: JobRow): Promise<void> {
     }
   }
 
-  const chatId = process.env.TELEGRAM_DEFAULT_CHAT_ID ?? "";
-  if (chatId && formatted.length > 0) {
+  if (chat && formatted.length > 0) {
     const html = formatPush({
       repo,
       branch,
       commits: formatted,
       compareUrl: payload.compare,
       forced: payload.forced,
+      directToMain,
     });
-    await sendMessage(chatId, html);
+    await sendMessage(chat, html);
   }
   await completeJob(job.id);
+}
+
+const CLOSES_RE = /clos(?:e|es|ed|ing)\s+#(\d+)/gi;
+
+async function processPullRequest(job: JobRow, payload: PullRequestPayload): Promise<void> {
+  const repo = payload.repository?.full_name ?? "unknown";
+  const pr = payload.pull_request;
+  const chat = chatId();
+  if (!pr) {
+    await completeJob(job.id);
+    return;
+  }
+  const merged = pr.state === "closed" && pr.merged === true;
+  const linked: number[] = [];
+  for (const m of (pr.body ?? "").matchAll(CLOSES_RE)) {
+    linked.push(Number(m[1]));
+  }
+  try {
+    const repoRow = await prisma.repo.upsert({
+      where: { fullName: repo },
+      update: {},
+      create: { fullName: repo },
+    });
+    let authorId: string | undefined;
+    if (pr.user?.login) {
+      const author = await prisma.author.upsert({
+        where: { githubLogin: pr.user.login },
+        update: {},
+        create: { githubLogin: pr.user.login },
+      });
+      authorId = author.id;
+    }
+    await prisma.pullRequest.upsert({
+      where: { repoId_number: { repoId: repoRow.id, number: pr.number } },
+      update: {
+        title: pr.title.slice(0, 500),
+        state: merged ? "merged" : pr.state,
+        mergedAt: pr.merged_at ? new Date(pr.merged_at) : undefined,
+        baseBranch: pr.base?.ref,
+        headBranch: pr.head?.ref,
+        linkedIssueIds: linked,
+      },
+      create: {
+        repoId: repoRow.id,
+        number: pr.number,
+        title: pr.title.slice(0, 500),
+        state: merged ? "merged" : pr.state,
+        authorId,
+        baseBranch: pr.base?.ref,
+        headBranch: pr.head?.ref,
+        mergedAt: pr.merged_at ? new Date(pr.merged_at) : undefined,
+        linkedIssueIds: linked,
+      },
+    });
+  } catch {
+    // dev without DB: keep going, still notify
+  }
+  // Squash-merge included: the PR merged event is the truth.
+  if (merged && chat) {
+    await sendMessage(
+      chat,
+      formatPRMerged({
+        repo,
+        prNumber: pr.number,
+        title: pr.title,
+        author: pr.user?.login ?? "unknown",
+      }),
+    );
+  }
+  await completeJob(job.id);
+}
+
+async function processCheckRun(job: JobRow, payload: CheckRunPayload): Promise<void> {
+  const repo = payload.repository?.full_name ?? "unknown";
+  const run = payload.check_run;
+  const chat = chatId();
+  if (!run || payload.action !== "completed") {
+    await completeJob(job.id);
+    return;
+  }
+  const branch = run.check_suite?.head_branch ?? "unknown";
+  const conclusion = run.conclusion ?? "unknown";
+  const status = conclusion === "success" ? "success" : conclusion === "failure" ? "failure" : "pending";
+  try {
+    const repoRow = await prisma.repo.upsert({
+      where: { fullName: repo },
+      update: {},
+      create: { fullName: repo },
+    });
+    await prisma.build.create({
+      data: {
+        repoId: repoRow.id,
+        commitSha: run.head_sha,
+        branch,
+        status,
+        buildNumber: String(run.id ?? run.name),
+        runUrl: run.html_url,
+      },
+    });
+  } catch {
+    // dev without DB: keep going, still notify on failure
+  }
+  if (!chat) {
+    await completeJob(job.id);
+    return;
+  }
+  if (conclusion === "failure") {
+    await sendMessage(
+      chat,
+      formatCIFailed({
+        repo,
+        branch,
+        build: String(run.id ?? run.name),
+        runUrl: run.html_url,
+      }),
+    );
+  } else if (conclusion === "success") {
+    // "Fixed" only if a prior failure exists for this commit; without DB
+    // there is no history to confirm, so stay silent.
+    try {
+      const repoRow = await prisma.repo.findUnique({ where: { fullName: repo } });
+      const priorFailure = repoRow
+        ? await prisma.build.findFirst({
+            where: { repoId: repoRow.id, commitSha: run.head_sha, status: "failure" },
+          })
+        : null;
+      if (priorFailure) {
+        await sendMessage(
+          chat,
+          formatCIFixed({
+            repo,
+            branch,
+            build: String(run.id ?? run.name),
+            runUrl: run.html_url,
+          }),
+        );
+      }
+    } catch {
+      // no history available — no fixed alert
+    }
+  }
+  await completeJob(job.id);
+}
+
+async function processStaleCheck(
+  job: JobRow,
+  payload: { repo?: string; thresholdDays?: number },
+): Promise<void> {
+  const chat = chatId();
+  const repo = payload.repo ?? "";
+  const threshold = payload.thresholdDays ?? 6;
+  if (!repo || !chat) {
+    await completeJob(job.id);
+    return;
+  }
+  try {
+    const repoRow = await prisma.repo.findUnique({ where: { fullName: repo } });
+    if (!repoRow) {
+      await completeJob(job.id);
+      return;
+    }
+    const commits = await prisma.commit.findMany({
+      where: { repoId: repoRow.id, branch: { not: null } },
+      select: { branch: true, committedAt: true, createdAt: true },
+    });
+    const latest = new Map<string, Date>();
+    for (const c of commits) {
+      if (!c.branch) continue;
+      const at = c.committedAt ?? c.createdAt;
+      const prev = latest.get(c.branch);
+      if (!prev || at > prev) latest.set(c.branch, at);
+    }
+    const stale = findStaleBranches(
+      [...latest].map(([name, lastActivityAt]) => ({ name, lastActivityAt })),
+      new Date(),
+      threshold,
+    );
+    if (stale.length > 0) {
+      await sendMessage(chat, formatStaleAlert({ repo, branches: stale }));
+    }
+  } catch {
+    // dev without DB: nothing to check
+  }
+  await completeJob(job.id);
+}
+
+export async function processJob(job: JobRow): Promise<void> {
+  switch (job.type) {
+    case "push":
+      await processPush(job, job.payload as PushPayload);
+      return;
+    case "pull_request":
+      await processPullRequest(job, job.payload as PullRequestPayload);
+      return;
+    case "check_run":
+      await processCheckRun(job, job.payload as CheckRunPayload);
+      return;
+    case "stale_check":
+      await processStaleCheck(job, job.payload as { repo?: string; thresholdDays?: number });
+      return;
+    default:
+      await completeJob(job.id);
+  }
 }
 
 export function startWorker(

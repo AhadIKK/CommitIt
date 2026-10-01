@@ -15,8 +15,24 @@ See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message sty
 ## Scripts
 
 - `npm run dev` — watch mode (tsx)
-- `npm run build` / `npm start` — compile + run
+- `npm run build` / `npm start` — compile backend + build dashboard into `public/`, then run
 - `npm test` — vitest
+- `npm run dashboard:dev` — Vite dev server (:5173, proxies `/api` → :3000)
+- `npm run dashboard:build` — dashboard only, output to `public/`
+
+## Webhooks
+
+`POST /webhook` (local/Render) and `POST /api/webhook` (Vercel) accept `push`,
+`pull_request`, and `check_run` events. All go through HMAC verify →
+rate-limit → `events.delivery_id` dedupe → `enqueueJob()` → worker
+(push digest, PR-merged / CI fail-fixed alerts, secret + stale-branch alerts).
+
+## Dashboard (Phase 7)
+
+Read-only Vite + React app in `dashboard/` (donut, author bars, issues,
+digests). Types shared from `src/dashboard.ts` via `@src/*.js` imports;
+BFF at `GET /api/progress|activity|issues|digests?repo=owner/name`.
+`npm run dashboard:dev` for local work; production build lands in `public/`.
 
 ## Layout (single-stack Node, per AGENTS.md)
 

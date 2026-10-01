@@ -1,5 +1,6 @@
 import "dotenv/config";
 import Fastify from "fastify";
+import { registerDashboardRoutes } from "./dashboard.js";
 import { webhookRoutes } from "./webhook.js";
 import { startWorker } from "./worker.js";
 
@@ -24,6 +25,7 @@ app.addContentTypeParser(
 
 app.get("/health", async () => ({ ok: true }));
 await app.register(webhookRoutes);
+await app.register(registerDashboardRoutes);
 
 // In-process worker poller (queue.ts SKIP LOCKED). Single stack, no Redis.
 startWorker(app.log);

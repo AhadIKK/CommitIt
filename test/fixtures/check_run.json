@@ -1,0 +1,13 @@
+{
+  "action": "completed",
+  "check_run": {
+    "id": 142,
+    "name": "ci",
+    "head_sha": "abc1234",
+    "status": "completed",
+    "conclusion": "failure",
+    "html_url": "https://github.com/AhadIKK/CommitIt/actions/runs/142",
+    "check_suite": { "head_branch": "main" }
+  },
+  "repository": { "full_name": "AhadIKK/CommitIt" }
+}

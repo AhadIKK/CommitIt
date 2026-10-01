@@ -1,5 +1,10 @@
 # Changes
 
+## 2026-10-01 — Phase 6 extras + Phase 7 dashboard
+- Phase 6: `pull_request` / `check_run` webhooks (fixtures + Zod + `enqueueJob`), worker handlers (PR-merged truth incl. squash, CI fail/fixed instant alerts, secret first-class 🔑 alert with path only, `stale_check` jobs via `findStaleBranches()`), `directToMain` risk flag in digests. Duplicate-delivery fast-path (`deduped:true`) + test.
+- Phase 7: read-only Vite+React dashboard in `dashboard/` (donut, author bars, issues table, digest timeline, theme.md dark style), shared types from `src/dashboard.ts`, BFF `GET /api/progress|activity|issues|digests`, Vercel mirrors in `api/`, build output to `public/`. Root `npm run build` now compiles backend + dashboard.
+- Reason: close out all plan phases; BullMQ/Redis deferred (no measured volume — PG poller stays).
+
 ## 2026-09-30 — Render live (API-driven setup)
 - Postgres `commitit-db` (dpg-..., free, v16, singapore) + web service `commitit` (srv-..., free, Node 22, singapore) at `https://commitit-brqq.onrender.com`.
 - `DATABASE_URL` (internal string) set via API; `GITHUB_WEBHOOK_SECRET=change-me-in-dashboard` placeholder. Deploy `dep-dauda0...` live, `/health` → `{ok:true}`.
