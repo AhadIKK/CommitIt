@@ -1,5 +1,7 @@
 # CommitIt — AI-powered project progress tracker (Telegram, not email)
 
+![CommitIt](assets/commitit-badge.svg)
+
 Connect a GitHub repo → get *who did what*, *which goal it moves*, *how close to done* in Telegram, without flooding.
 
 See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message style), `changes.md` (log).
@@ -33,6 +35,17 @@ Read-only Vite + React app in `dashboard/` (donut, author bars, issues,
 digests). Types shared from `src/dashboard.ts` via `@src/*.js` imports;
 BFF at `GET /api/progress|activity|issues|digests?repo=owner/name`.
 `npm run dashboard:dev` for local work; production build lands in `public/`.
+
+Views: Dashboard (sections), Review (3-slide milestone review, arrow keys),
+Help (reading guide with FAQ schema). Dark default + light switcher (persisted).
+Exports: issues/activity as Excel-safe CSV, weekly digest as Word `.doc`,
+print stylesheet for Save-as-PDF. Brand mark, favicon, and repo badge are the
+approved concept-2 "chat" artwork; only the OG social image is still pending.
+
+Conventions (skill-creator record): tokens first (`tokens.css`, no raw hex in
+components), shared BFF types via `@src/*.js` (never duplicated), read-only
+BFF (GET only), text-labeled buttons (no icon-only controls), redundant
+encoding on every chart (number + label, never color alone).
 
 ## Layout (single-stack Node, per AGENTS.md)
 

@@ -1,0 +1,14 @@
+# CommitIt dashboard
+
+GitHub → Telegram progress tracker: who did what, how close to done.
+
+- Progress = weighted share of closed issue points. Commits never count.
+- Size weights: S = 1 pt, M = 3 pts, L = 5 pts. Unweighted issues count 1 pt.
+- Read-only web UI. Data endpoints (GET, `repo=owner/name` required):
+  - /api/progress — per-milestone and overall weighted progress
+  - /api/activity — per-author commits and merged PRs (days=7 default)
+  - /api/issues — issue board with weights and states
+  - /api/digests — recent notification timeline (limit=20 default)
+- Exports: issues/activity as Excel-safe CSV, weekly digest as Word .doc,
+  print stylesheet for Save-as-PDF.
+- Suggested commit→issue links are heuristic guesses; confirm via /link.

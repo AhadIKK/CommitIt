@@ -1,0 +1,91 @@
+/* CommitIt design tokens — three layers (design-system):
+   primitive (raw values) → semantic (purpose) → component (usage).
+   Theme switch: <html data-theme="dark"|"light">. Dark is default. */
+
+:root,
+:root[data-theme="dark"] {
+  /* Primitive */
+  --primitive-abyss: #0f1419;
+  --primitive-card: #1a222c;
+  --primitive-track: #2a3441;
+  --primitive-line: #30363d;
+  --primitive-ink: #e6edf3;
+  --primitive-dim: #8b949e;
+  --primitive-signal: #1f6feb;
+  --primitive-signal-strong: #388bfd;
+  --primitive-leaf: #1a7f37;
+  --primitive-leaf-bright: #2ea043;
+  --primitive-alarm: #cf222e;
+  --primitive-alarm-bright: #f85149;
+  --primitive-ember: #9a6700;
+  --primitive-ember-bright: #d29922;
+  --primitive-white: #ffffff;
+
+  /* Type scale (base 16px, line-height 1.5 body) */
+  --type-xs: 12px;
+  --type-sm: 14px;
+  --type-md: 16px;
+  --type-lg: 20px;
+  --type-xl: 24px;
+  --type-2xl: 32px;
+
+  /* Spacing (4-point grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Shape: one radius scale */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-pill: 10px;
+
+  /* Semantic */
+  --bg: var(--primitive-abyss);
+  --surface: var(--primitive-card);
+  --track: var(--primitive-track);
+  --line: var(--primitive-line);
+  --text: var(--primitive-ink);
+  --muted: var(--primitive-dim);
+  --accent: var(--primitive-signal);
+  --accent-strong: var(--primitive-signal-strong);
+  --ok: var(--primitive-leaf);
+  --danger: var(--primitive-alarm);
+  --warn: var(--primitive-ember);
+  --on-accent: var(--primitive-white);
+
+  /* Component */
+  --header-bg: var(--bg);
+  --input-bg: var(--surface);
+  --input-border: var(--line);
+  --button-bg: var(--accent);
+  --button-text: var(--on-accent);
+  --logo-placeholder-border: var(--muted);
+}
+
+:root[data-theme="light"] {
+  --primitive-paper: #f6f8fa;
+  --primitive-paper-card: #ffffff;
+
+  --bg: var(--primitive-paper);
+  --surface: var(--primitive-paper-card);
+  --track: #e3e8ee;
+  --line: #d0d7de;
+  --text: #1f2328;
+  --muted: #59636e;
+  --accent: var(--primitive-signal);
+  --accent-strong: #0969da;
+  --ok: var(--primitive-leaf);
+  --danger: var(--primitive-alarm);
+  --warn: var(--primitive-ember);
+  --on-accent: var(--primitive-white);
+
+  --header-bg: var(--bg);
+  --input-bg: var(--surface);
+  --input-border: var(--line);
+  --button-bg: var(--accent);
+  --button-text: var(--on-accent);
+  --logo-placeholder-border: var(--muted);
+}
