@@ -7,6 +7,9 @@ import type {
 } from "@src/dashboard.js";
 import { fetchActivity, fetchDigests, fetchIssues, fetchProgress } from "./api.js";
 import { AuthorBars, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
+import { Button } from "./components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card.js";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs.js";
 import { activityToCsv, downloadCsv, downloadDoc, exportFilename, issuesToCsv } from "./export.js";
 import Logo from "./Logo.js";
 import { buildWeeklySummary, digestToDoc, weekLabel } from "./report.js";
@@ -16,9 +19,11 @@ import { ThemeSwitch, useTheme } from "./theme.js";
 
 const DEFAULT_REPO = "AhadIKK/CommitIt";
 
+type View = "dashboard" | "review" | "help";
+
 export default function App() {
   const [repo, setRepo] = useState(DEFAULT_REPO);
-  const [view, setView] = useState<"dashboard" | "review" | "help">("dashboard");
+  const [view, setView] = useState<View>("dashboard");
   const [theme, toggleTheme] = useTheme();
   const [input, setInput] = useState(DEFAULT_REPO);
   const [progress, setProgress] = useState<RepoProgress | null>(null);
@@ -74,7 +79,7 @@ export default function App() {
               placeholder="owner/repo"
               aria-label="Repository"
             />
-            <button type="submit">Load</button>
+            <Button type="submit">Load</Button>
             <ThemeSwitch theme={theme} onToggle={toggleTheme} />
           </form>
         </div>
@@ -83,44 +88,40 @@ export default function App() {
       {loading && <p className="muted">Loading…</p>}
       {error && <p className="error">Error: {error}</p>}
 
-      <div className="view-nav" role="tablist" aria-label="Views">
-        {(["dashboard", "review", "help"] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            role="tab"
-            aria-selected={view === v}
-            onClick={() => setView(v)}
-          >
-            {v === "dashboard" ? "Dashboard" : v === "review" ? "Review" : "Help"}
-          </button>
-        ))}
-      </div>
+      <Tabs value={view} onValueChange={(v) => setView(v as View)}>
+        <TabsList aria-label="Views">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="review">Review</TabsTrigger>
+          <TabsTrigger value="help">Help</TabsTrigger>
+        </TabsList>
 
-      {view === "dashboard" && (
-        <>
-      <section aria-label="Milestones">
-        <h2>Milestones</h2>
-        {progress?.overall && <OverallBand m={progress.overall} />}
-        {progress && progress.milestones.length === 0 && !progress.overall && (
-          <p className="muted">No milestones yet.</p>
-        )}
-        <div className="miles">
-          {progress?.milestones.map((m) => <Donut key={m.title} m={m} />)}
-        </div>
-      </section>
+        <TabsContent value="dashboard" forceMount className="tab-panel">
+        <Card aria-label="Milestones">
+          <CardHeader>
+            <CardTitle>Milestones</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {progress?.overall && <OverallBand m={progress.overall} />}
+            {progress && progress.milestones.length === 0 && !progress.overall && (
+              <p className="muted">No milestones yet.</p>
+            )}
+            <div className="miles">
+              {progress?.milestones.map((m) => <Donut key={m.title} m={m} />)}
+            </div>
+          </CardContent>
+        </Card>
 
       <section aria-label="Activity">
         <div className="section-head">
           <h2>Activity (7d)</h2>
           {activity && activity.authors.length > 0 && (
-            <button
+            <Button
               type="button"
-              className="btn-secondary"
+              variant="secondary"
               onClick={() => downloadCsv(exportFilename(repo, "activity"), activityToCsv(activity.authors))}
             >
               Export CSV
-            </button>
+            </Button>
           )}
         </div>
         {activity && <AuthorBars authors={activity.authors} />}
@@ -130,13 +131,13 @@ export default function App() {
         <div className="section-head">
           <h2>Issues</h2>
           {issues.length > 0 && (
-            <button
+            <Button
               type="button"
-              className="btn-secondary"
+              variant="secondary"
               onClick={() => downloadCsv(exportFilename(repo, "issues"), issuesToCsv(issues))}
             >
               Export CSV
-            </button>
+            </Button>
           )}
         </div>
         {issues.length === 0 ? (
@@ -151,9 +152,9 @@ export default function App() {
       <section aria-label="Digests">
         <div className="section-head">
           <h2>Digests</h2>
-          <button
+          <Button
             type="button"
-            className="btn-secondary"
+            variant="secondary"
             onClick={() =>
               downloadDoc(
                 exportFilename(repo, "digest").replace(/\.csv$/, ".doc"),
@@ -168,7 +169,7 @@ export default function App() {
             }
           >
             Export .doc
-          </button>
+          </Button>
         </div>
         <div className="summary-3p">
           <p>
@@ -183,15 +184,14 @@ export default function App() {
         </div>
         <DigestTimeline digests={digests} />
       </section>
-        </>
-      )}
+        </TabsContent>
 
-      {view === "review" && (
-        <Review progress={progress} activity={activity} issues={issues} />
-      )}
+        <TabsContent value="review" forceMount className="tab-panel">
+          <Review progress={progress} activity={activity} issues={issues} />
+        </TabsContent>
 
-      {view === "help" && (
-        <section aria-label="Help" className="help">
+        <TabsContent value="help" forceMount className="tab-panel">
+          <section aria-label="Help" className="help">
           <h2>How to read this dashboard</h2>
           <script
             type="application/ld+json"
@@ -252,7 +252,8 @@ export default function App() {
             </dd>
           </dl>
         </section>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

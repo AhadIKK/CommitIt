@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -10,7 +11,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 // for Vite's bundler at dev/build time. No extra deps.
 export default defineConfig({
   root,
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: [
       {
@@ -22,6 +23,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(root, "../public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react/jsx-runtime"],
+          "vendor-chart": ["chart.js", "react-chartjs-2"],
+          "vendor-motion": ["framer-motion"],
+          "vendor-radix": ["@radix-ui/react-tabs"],
+        },
+      },
+    },
   },
   server: {
     port: 5173,

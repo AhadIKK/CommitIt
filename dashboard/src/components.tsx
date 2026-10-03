@@ -1,37 +1,92 @@
+import { useEffect, useState } from "react";
+import { Chart as ChartJS, ArcElement, Tooltip, type ChartOptions } from "chart.js";
+import { animate, motion, useReducedMotion } from "framer-motion";
+import { Doughnut } from "react-chartjs-2";
 import type { AuthorStat, DigestEntry, IssueRow, MilestoneSnapshot } from "@src/dashboard.js";
 import { avatarCells } from "./avatars.js";
 import { StatusIcon } from "./icons.js";
 
-// Chart colors resolve through CSS tokens so light/dark themes apply.
+ChartJS.register(ArcElement, Tooltip);
+
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+  );
+}
+
+function doughnutOptions(cutout: string, reduce: boolean): ChartOptions<"doughnut"> {
+  return {
+    cutout,
+    responsive: true,
+    maintainAspectRatio: true,
+    animation: reduce ? false : { duration: 800 },
+    plugins: { legend: { display: false } },
+  };
+}
+
+function doughnutData(percent: number, accent: string, track: string) {
+  return {
+    labels: ["Closed", "Open"],
+    datasets: [
+      {
+        data: [percent, Math.max(0, 100 - percent)],
+        backgroundColor: [accent, track],
+        borderWidth: 0,
+        hoverOffset: 0,
+      },
+    ],
+  };
+}
+
+// Animated figure to go with the ring (redundant encoding, never color alone).
+function CountUp({ value, suffix = "%" }: { value: number; suffix?: string }) {
+  const reduce = useReducedMotion();
+  const [display, setDisplay] = useState(reduce ? value : 0);
+  useEffect(() => {
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 1,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [value, reduce]);
+  return (
+    <>
+      {display}
+      {suffix}
+    </>
+  );
+}
 
 export function Donut({ m }: { m: MilestoneSnapshot }) {
-  const r = 34;
-  const c = 2 * Math.PI * r;
-  const filled = (m.percent / 100) * c;
+  const reduce = useReducedMotion() ?? false;
+  const accent = cssVar("--accent", "#1f6feb");
+  const track = cssVar("--track", "#2a3441");
   return (
-    <div className="mile">
-      <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label={`${m.title} ${m.percent}%`}>
-        <circle cx="48" cy="48" r={r} fill="none" stroke="var(--track)" strokeWidth="12" />
-        <circle
-          cx="48"
-          cy="48"
-          r={r}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth="12"
-          strokeDasharray={`${filled} ${c}`}
-          strokeLinecap="round"
-          transform="rotate(-90 48 48)"
-        />
-        <text x="48" y="54" textAnchor="middle" fill="var(--text)" fontSize="18" fontFamily="monospace">
-          {m.percent}%
-        </text>
-      </svg>
+    <motion.div
+      className="mile"
+      role="img"
+      aria-label={`${m.title} ${m.percent}%`}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <div style={{ width: 96, height: 96 }}>
+        <Doughnut data={doughnutData(m.percent, accent, track)} options={doughnutOptions("72%", reduce)} />
+      </div>
       <div className="mile-meta">
         <strong>{m.title}</strong>
+        <span className="mono">
+          <CountUp value={m.percent} />
+        </span>
         <span className="muted">{m.label}</span>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -152,37 +207,30 @@ export function Avatar({ login, size = 28 }: { login: string; size?: number }) {
 }
 
 // OverallBand — the memorable element: one large progress figure with
-// redundant encoding (ring + big number + text label), never color alone.
+// redundant encoding (ring + animated number + text label), never color alone.
 export function OverallBand({ m }: { m: MilestoneSnapshot }) {
-  const r = 54;
-  const c = 2 * Math.PI * r;
-  const filled = (m.percent / 100) * c;
+  const reduce = useReducedMotion() ?? false;
+  const accent = cssVar("--accent", "#1f6feb");
+  const track = cssVar("--track", "#2a3441");
   return (
-    <div className="band">
-      <svg width="140" height="140" viewBox="0 0 140 140" role="img" aria-label={`Overall progress ${m.percent}%`}>
-        <circle cx="70" cy="70" r={r} fill="none" stroke="var(--track)" strokeWidth="14" />
-        <circle
-          cx="70"
-          cy="70"
-          r={r}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth="14"
-          strokeDasharray={`${filled} ${c}`}
-          strokeLinecap="round"
-          transform="rotate(-90 70 70)"
-        />
-        <text x="70" y="80" textAnchor="middle" fill="var(--text)" fontSize="30" fontFamily="monospace">
-          {m.percent}%
-        </text>
-      </svg>
+    <motion.div
+      className="band"
+      role="img"
+      aria-label={`Overall progress ${m.percent}%`}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45 }}
+    >
+      <div style={{ width: 140, height: 140 }}>
+        <Doughnut data={doughnutData(m.percent, accent, track)} options={doughnutOptions("70%", reduce)} />
+      </div>
       <div className="band-meta">
         <span className="band-label">Overall progress</span>
         <span className="band-points mono">
-          {m.closedPoints}/{m.totalPoints} pts · {m.closed} closed · {m.open} open
+          <CountUp value={m.percent} /> · {m.closedPoints}/{m.totalPoints} pts · {m.closed} closed · {m.open} open
         </span>
         {m.label !== "no issues yet" && <span className="muted">{m.label}</span>}
       </div>
-    </div>
+    </motion.div>
   );
 }
