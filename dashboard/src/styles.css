@@ -160,6 +160,23 @@ table.issues { width: 100%; border-collapse: collapse; font-size: var(--type-sm)
 table.issues th, table.issues td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .table-wrap { overflow-x: auto; }
 
+.connect { display: flex; flex-direction: column; gap: var(--space-3); }
+.connect p { margin: 0; }
+.connect-code { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.connect-code label { font-size: var(--type-sm); color: var(--muted); }
+.connect-row { display: flex; gap: var(--space-2); align-items: center; }
+.connect-row input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  width: 140px;
+  font-size: var(--type-sm);
+  min-height: 44px;
+  text-transform: uppercase;
+}
+
 .badge {
   display: inline-block;
   min-width: 22px;

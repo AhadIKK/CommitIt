@@ -185,3 +185,20 @@ model Job {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
+
+// Telegram chat linking (website <-> bot). Two flows, one table:
+// - "token": website creates row + shows t.me/bot?start=CODE deep link;
+//   bot binds it on /start CODE (claimedBy = chat id).
+// - "code": bot creates row on /link bound to the sender's chat;
+//   website claims it with {code, repo}. Single-use, short expiry.
+model TelegramLink {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  kind         String    // "token" | "code"
+  chatId       String?   // sender chat, set by bot on /link
+  claimedBy    String?   // chat id that claimed a deep-link token
+  repoFullName String?
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
+}

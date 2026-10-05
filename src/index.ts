@@ -1,6 +1,8 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import { registerDashboardRoutes } from "./dashboard.js";
+import { registerLinkingRoutes } from "./linking.js";
+import { startBotPolling } from "./telegramBot.js";
 import { webhookRoutes } from "./webhook.js";
 import { startWorker } from "./worker.js";
 
@@ -26,9 +28,13 @@ app.addContentTypeParser(
 app.get("/health", async () => ({ ok: true }));
 await app.register(webhookRoutes);
 await app.register(registerDashboardRoutes);
+await app.register(registerLinkingRoutes);
 
 // In-process worker poller (queue.ts SKIP LOCKED). Single stack, no Redis.
 startWorker(app.log);
+
+// Telegram inbound (getUpdates). No-op without TELEGRAM_BOT_TOKEN.
+startBotPolling(app.log);
 
 try {
   await app.listen({ port, host: "0.0.0.0" });

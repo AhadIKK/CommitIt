@@ -13,9 +13,10 @@ import {
   type FormatCommit,
 } from "./formatter.js";
 import { linkCommit } from "./linker.js";
+import { syncRepoIssues } from "./github-sync.js";
 import { claimNextJob, completeJob, failJob } from "./queue.js";
 import { findStaleBranches } from "./stale.js";
-import { sendMessage } from "./telegram.js";
+import { deliver, dispatchDueNotifications } from "./delivery.js";
 import type { JobRow } from "./queue.js";
 
 // worker.ts — in-process pipeline:
@@ -69,10 +70,6 @@ type CheckRunPayload = {
   repository?: { full_name?: string };
 };
 
-function chatId(): string {
-  return process.env.TELEGRAM_DEFAULT_CHAT_ID ?? "";
-}
-
 function isProtectedBranch(branch: string): boolean {
   return branch === "main" || branch === "master";
 }
@@ -81,7 +78,6 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
   const repo = payload.repository?.full_name ?? "unknown";
   const branch = (payload.ref ?? "").replace("refs/heads/", "") || "main";
   const commits = payload.commits ?? [];
-  const chat = chatId();
 
   const formatted: FormatCommit[] = [];
   let directToMain = false;
@@ -102,10 +98,12 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
     void link;
     const author = c.author?.username ?? c.author?.name ?? "unknown";
     if (!isMerge && isProtectedBranch(branch)) directToMain = true;
-    if (secretFlag && chat) {
+    if (secretFlag) {
       // First-class secret notification: path only, never the value.
-      await sendMessage(
-        chat,
+      // Priority: bypasses digest batching, goes to every subscriber now.
+      await deliver(
+        repo,
+        "secret",
         formatSecretAlert({
           repo,
           branch,
@@ -113,6 +111,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           file: "<message>",
           author,
         }),
+        { priority: true },
       );
     }
     let aiSummary: string | undefined;
@@ -168,7 +167,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
     }
   }
 
-  if (chat && formatted.length > 0) {
+  if (formatted.length > 0) {
     const html = formatPush({
       repo,
       branch,
@@ -177,8 +176,11 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
       forced: payload.forced,
       directToMain,
     });
-    await sendMessage(chat, html);
+    // Forced / direct-to-main digests are priority: risk alerts go now.
+    await deliver(repo, "push", html, { priority: payload.forced === true || directToMain });
   }
+  // Refresh issues/milestones from the source of truth (best-effort).
+  await syncRepoIssues(repo);
   await completeJob(job.id);
 }
 
@@ -187,7 +189,6 @@ const CLOSES_RE = /clos(?:e|es|ed|ing)\s+#(\d+)/gi;
 async function processPullRequest(job: JobRow, payload: PullRequestPayload): Promise<void> {
   const repo = payload.repository?.full_name ?? "unknown";
   const pr = payload.pull_request;
-  const chat = chatId();
   if (!pr) {
     await completeJob(job.id);
     return;
@@ -238,9 +239,10 @@ async function processPullRequest(job: JobRow, payload: PullRequestPayload): Pro
     // dev without DB: keep going, still notify
   }
   // Squash-merge included: the PR merged event is the truth.
-  if (merged && chat) {
-    await sendMessage(
-      chat,
+  if (merged) {
+    await deliver(
+      repo,
+      "pr",
       formatPRMerged({
         repo,
         prNumber: pr.number,
@@ -249,13 +251,14 @@ async function processPullRequest(job: JobRow, payload: PullRequestPayload): Pro
       }),
     );
   }
+  // PR open/close/merge changes issue states — resync (best-effort).
+  await syncRepoIssues(repo);
   await completeJob(job.id);
 }
 
 async function processCheckRun(job: JobRow, payload: CheckRunPayload): Promise<void> {
   const repo = payload.repository?.full_name ?? "unknown";
   const run = payload.check_run;
-  const chat = chatId();
   if (!run || payload.action !== "completed") {
     await completeJob(job.id);
     return;
@@ -282,19 +285,17 @@ async function processCheckRun(job: JobRow, payload: CheckRunPayload): Promise<v
   } catch {
     // dev without DB: keep going, still notify on failure
   }
-  if (!chat) {
-    await completeJob(job.id);
-    return;
-  }
   if (conclusion === "failure") {
-    await sendMessage(
-      chat,
+    await deliver(
+      repo,
+      "ci",
       formatCIFailed({
         repo,
         branch,
         build: String(run.id ?? run.name),
         runUrl: run.html_url,
       }),
+      { priority: true },
     );
   } else if (conclusion === "success") {
     // "Fixed" only if a prior failure exists for this commit; without DB
@@ -307,8 +308,9 @@ async function processCheckRun(job: JobRow, payload: CheckRunPayload): Promise<v
           })
         : null;
       if (priorFailure) {
-        await sendMessage(
-          chat,
+        await deliver(
+          repo,
+          "ci",
           formatCIFixed({
             repo,
             branch,
@@ -328,10 +330,9 @@ async function processStaleCheck(
   job: JobRow,
   payload: { repo?: string; thresholdDays?: number },
 ): Promise<void> {
-  const chat = chatId();
   const repo = payload.repo ?? "";
   const threshold = payload.thresholdDays ?? 6;
-  if (!repo || !chat) {
+  if (!repo) {
     await completeJob(job.id);
     return;
   }
@@ -358,7 +359,7 @@ async function processStaleCheck(
       threshold,
     );
     if (stale.length > 0) {
-      await sendMessage(chat, formatStaleAlert({ repo, branches: stale }));
+      await deliver(repo, "stale", formatStaleAlert({ repo, branches: stale }));
     }
   } catch {
     // dev without DB: nothing to check
@@ -377,6 +378,15 @@ export async function processJob(job: JobRow): Promise<void> {
     case "check_run":
       await processCheckRun(job, job.payload as CheckRunPayload);
       return;
+    case "issues": {
+      const repo =
+        (job.payload as { repository?: { full_name?: string } }).repository?.full_name ??
+        "unknown";
+      // closed/reopened edited directly on GitHub — recompute from the API.
+      if (repo !== "unknown") await syncRepoIssues(repo);
+      await completeJob(job.id);
+      return;
+    }
     case "stale_check":
       await processStaleCheck(job, job.payload as { repo?: string; thresholdDays?: number });
       return;
@@ -393,6 +403,7 @@ export function startWorker(
     try {
       const job = await claimNextJob();
       if (job) await processJob(job);
+      await dispatchDueNotifications();
     } catch (err) {
       log.error({ err }, "worker poll failed");
       // never silently drop: job stays queued, failJob() sets backoff

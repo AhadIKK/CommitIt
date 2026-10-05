@@ -1,3 +1,5 @@
+import { prisma } from "./db.js";
+
 // github-sync.ts — minimal GitHub REST sync (issues/milestones).
 // Recompute progress from source of truth on closed/reopened/merged.
 // Uses fetch (no Octokit dep in MVP). Requires GITHUB_TOKEN for private
@@ -70,4 +72,54 @@ export async function fetchIssues(
     issues,
     milestones: [...milestones].map(([number, title]) => ({ number, title })),
   };
+}
+
+// syncRepoIssues(): pull issues/milestones from GitHub (source of truth)
+// into the DB so progress/linker/dashboard read fresh data. Best-effort:
+// rate limits, private repos without GITHUB_TOKEN, or no DB all degrade to
+// null and the calling job still completes.
+export async function syncRepoIssues(
+  fullName: string,
+): Promise<{ issues: number; milestones: number } | null> {
+  let data: Awaited<ReturnType<typeof fetchIssues>>;
+  try {
+    data = await fetchIssues(fullName);
+  } catch {
+    return null;
+  }
+  try {
+    const repoRow = await prisma.repo.upsert({
+      where: { fullName },
+      update: {},
+      create: { fullName },
+    });
+    const milestoneIds = new Map<number, string>();
+    for (const m of data.milestones) {
+      const row = await prisma.milestone.upsert({
+        where: { repoId_githubId: { repoId: repoRow.id, githubId: m.number } },
+        update: { title: m.title },
+        create: { repoId: repoRow.id, githubId: m.number, title: m.title },
+      });
+      milestoneIds.set(m.number, row.id);
+    }
+    for (const i of data.issues) {
+      const milestoneId =
+        i.milestoneNumber !== undefined ? (milestoneIds.get(i.milestoneNumber) ?? null) : null;
+      await prisma.issue.upsert({
+        where: { repoId_number: { repoId: repoRow.id, number: i.number } },
+        update: { title: i.title, state: i.state, sizeWeight: i.sizeWeight, milestoneId },
+        create: {
+          repoId: repoRow.id,
+          number: i.number,
+          title: i.title,
+          state: i.state,
+          sizeWeight: i.sizeWeight,
+          milestoneId,
+        },
+      });
+    }
+    return { issues: data.issues.length, milestones: data.milestones.length };
+  } catch {
+    return null;
+  }
 }

@@ -35,3 +35,16 @@ export function nextDigestAt(mode: string, now: Date): Date {
       return d;
   }
 }
+
+// End of the quiet window containing `now`. Same-day windows end today;
+// overnight windows end tomorrow when `now` is on the evening side.
+export function quietEndsAt(now: Date, start: string, end: string): Date {
+  const d = new Date(now);
+  const [eh = 0, em = 0] = end.split(":").map(Number);
+  d.setUTCHours(eh, em, 0, 0);
+  const h = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const s = Number(start.split(":")[0]) ?? 0;
+  const e = Number(end.split(":")[0]) ?? 0;
+  if (s > e && h >= s) d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}

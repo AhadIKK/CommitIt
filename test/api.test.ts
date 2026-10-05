@@ -1,7 +1,11 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import webhookHandler from "../api/webhook.js";
 import healthHandler from "../api/health.js";
+import progressHandler from "../api/progress.js";
+import activityHandler from "../api/activity.js";
+import issuesHandler from "../api/issues.js";
+import digestsHandler from "../api/digests.js";
 import { signPayload } from "../src/verify.js";
 import { clearRateLimit } from "../src/rateLimit.js";
 
@@ -109,5 +113,64 @@ describe("api/health handler", () => {
       res as never,
     );
     expect(await done).toEqual({ status: 200, body: { ok: true } });
+  });
+});
+
+function mockGetReq(url: string) {
+  return {
+    method: "GET",
+    headers: {},
+    socket: { remoteAddress: "127.0.0.1" },
+    url,
+  } as unknown as Parameters<typeof progressHandler>[0];
+}
+
+describe("dashboard api handlers without DB", () => {
+  // Regression: these endpoints 500d on Vercel when the DB was unreachable.
+  // They must degrade to 200 + empty data instead. The prisma client is
+  // mocked to fail fast so the test never touches the network.
+  vi.mock("../src/db.js", () => ({
+    prisma: {
+      repo: {
+        findUnique: async () => {
+          throw new Error("db down");
+        },
+      },
+    },
+  }));
+
+  it("return 200 + empty data when the DB is unreachable", async () => {
+    const cases = [
+        {
+          handler: progressHandler,
+          url: "/api/progress?repo=AhadIKK%2FCommitIt",
+          data: { repo: "AhadIKK/CommitIt", milestones: [], overall: null },
+        },
+        {
+          handler: activityHandler,
+          url: "/api/activity?repo=AhadIKK%2FCommitIt&days=7",
+          data: {
+            repo: "AhadIKK/CommitIt",
+            authors: [],
+            totalCommits: 0,
+            totalMergedPRs: 0,
+          },
+        },
+        {
+          handler: issuesHandler,
+          url: "/api/issues?repo=AhadIKK%2FCommitIt",
+          data: [],
+        },
+        {
+          handler: digestsHandler,
+          url: "/api/digests?repo=AhadIKK%2FCommitIt",
+          data: [],
+        },
+      ] as const;
+      for (const { handler, url, data } of cases) {
+        const { res, done } = mockRes();
+        await (handler as typeof progressHandler)(mockGetReq(url), res as never);
+        expect(await done).toEqual({ status: 200, body: { ok: true, data } });
+      }
   });
 });

@@ -14,6 +14,7 @@ import { activityToCsv, downloadCsv, downloadDoc, exportFilename, issuesToCsv } 
 import Logo from "./Logo.js";
 import { buildWeeklySummary, digestToDoc, weekLabel } from "./report.js";
 import Review from "./Review.js";
+import Connect from "./Connect.js";
 import "./styles.css";
 import { ThemeSwitch, useTheme } from "./theme.js";
 
@@ -183,6 +184,12 @@ export default function App() {
           </p>
         </div>
         <DigestTimeline digests={digests} />
+      </section>
+      <section aria-label="Telegram">
+        <div className="section-head">
+          <h2>Telegram</h2>
+        </div>
+        <Connect repo={repo} />
       </section>
         </TabsContent>
 

@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getIssues } from "../src/dashboard.js";
+import type { IssueRow } from "../src/dashboard.js";
 
 // GET /api/issues?repo=owner/name — Vercel mirror. Read-only.
+// Never 500s: any failure degrades to an empty list.
 export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
@@ -19,7 +21,13 @@ export default async function handler(
     res.end(JSON.stringify({ ok: false, error: "missing_repo" }));
     return;
   }
+  let data: IssueRow[];
+  try {
+    data = await getIssues(repo);
+  } catch {
+    data = [];
+  }
   res.statusCode = 200;
   res.setHeader("content-type", "application/json");
-  res.end(JSON.stringify({ ok: true, data: await getIssues(repo) }));
+  res.end(JSON.stringify({ ok: true, data }));
 }
