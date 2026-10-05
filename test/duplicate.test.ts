@@ -47,7 +47,7 @@ describe("duplicate delivery", () => {
     await app.close();
     // NOTE: without a reachable DB each inject waits out the Prisma
     // connection timeout before hitting the memory fallback.
-  }, 30_000);
+  }, 90_000);
 
   it("different delivery ids are both accepted", async () => {
     const app = await buildApp();
@@ -66,5 +66,5 @@ describe("duplicate delivery", () => {
       expect(res.json()).toEqual({ ok: true });
     }
     await app.close();
-  }, 30_000);
+  }, 90_000);
 });
