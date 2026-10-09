@@ -2,17 +2,18 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { isRateLimited } from "./rateLimit.js";
-import { codeExpiry, genToken } from "./telegramBot.js";
+import { TOKEN_RE, createLinkToken, isTokenClaimed } from "./linkTokens.js";
 
 // linking.ts — website side of Telegram chat linking (no website accounts;
 // the chat subscription IS the user). Pairs with src/telegramBot.ts:
 // - POST /api/link-token {repo} → {code, url} (deep-link primary flow)
 // - GET  /api/link-token/:code → {claimed} (website polls while user taps)
 // - POST /api/link-code {code, repo} → claims a /link backup code
+// Deep-link tokens are hash-only (LinkToken); the /link backup codes stay
+// on TelegramLink (short user-typed codes, rate-limited + single-use).
 // Code formats are validated BEFORE touching the DB so malformed input
 // never pays a connection timeout.
 
-const TOKEN_RE = /^[0-9a-f]{32}$/;
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
 const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
 
@@ -46,16 +47,11 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
       return reply.code(503).send({ ok: false, error: "bot_not_configured" });
     }
     try {
-      const code = genToken();
-      await prisma.telegramLink.create({
-        data: {
-          code,
-          kind: "token",
-          repoFullName: parsed.data.repo,
-          expiresAt: codeExpiry(),
-        },
-      });
-      return reply.send({ ok: true, data: { code, url: botDeepLink(code) } });
+      const issued = await createLinkToken(parsed.data.repo);
+      if (!issued) {
+        return reply.code(503).send({ ok: false, error: "unavailable" });
+      }
+      return reply.send({ ok: true, data: { code: issued.token, url: botDeepLink(issued.token) } });
     } catch {
       return reply.code(503).send({ ok: false, error: "unavailable" });
     }
@@ -65,6 +61,12 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
     const code = (req.params as { code?: string }).code ?? "";
     if (!TOKEN_RE.test(code)) {
       return reply.code(404).send({ ok: false, error: "not_found" });
+    }
+    // New hash-only tokens first; legacy raw TelegramLink rows still poll
+    // until they expire (pre-Phase D deep links).
+    const claimed = await isTokenClaimed(code);
+    if (claimed) {
+      return reply.send({ ok: true, data: { claimed: true } });
     }
     try {
       const row = await prisma.telegramLink.findUnique({ where: { code } });

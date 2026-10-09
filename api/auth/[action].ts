@@ -8,6 +8,7 @@ import {
   fetchViewer,
   isSecureCallback,
 } from "../../src/githubApp.js";
+import { isRateLimited } from "../../src/rateLimit.js";
 import {
   SESSION_COOKIE,
   STATE_COOKIE,
@@ -37,9 +38,22 @@ function actionOf(req: IncomingMessage): string {
   return seg.toLowerCase();
 }
 
+function clientIp(req: IncomingMessage): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  return (
+    (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0]?.trim()) ||
+    req.socket?.remoteAddress ||
+    "unknown"
+  );
+}
+
 async function startLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if ((req.method ?? "GET") !== "GET") {
     sendJson(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+  if (isRateLimited(`oauth:${clientIp(req)}`, { max: 20 })) {
+    sendJson(res, 429, { ok: false, error: "rate_limited" });
     return;
   }
   const clientId = (process.env.GITHUB_CLIENT_ID ?? "").trim();
@@ -61,6 +75,10 @@ async function startLogin(req: IncomingMessage, res: ServerResponse): Promise<vo
 async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if ((req.method ?? "GET") !== "GET") {
     sendJson(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+  if (isRateLimited(`oauth:${clientIp(req)}`, { max: 20 })) {
+    sendJson(res, 429, { ok: false, error: "rate_limited" });
     return;
   }
   const url = new URL(req.url ?? "/", "http://localhost");

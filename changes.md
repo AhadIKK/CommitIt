@@ -1,6 +1,11 @@
 # Changes
 
-## 2026-10-09 — Phase C: login + server-side sessions + BFF access gates (spec build)
+## 2026-10-09 — Phase D: Telegram linking on hash-only tokens + repo binding (spec build)
+- Added: `src/linkTokens.ts` (32-byte deep-link tokens, SHA-256-only storage, constant-time re-compare, expiry + single-use); `src/chatAccess.ts` (DM: GitHub-linked + repo access; groups: + admin via getChatMember); bot `/repos` picker (accessible + bound marks), `/bind owner/repo`, `/unlink [owner/repo]` (groups: admin-gated both ways); per-command rate limits; auth start/callback rate-limited in both shells.
+- Changed: website `link-token` issues/polls via LinkToken (Connect UI unchanged); bot `/start` claims hash-first with legacy raw fallback until expiry; sender id + chat type plumbed through polling.
+- Deferred + documented: legacy `/link` 6-letter codes stay raw on TelegramLink (rate-limited, 10-min, single-use — hash adds little at ~30 bits entropy).
+- Reason: no-token-in-DB linking; groups can't be bound/unbound by non-admins or unlinked strangers.
+- Verification: `test/linkTokens.test.ts` (mint/claim/reuse/tamper/expiry) + `test/botCommands.test.ts` (start/bind/admin-denial/repos/unlink/rate-limit, stubbed Bot API). Gate green (26 files / 122 tests, `tsc --noEmit`, `npm run build`).
 - Added: server-side sessions (`Session` rows hold only the SHA-256 of a 32-byte id; cookie is `v1.<sid>.<hmac>`, HttpOnly/SameSite-Lax/Secure); `src/access.ts` (`canAccessRepo`: active install + owner/member, `checkRepoAccess` → 401/403); `/api/auth/login` canonical path (legacy `/api/auth/github` kept).
 - Changed: callbacks create session rows + revoke-safe logout (both shells); `/api/me` resolves via DB; all 4 BFF endpoints (both shells) gate on session + access — 401 logged_out / 403 forbidden, DB outages still 200-empty; dashboard maps auth errors to sign-in prompts.
 - BFF exceptions stay exactly the two allowed: POST `/api/auth/logout`, Telegram link-confirm (`link-token`/`link-code` untouched).

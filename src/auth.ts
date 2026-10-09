@@ -48,6 +48,9 @@ function reqHeaders(req: {
 
 export async function registerAuthRoutes(app: FastifyInstance) {
   const startLogin = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (isRateLimited(`oauth:${clientIp(req)}`, { max: 20 })) {
+      return reply.code(429).send({ ok: false, error: "rate_limited" });
+    }
     const clientId = (process.env.GITHUB_CLIENT_ID ?? "").trim();
     if (!clientId) {
       return reply.code(503).send({ ok: false, error: "oauth_not_configured" });
@@ -65,6 +68,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   app.get("/api/auth/github", startLogin); // legacy alias
 
   app.get("/api/auth/callback", async (req, reply) => {
+    if (isRateLimited(`oauth:${clientIp(req)}`, { max: 20 })) {
+      return reply.code(429).send({ ok: false, error: "rate_limited" });
+    }
     const q = req.query as { code?: string; state?: string };
     const code = q.code ?? "";
     const state = q.state ?? "";
