@@ -1,6 +1,11 @@
 # Changes
 
-## 2026-10-09 — Phase D: Telegram linking on hash-only tokens + repo binding (spec build)
+## 2026-10-09 — Phase E: live progress via milestone events + reconcile (spec build)
+- Added: `src/reconcile.ts` (pure `diffIssues` + `reconcileRepo` with ETag-style guarded pruning + targeted `pruneMilestone`); worker `milestone` case (prune-on-deleted, then recompute) and `progress_sync` case (operator-enqueued, like `stale_check` — no scheduler exists yet); `MilestoneSchema` routing in all four webhook shells.
+- Changed: `fetchIssues` returns `truncated` (page-cap guard so reconcile never prunes from partial listings).
+- Fixtures: milestone_closed/deleted.
+- Reason: milestone open/close/delete moves progress the same event-driven way issues do; reconcile fixes drift (missed deliveries) without ever counting commits.
+- Verification: `test/reconcile.test.ts` (diff matrix incl. truncated-no-prune, live reconcile + prune with mocked DB/stub HTTP) + `test/milestone.test.ts` (schema + end-to-end route). Gate green (28 files / 131 tests, `tsc --noEmit`, `npm run build`).
 - Added: `src/linkTokens.ts` (32-byte deep-link tokens, SHA-256-only storage, constant-time re-compare, expiry + single-use); `src/chatAccess.ts` (DM: GitHub-linked + repo access; groups: + admin via getChatMember); bot `/repos` picker (accessible + bound marks), `/bind owner/repo`, `/unlink [owner/repo]` (groups: admin-gated both ways); per-command rate limits; auth start/callback rate-limited in both shells.
 - Changed: website `link-token` issues/polls via LinkToken (Connect UI unchanged); bot `/start` claims hash-first with legacy raw fallback until expiry; sender id + chat type plumbed through polling.
 - Deferred + documented: legacy `/link` 6-letter codes stay raw on TelegramLink (rate-limited, 10-min, single-use — hash adds little at ~30 bits entropy).

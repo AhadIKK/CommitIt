@@ -35,10 +35,15 @@ function weightFromLabels(labels: { name: string }[]): number {
 
 export async function fetchIssues(
   fullName: string,
-): Promise<{ issues: SyncIssue[]; milestones: { number: number; title: string }[] }> {
+): Promise<{
+  issues: SyncIssue[];
+  milestones: { number: number; title: string }[];
+  truncated: boolean; // true when the 10-page cap cut the listing (unsafe to prune)
+}> {
   const issues: SyncIssue[] = [];
   const milestones = new Map<number, string>();
   let page = 1;
+  let truncated = false;
   for (;;) {
     const res = await fetch(
       `https://api.github.com/repos/${fullName}/issues?state=all&per_page=100&page=${page}`,
@@ -66,11 +71,15 @@ export async function fetchIssues(
       if (it.milestone) milestones.set(it.milestone.number, it.milestone.title);
     }
     page += 1;
-    if (page > 10) break;
+    if (page > 10) {
+      truncated = true;
+      break;
+    }
   }
   return {
     issues,
     milestones: [...milestones].map(([number, title]) => ({ number, title })),
+    truncated,
   };
 }
 

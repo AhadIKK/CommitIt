@@ -25,7 +25,7 @@ See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message sty
 ## Webhooks
 
 `POST /webhook` (local/Render) and `POST /api/webhook` (Vercel) accept `push`,
-`pull_request`, and `check_run` events. All go through HMAC verify →
+`pull_request`, `check_run`, `issues`, and `milestone` events. All go through HMAC verify →
 rate-limit → `events.delivery_id` dedupe → `enqueueJob()` → worker
 (push digest, PR-merged / CI fail-fixed alerts, secret + stale-branch alerts).
 

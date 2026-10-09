@@ -1,0 +1,10 @@
+{
+  "action": "deleted",
+  "milestone": {
+    "number": 4,
+    "title": "Old scope",
+    "state": "open"
+  },
+  "repository": { "full_name": "AhadIKK/CommitIt" },
+  "sender": { "login": "AhadIKK" }
+}

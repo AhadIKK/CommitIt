@@ -143,7 +143,13 @@ export default async function handler(
   }
 
   // Code events: same pipeline as manual webhooks (AGENTS.md rules 2+3).
-  if (event === "push" || event === "issues" || event === "pull_request" || event === "check_run") {
+  if (
+    event === "push" ||
+    event === "issues" ||
+    event === "milestone" ||
+    event === "pull_request" ||
+    event === "check_run"
+  ) {
     try {
       await prisma.event.upsert({
         where: { deliveryId: delivery },

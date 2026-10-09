@@ -1,0 +1,10 @@
+{
+  "action": "closed",
+  "milestone": {
+    "number": 3,
+    "title": "Auth",
+    "state": "closed"
+  },
+  "repository": { "full_name": "AhadIKK/CommitIt" },
+  "sender": { "login": "AhadIKK" }
+}

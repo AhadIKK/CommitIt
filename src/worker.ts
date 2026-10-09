@@ -5,6 +5,7 @@ import { trim } from "./brain/trim.js";
 import { backfillInstallation } from "./backfill.js";
 import { prisma } from "./db.js";
 import { appKeys } from "./githubAuth.js";
+import { pruneMilestone, reconcileRepo } from "./reconcile.js";
 import {
   formatCIFailed,
   formatCIFixed,
@@ -386,6 +387,32 @@ export async function processJob(job: JobRow): Promise<void> {
         "unknown";
       // closed/reopened edited directly on GitHub — recompute from the API.
       if (repo !== "unknown") await syncRepoIssues(repo);
+      await completeJob(job.id);
+      return;
+    }
+    case "milestone": {
+      const p = job.payload as {
+        action?: string;
+        repository?: { full_name?: string };
+        milestone?: { number?: number };
+      };
+      const repo = p.repository?.full_name ?? "unknown";
+      // Milestone opened/closed/edited/deleted — recompute from the API.
+      // Deleted prunes the exact milestone row first (targeted, no page guard needed).
+      if (repo !== "unknown") {
+        if (p.action === "deleted" && p.milestone?.number !== undefined) {
+          await pruneMilestone(repo, p.milestone.number);
+        }
+        await syncRepoIssues(repo);
+      }
+      await completeJob(job.id);
+      return;
+    }
+    case "progress_sync": {
+      // Periodic reconcile (operator-enqueued, like stale_check): diff DB vs
+      // API and fix drift. Best-effort — null still completes the job.
+      const repo = (job.payload as { repo?: string }).repo ?? "unknown";
+      if (repo !== "unknown") await reconcileRepo(repo);
       await completeJob(job.id);
       return;
     }

@@ -301,4 +301,28 @@ describe("api/github-app", () => {
       else delete process.env.GITHUB_APP_WEBHOOK_SECRET;
     }
   });
+
+  it("routes milestone events into the pipeline", async () => {
+    const saved = process.env.GITHUB_APP_WEBHOOK_SECRET;
+    delete process.env.GITHUB_APP_WEBHOOK_SECRET; // dev-skip path
+    try {
+      const raw = JSON.stringify({
+        action: "closed",
+        milestone: { number: 3, title: "Auth" },
+        repository: { full_name: "o/r" },
+      });
+      const { res, done } = mockRes();
+      await (appWebhookHandler as Handler)(
+        mockReq({
+          method: "POST",
+          headers: { "x-github-delivery": "d5", "x-github-event": "milestone" },
+          body: raw,
+        }),
+        res,
+      );
+      expect(await done).toMatchObject({ status: 200, body: { ok: true } });
+    } finally {
+      if (saved !== undefined) process.env.GITHUB_APP_WEBHOOK_SECRET = saved;
+    }
+  });
 });
