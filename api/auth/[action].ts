@@ -1,12 +1,25 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { exchangeCode, fetchViewer } from "../../src/githubApp.js";
 import { prisma } from "../../src/db.js";
 import {
+  buildAuthorizeUrl,
+  callbackUrl,
+  exchangeCode,
+  fetchViewer,
+  isSecureCallback,
+} from "../../src/githubApp.js";
+import {
   STATE_COOKIE,
+  clearSessionCookieHeader,
+  genState,
   parseCookies,
   sessionCookieHeader,
   signSession,
+  stateCookieHeader,
 } from "../../src/session.js";
+
+// Dynamic auth route: /api/auth/github, /api/auth/callback, /api/auth/logout
+// share ONE serverless function (Vercel Hobby caps at 12 per deployment).
+// Same semantics as the three separate handlers it replaces.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
@@ -14,13 +27,34 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-// GET /api/auth/callback?code=..&state=.. — finish GitHub OAuth login.
-// Validates state, exchanges the code (token never stored), upserts the
-// User by githubLogin, sets the session cookie, redirects home.
-export default async function handler(
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> {
+function actionOf(req: IncomingMessage): string {
+  const path = (req.url ?? "/").split("?")[0] ?? "";
+  const seg = path.split("/").filter(Boolean).pop() ?? "";
+  return seg.toLowerCase();
+}
+
+async function startLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if ((req.method ?? "GET") !== "GET") {
+    sendJson(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+  const clientId = (process.env.GITHUB_CLIENT_ID ?? "").trim();
+  if (!clientId) {
+    sendJson(res, 503, { ok: false, error: "oauth_not_configured" });
+    return;
+  }
+  const redirectUri = callbackUrl(req.headers);
+  const state = genState();
+  res.statusCode = 302;
+  res.setHeader("Set-Cookie", stateCookieHeader(state, isSecureCallback(redirectUri)));
+  res.setHeader(
+    "Location",
+    buildAuthorizeUrl({ clientId, redirectUri, state }),
+  );
+  res.end();
+}
+
+async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if ((req.method ?? "GET") !== "GET") {
     sendJson(res, 405, { ok: false, error: "method_not_allowed" });
     return;
@@ -79,4 +113,35 @@ export default async function handler(
   ]);
   res.setHeader("Location", "/?linked=github");
   res.end();
+}
+
+async function logout(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+  res.statusCode = 200;
+  res.setHeader("Set-Cookie", clearSessionCookieHeader());
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify({ ok: true }));
+}
+
+export default async function handler(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const action = actionOf(req);
+  if (action === "github") {
+    await startLogin(req, res);
+    return;
+  }
+  if (action === "callback") {
+    await finishLogin(req, res);
+    return;
+  }
+  if (action === "logout") {
+    await logout(req, res);
+    return;
+  }
+  sendJson(res, 404, { ok: false, error: "not_found" });
 }

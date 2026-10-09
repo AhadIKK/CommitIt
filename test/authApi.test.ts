@@ -1,8 +1,6 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
-import callbackHandler from "../api/auth/callback.js";
-import githubHandler from "../api/auth/github.js";
-import logoutHandler from "../api/auth/logout.js";
+import authHandler from "../api/auth/[action].js";
 import appWebhookHandler from "../api/github-app.js";
 import meHandler from "../api/me.js";
 import metaHandler from "../api/meta.js";
@@ -150,7 +148,7 @@ describe("api/auth/github", () => {
     process.env.GITHUB_CLIENT_ID = "client-123";
     try {
       const { res, done } = mockRes();
-      await (githubHandler as Handler)(mockReq(), res);
+      await (authHandler as Handler)(mockReq({ url: "/api/auth/github" }), res);
       const out = await done;
       expect(out.status).toBe(302);
       const headers = out.headers as Record<string, unknown>;
@@ -168,7 +166,7 @@ describe("api/auth/github", () => {
     delete process.env.GITHUB_CLIENT_ID;
     try {
       const { res, done } = mockRes();
-      await (githubHandler as Handler)(mockReq(), res);
+      await (authHandler as Handler)(mockReq({ url: "/api/auth/github" }), res);
       expect((await done).status).toBe(503);
     } finally {
       if (saved !== undefined) process.env.GITHUB_CLIENT_ID = saved;
@@ -179,7 +177,7 @@ describe("api/auth/github", () => {
 describe("api/auth/callback", () => {
   it("rejects state mismatch without network", async () => {
     const { res, done } = mockRes();
-    await (callbackHandler as Handler)(
+    await (authHandler as Handler)(
       mockReq({
         url: "/api/auth/callback?code=abc&state=wrong",
         headers: { cookie: "commitit_oauth_state=right" },
@@ -193,7 +191,10 @@ describe("api/auth/callback", () => {
 describe("api/auth/logout", () => {
   it("clears the session cookie on POST", async () => {
     const { res, done } = mockRes();
-    await (logoutHandler as Handler)(mockReq({ method: "POST" }), res);
+    await (authHandler as Handler)(
+      mockReq({ method: "POST", url: "/api/auth/logout" }),
+      res,
+    );
     const out = await done;
     expect(out.status).toBe(200);
     expect(String((out.headers as Record<string, unknown>)["Set-Cookie"])).toContain(
