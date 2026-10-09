@@ -1,5 +1,6 @@
 import "dotenv/config";
 import Fastify from "fastify";
+import { registerAuthRoutes } from "./auth.js";
 import { registerDashboardRoutes } from "./dashboard.js";
 import { registerLinkingRoutes } from "./linking.js";
 import { startBotPolling } from "./telegramBot.js";
@@ -29,6 +30,7 @@ app.get("/health", async () => ({ ok: true }));
 await app.register(webhookRoutes);
 await app.register(registerDashboardRoutes);
 await app.register(registerLinkingRoutes);
+await app.register(registerAuthRoutes);
 
 // In-process worker poller (queue.ts SKIP LOCKED). Single stack, no Redis.
 startWorker(app.log);

@@ -34,6 +34,7 @@ GitHub → Telegram progress tracker. Single-stack Node.js + TypeScript. Chat-fi
 src/webhook.ts verify.ts rateLimit.ts queue.ts worker.ts
 src/brain/scan.ts trim.ts classify.ts summarize.ts suggest.ts
 src/linker.ts progress.ts formatter.ts scheduler.ts subscriptions.ts telegram.ts github-sync.ts
+src/auth.ts session.ts githubApp.ts
 src/ai/providers/*.ts
 prisma/schema.prisma test/fixtures/ .env.example
 ```

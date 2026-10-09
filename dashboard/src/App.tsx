@@ -15,6 +15,7 @@ import Logo from "./Logo.js";
 import { buildWeeklySummary, digestToDoc, weekLabel } from "./report.js";
 import Review from "./Review.js";
 import Connect from "./Connect.js";
+import Auth from "./Auth.js";
 import "./styles.css";
 import { ThemeSwitch, useTheme } from "./theme.js";
 
@@ -190,6 +191,12 @@ export default function App() {
           <h2>Telegram</h2>
         </div>
         <Connect repo={repo} />
+      </section>
+      <section aria-label="GitHub">
+        <div className="section-head">
+          <h2>GitHub</h2>
+        </div>
+        <Auth repo={repo} />
       </section>
         </TabsContent>
 

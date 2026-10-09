@@ -10,7 +10,10 @@ datasource db {
 
 model User {
   id             String   @id @default(cuid())
-  telegramUserId String   @unique
+  telegramUserId String?  @unique
+  githubLogin    String?  @unique
+  githubUserId   BigInt?  @unique
+  avatarUrl      String?
   repos          Repo[]
   createdAt      DateTime @default(now())
 }
@@ -31,6 +34,8 @@ model Repo {
   owner         User?    @relation(fields: [ownerUserId], references: [id])
   aiEnabled     Boolean  @default(true)
   defaultBranch String?
+  installationId BigInt?
+  installedAt   DateTime?
   subscriptions Subscription[]
   commits       Commit[]
   issues        Issue[]

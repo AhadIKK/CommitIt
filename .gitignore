@@ -1,6 +1,7 @@
 .vercel
 .env
 .env.local
+.opencode/
 node_modules/
 dist/
 *.log
