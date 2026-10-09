@@ -10,6 +10,9 @@ import {
   selectUserInstallations,
 } from "../src/githubApp.js";
 import installationFixture from "./fixtures/installation.json";
+import suspendFixture from "./fixtures/installation_suspend.json";
+import unsuspendFixture from "./fixtures/installation_unsuspend.json";
+import repositoriesFixture from "./fixtures/installation_repositories.json";
 
 describe("buildAuthorizeUrl", () => {
   it("points at github.com with client, redirect, state", () => {
@@ -56,14 +59,35 @@ describe("parseInstallationEvent", () => {
       installationId: 12345678n,
       repos: ["AhadIKK/CommitIt"],
       senderLogin: "AhadIKK",
+      accountLogin: "AhadIKK",
+      accountType: "User",
     });
   });
 
-  it("parses removal and ignores the rest", () => {
+  it("parses removal, suspend, and ignores the rest", () => {
     expect(
       parseInstallationEvent({ action: "deleted", installation: { id: 9 }, repositories: [] }),
     ).toEqual({ kind: "removed", installationId: 9n, repos: [], senderLogin: null });
-    expect(parseInstallationEvent({ action: "suspend", installation: { id: 9 } })).toBeNull();
+    expect(parseInstallationEvent(suspendFixture)).toEqual({
+      kind: "suspended",
+      installationId: 12345678n,
+      senderLogin: "AhadIKK",
+    });
+    expect(parseInstallationEvent(unsuspendFixture)).toEqual({
+      kind: "unsuspended",
+      installationId: 12345678n,
+      senderLogin: "AhadIKK",
+    });
+    expect(
+      parseInstallationEvent(repositoriesFixture),
+    ).toEqual({
+      kind: "installed",
+      installationId: 12345678n,
+      repos: ["AhadIKK/CommitIt", "AhadIKK/other"],
+      senderLogin: "AhadIKK",
+      accountLogin: "AhadIKK",
+      accountType: "User",
+    });
     expect(parseInstallationEvent({ action: "opened" })).toBeNull();
     expect(parseInstallationEvent(null)).toBeNull();
   });

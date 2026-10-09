@@ -1,6 +1,11 @@
 # Changes
 
-## 2026-10-09 — Phase A: GitHub App client (spec build)
+## 2026-10-09 — Phase B: install lifecycle (spec build)
+- Added: migration `3_install_lifecycle` (Installation, UserInstallation, Session hash-only, LinkToken hash-only, Repo.installActive/syncEtag/lastSyncAt — applied to Supabase, all tables/columns verified live); `src/installations.ts` (record/remove/suspend/revoke writes); `src/backfill.ts` (per-install paginated sync with ETag 304-skip + 429/403 RateLimitedError for worker backoff); worker `backfill` job; delivery gates (`resolveRecipients` returns nobody + `dispatchDueNotifications` fails queued notes when `installActive=false`).
+- Changed: `parseInstallationEvent` (suspend/unsuspend kinds, account info, `repositories_added/_removed` shapes); install branches in `api/github-app.ts` + `src/auth.ts` route through the lifecycle module; `github-sync.ts` upserts extracted to `storeSyncedIssues()` (behavior unchanged); `attributeInstallToSender` returns userId; `claimUserRepos` writes join rows.
+- Fixtures: installation_deleted/suspend/unsuspend/repositories, github_app_authorization.
+- Reason: installs drive profiles + access gating; revocation kills sessions; backfill seeds history without webhooks.
+- Verification: `test/installations.test.ts` + `test/backfill.test.ts` (ETag/429/pagination mocked); full gate green (23 files / 107 tests, `tsc --noEmit`, `npm run build`).
 - Added: `src/githubAuth.ts` (App JWT reuse, in-memory installation-token cache with ~5-min refresh skew, PEM normalize for base64 + `\n`-escaped forms, authenticated API fetch wrapper). No Octokit: plain `fetch` per plan.md §18 (named deviation from spec, justified: zero new deps, matches `github-sync.ts`).
 - Changed: `.env.example` (+`GITHUB_APP_PRIVATE_KEY` raw-PEM alternative).
 - Reason: token minting/cache foundation for install lifecycle (B), login claim (C), backfill (B); tokens never persisted.

@@ -2,7 +2,9 @@ import { classify } from "./brain/classify.js";
 import { scan } from "./brain/scan.js";
 import { summarize } from "./brain/summarize.js";
 import { trim } from "./brain/trim.js";
+import { backfillInstallation } from "./backfill.js";
 import { prisma } from "./db.js";
+import { appKeys } from "./githubAuth.js";
 import {
   formatCIFailed,
   formatCIFixed,
@@ -390,6 +392,26 @@ export async function processJob(job: JobRow): Promise<void> {
     case "stale_check":
       await processStaleCheck(job, job.payload as { repo?: string; thresholdDays?: number });
       return;
+    case "backfill": {
+      // One-shot per-install sync. RateLimitedError propagates to failJob()
+      // backoff; missing App config completes (retry would never help).
+      const installationId = (job.payload as { installationId?: string | number })
+        .installationId;
+      if (installationId === undefined) {
+        await completeJob(job.id);
+        return;
+      }
+      let keys;
+      try {
+        keys = appKeys();
+      } catch {
+        await completeJob(job.id);
+        return;
+      }
+      await backfillInstallation(installationId, keys);
+      await completeJob(job.id);
+      return;
+    }
     default:
       await completeJob(job.id);
   }

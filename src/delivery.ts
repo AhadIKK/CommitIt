@@ -35,6 +35,9 @@ export async function resolveRecipients(repoFullName: string): Promise<Recipient
   try {
     const repoRow = await prisma.repo.findUnique({ where: { fullName: repoFullName } });
     if (!repoRow) return fallbackRecipient();
+    // Access lost (install deleted/suspended): NOBODY is notified — not even
+    // the default-chat fallback. Never notify about a repo we lost access to.
+    if (repoRow.installActive === false) return [];
     const subs = await prisma.subscription.findMany({
       where: { repoId: repoRow.id, isMuted: false },
       include: { chat: { select: { telegramChatId: true } } },
@@ -117,7 +120,12 @@ export async function dispatchDueNotifications(now: Date = new Date()): Promise<
         OR: [{ scheduledFor: null }, { scheduledFor: { lte: now } }],
       },
       include: {
-        subscription: { include: { chat: { select: { telegramChatId: true } } } },
+        subscription: {
+          include: {
+            chat: { select: { telegramChatId: true } },
+            repo: { select: { installActive: true } },
+          },
+        },
       },
       take: 50,
     });
@@ -130,6 +138,14 @@ export async function dispatchDueNotifications(now: Date = new Date()): Promise<
     let digests = 0;
     for (const [, notes] of bySub) {
       const sub = notes[0]!.subscription;
+      // Access lost after queueing: fail (never send), don't reschedule.
+      if (sub.repo.installActive === false) {
+        await prisma.notification.updateMany({
+          where: { id: { in: notes.map((n) => n.id) } },
+          data: { status: "failed" },
+        });
+        continue;
+      }
       if (sub.isMuted) {
         await prisma.notification.updateMany({
           where: { id: { in: notes.map((n) => n.id) } },

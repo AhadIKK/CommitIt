@@ -15,6 +15,8 @@ model User {
   githubUserId   BigInt?  @unique
   avatarUrl      String?
   repos          Repo[]
+  installations  UserInstallation[]
+  sessions       Session[]
   createdAt      DateTime @default(now())
 }
 
@@ -36,6 +38,9 @@ model Repo {
   defaultBranch String?
   installationId BigInt?
   installedAt   DateTime?
+  installActive Boolean  @default(true)
+  syncEtag      String?
+  lastSyncAt    DateTime?
   subscriptions Subscription[]
   commits       Commit[]
   issues        Issue[]
@@ -202,6 +207,52 @@ model TelegramLink {
   kind         String    // "token" | "code"
   chatId       String?   // sender chat, set by bot on /link
   claimedBy    String?   // chat id that claimed a deep-link token
+  repoFullName String?
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+// Phase B install lifecycle. Installations are GitHub-owned (BigInt id);
+// access loss (deleted/suspend) flips repos.installActive so delivery stops.
+// Sessions store only a SHA-256 hash (spec); LinkToken the same for the
+// Phase D Telegram flows (TelegramLink keeps its legacy raw-code flow).
+model Installation {
+  id           BigInt   @id // GitHub installation id
+  accountLogin String?
+  accountType  String? // User | Organization
+  suspendedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  members      UserInstallation[]
+}
+
+model UserInstallation {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  installationId BigInt
+  installation   Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, installationId])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 of the session id, never the id
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model LinkToken {
+  id           String    @id @default(cuid())
+  tokenHash    String    @unique // SHA-256 of the 32-byte token
+  purpose      String    // "telegram_link"
+  chatId       String?
   repoFullName String?
   expiresAt    DateTime
   usedAt       DateTime?

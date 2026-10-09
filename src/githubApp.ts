@@ -9,14 +9,35 @@ import { z } from "zod";
 
 const InstallationSchema = z.object({
   action: z.string(),
-  installation: z.object({ id: z.number() }).optional(),
+  installation: z
+    .object({
+      id: z.number(),
+      account: z.object({ login: z.string(), type: z.string().optional() }).optional(),
+    })
+    .optional(),
   sender: z.object({ login: z.string() }).optional(),
   repositories: z.array(z.object({ full_name: z.string() })).optional(),
+  repositories_added: z.array(z.object({ full_name: z.string() })).optional(),
+  repositories_removed: z.array(z.object({ full_name: z.string() })).optional(),
 });
 
 export type InstallationChange =
-  | { kind: "installed"; installationId: bigint; repos: string[]; senderLogin: string | null }
-  | { kind: "removed"; installationId: bigint; repos: string[]; senderLogin: string | null };
+  | {
+      kind: "installed";
+      installationId: bigint;
+      repos: string[];
+      senderLogin: string | null;
+      accountLogin: string | null;
+      accountType: string | null;
+    }
+  | {
+      kind: "removed";
+      installationId: bigint;
+      repos: string[];
+      senderLogin: string | null;
+    }
+  | { kind: "suspended"; installationId: bigint; senderLogin: string | null }
+  | { kind: "unsuspended"; installationId: bigint; senderLogin: string | null };
 
 /**
  * Parse `installation` / `installation_repositories` webhook bodies into a
@@ -30,12 +51,31 @@ export function parseInstallationEvent(body: unknown): InstallationChange | null
   if (!installation) return null;
   const installationId = BigInt(installation.id);
   const senderLogin = sender?.login ?? null;
-  const repos = (repositories ?? []).map((r) => r.full_name).filter(Boolean);
-  if (action === "created") return { kind: "installed", installationId, repos, senderLogin };
-  if (action === "deleted") return { kind: "removed", installationId, repos, senderLogin };
-  if (action === "added") return { kind: "installed", installationId, repos, senderLogin };
-  if (action === "removed") return { kind: "removed", installationId, repos, senderLogin };
-  return null; // suspend/unsuspend/etc: nothing to route
+  const names = (list?: { full_name: string }[]) => (list ?? []).map((r) => r.full_name).filter(Boolean);
+  // installation_repositories events carry repositories_added/_removed;
+  // installation created/deleted carry repositories.
+  const repos = names(repositories);
+  const added = names(parsed.data.repositories_added);
+  const removed = names(parsed.data.repositories_removed);
+  const accountLogin = installation.account?.login ?? null;
+  const accountType = installation.account?.type ?? null;
+  if (action === "created") {
+    return { kind: "installed", installationId, repos, senderLogin, accountLogin, accountType };
+  }
+  if (action === "added") {
+    const list = repos.length > 0 ? repos : added;
+    return { kind: "installed", installationId, repos: list, senderLogin, accountLogin, accountType };
+  }
+  if (action === "deleted") {
+    return { kind: "removed", installationId, repos, senderLogin };
+  }
+  if (action === "removed") {
+    const list = repos.length > 0 ? repos : removed;
+    return { kind: "removed", installationId, repos: list, senderLogin };
+  }
+  if (action === "suspend") return { kind: "suspended", installationId, senderLogin };
+  if (action === "unsuspend") return { kind: "unsuspended", installationId, senderLogin };
+  return null; // anything else: nothing to route
 }
 
 export function buildAuthorizeUrl(opts: {
@@ -183,28 +223,30 @@ export function selectUserInstallations(
     .map((i) => i.id);
 }
 
-type AttributionDb = Pick<PrismaClient, "repo" | "user">;
+type AttributionDb = Pick<PrismaClient, "repo" | "user" | "userInstallation">;
 
 /**
  * Attribute freshly-installed repos to the installer's CommitIt account
  * (matched by installer GitHub login). Best-effort: never throws, never
- * blocks the install ack. No-op when the installer has no account yet —
- * login claims it later via claimUserRepos().
+ * blocks the install ack. Returns the user id, or null when the installer
+ * has no account yet — login claims it later via claimUserRepos().
  */
 export async function attributeInstallToSender(
   db: AttributionDb,
   change: { installationId: bigint; repos: string[]; senderLogin: string | null },
-): Promise<void> {
-  if (!change.senderLogin || change.repos.length === 0) return;
+): Promise<string | null> {
+  if (!change.senderLogin || change.repos.length === 0) return null;
   try {
     const user = await db.user.findUnique({ where: { githubLogin: change.senderLogin } });
-    if (!user) return;
+    if (!user) return null;
     await db.repo.updateMany({
       where: { fullName: { in: change.repos } },
       data: { ownerUserId: user.id },
     });
+    return user.id;
   } catch {
     // attribution is best-effort; the install itself is already applied
+    return null;
   }
 }
 
@@ -235,10 +277,17 @@ export async function claimUserRepos(db: AttributionDb, login: string): Promise<
       where: { installationId: { in: ids } },
       data: { ownerUserId: userId },
     });
+    for (const installationId of ids) {
+      await db.userInstallation.upsert({
+        where: { userId_installationId: { userId, installationId } },
+        update: {},
+        create: { userId, installationId },
+      });
+    }
+    return ids.length;
   } catch {
     return 0;
   }
-  return ids.length;
 }
 
 /** Mint a short-lived installation token for API calls as the App. */

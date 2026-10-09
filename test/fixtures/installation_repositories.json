@@ -1,0 +1,14 @@
+{
+  "action": "added",
+  "installation": {
+    "id": 12345678,
+    "account": { "login": "AhadIKK", "type": "User" }
+  },
+  "repositories_added": [
+    { "full_name": "AhadIKK/CommitIt" },
+    { "full_name": "AhadIKK/other" }
+  ],
+  "repositories_removed": [],
+  "repository_selection": "selected",
+  "sender": { "login": "AhadIKK" }
+}

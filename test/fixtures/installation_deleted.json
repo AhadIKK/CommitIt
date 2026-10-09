@@ -1,0 +1,9 @@
+{
+  "action": "deleted",
+  "installation": {
+    "id": 12345678,
+    "account": { "login": "AhadIKK", "type": "User" }
+  },
+  "repositories": [],
+  "sender": { "login": "AhadIKK" }
+}

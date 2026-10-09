@@ -21,6 +21,12 @@ vi.mock("../src/db.js", () => ({
       findUnique: async () => ({ installationId: 12345678n }),
       findMany: async () => [{ fullName: "AhadIKK/CommitIt" }],
     },
+    installation: {
+      upsert: async () => ({}),
+      deleteMany: async () => ({ count: 1 }),
+    },
+    userInstallation: { upsert: async () => ({}) },
+    session: { updateMany: async () => ({ count: 0 }) },
     event: { upsert: async () => ({}) },
     job: { upsert: async () => ({}) },
   },

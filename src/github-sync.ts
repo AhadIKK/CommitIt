@@ -74,19 +74,13 @@ export async function fetchIssues(
   };
 }
 
-// syncRepoIssues(): pull issues/milestones from GitHub (source of truth)
-// into the DB so progress/linker/dashboard read fresh data. Best-effort:
-// rate limits, private repos without GITHUB_TOKEN, or no DB all degrade to
-// null and the calling job still completes.
-export async function syncRepoIssues(
+// storeSyncedIssues(): DB half of the sync (extracted for the install
+// backfill, which fetches with an installation token + ETag instead of
+// GITHUB_TOKEN). Progress invariant holds: issues/milestones only.
+export async function storeSyncedIssues(
   fullName: string,
+  data: { issues: SyncIssue[]; milestones: { number: number; title: string }[] },
 ): Promise<{ issues: number; milestones: number } | null> {
-  let data: Awaited<ReturnType<typeof fetchIssues>>;
-  try {
-    data = await fetchIssues(fullName);
-  } catch {
-    return null;
-  }
   try {
     const repoRow = await prisma.repo.upsert({
       where: { fullName },
@@ -122,4 +116,20 @@ export async function syncRepoIssues(
   } catch {
     return null;
   }
+}
+
+// syncRepoIssues(): pull issues/milestones from GitHub (source of truth)
+// into the DB so progress/linker/dashboard read fresh data. Best-effort:
+// rate limits, private repos without GITHUB_TOKEN, or no DB all degrade to
+// null and the calling job still completes.
+export async function syncRepoIssues(
+  fullName: string,
+): Promise<{ issues: number; milestones: number } | null> {
+  let data: Awaited<ReturnType<typeof fetchIssues>>;
+  try {
+    data = await fetchIssues(fullName);
+  } catch {
+    return null;
+  }
+  return storeSyncedIssues(fullName, data);
 }

@@ -1,6 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { prisma } from "../src/db.js";
-import { attributeInstallToSender, parseInstallationEvent } from "../src/githubApp.js";
+import { parseInstallationEvent } from "../src/githubApp.js";
+import {
+  recordInstall,
+  removeInstallRepos,
+  revokeGithubAuthorization,
+  setInstallSuspended,
+} from "../src/installations.js";
 import { enqueueJob } from "../src/queue.js";
 import { isRateLimited } from "../src/rateLimit.js";
 import { verifySignature } from "../src/verify.js";
@@ -95,39 +101,13 @@ export default async function handler(
     }
     try {
       if (change.kind === "installed") {
-        for (const fullName of change.repos) {
-          await prisma.repo.upsert({
-            where: { fullName },
-            update: { installationId: change.installationId, installedAt: new Date() },
-            create: {
-              fullName,
-              installationId: change.installationId,
-              installedAt: new Date(),
-            },
-          });
-        }
-        // Attribute the install to the installer's account (by sender login).
-        await attributeInstallToSender(prisma, {
-          installationId: change.installationId,
-          repos: change.repos,
-          senderLogin: change.senderLogin,
-        });
+        await recordInstall(change);
+      } else if (change.kind === "removed") {
+        await removeInstallRepos(change);
+      } else if (change.kind === "suspended") {
+        await setInstallSuspended(change.installationId, true);
       } else {
-        if (change.repos.length > 0) {
-          await prisma.repo.updateMany({
-            where: {
-              fullName: { in: change.repos },
-              installationId: change.installationId,
-            },
-            data: { installationId: null },
-          });
-        } else {
-          // installation deleted: clear every repo on that install
-          await prisma.repo.updateMany({
-            where: { installationId: change.installationId },
-            data: { installationId: null },
-          });
-        }
+        await setInstallSuspended(change.installationId, false);
       }
     } catch {
       sendJson(res, 503, { ok: false, error: "unavailable" });
@@ -141,6 +121,22 @@ export default async function handler(
       });
     } catch {
       // idempotency store down: install already applied above, still ack
+    }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  // Authorization revoked: kill that GitHub user's sessions immediately.
+  if (event === "github_app_authorization") {
+    await revokeGithubAuthorization(body);
+    try {
+      await prisma.event.upsert({
+        where: { deliveryId: delivery },
+        update: {},
+        create: { deliveryId: delivery, type: event },
+      });
+    } catch {
+      // idempotency store down: revocation already applied, still ack
     }
     sendJson(res, 200, { ok: true });
     return;
