@@ -1,0 +1,6 @@
+{
+  "action": "renamed",
+  "repository": { "full_name": "AhadIKK/new-name" },
+  "changes": { "repository": { "name": { "from": "old-name" } } },
+  "sender": { "login": "AhadIKK" }
+}

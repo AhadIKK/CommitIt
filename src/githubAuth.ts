@@ -55,6 +55,11 @@ export function clearTokenCache(): void {
   tokenCache.clear();
 }
 
+/** Drop one install's cached token (access lost: deleted/suspended). */
+export function dropCachedToken(installationId: bigint | number | string): void {
+  tokenCache.delete(installationId.toString());
+}
+
 export type TokenDeps = {
   nowMs?: number;
   fetchFn?: typeof fetch;

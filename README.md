@@ -6,13 +6,39 @@ Connect a GitHub repo → get *who did what*, *which goal it moves*, *how close 
 
 See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message style), `changes.md` (log).
 
-## Phase 0 — run locally
+## Setup (production: Vercel + Supabase)
+
+1. **Database** — any Postgres (Supabase pooler URL works). Run the versioned
+   migrations in `prisma/migrations/` in order (`npx prisma migrate deploy`
+   where a direct connection exists; the SQL is idempotent).
+2. **GitHub App** — Settings → Developer settings → GitHub Apps → New:
+   - Webhook URL `https://<your-app>.vercel.app/api/github-app`
+   - Permissions (read-only): Metadata, Contents, Issues, Pull requests, Checks
+   - Events: push, pull_request, check_run, issues, milestone, installation,
+     installation_repositories, github_app_authorization, repository
+   - Note the App ID, slug, Client ID; generate a Client secret + private key.
+3. **Vercel env vars** (Production): `COMMITIT_DATABASE_URL` (pooled 6543 URL —
+   do NOT use the Supabase integration's managed vars, it reverts them),
+   `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY_BASE64` (or
+   `GITHUB_APP_PRIVATE_KEY` with `\n` escapes), `GITHUB_APP_WEBHOOK_SECRET`,
+   `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`,
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_DEFAULT_CHAT_ID`. Redeploy after changes.
+4. **Install + link** — open the dashboard, Install the App on chosen repos,
+   Link GitHub account (first login creates it), Connect Telegram via the Join
+   link, `/bind owner/repo` in the chat (groups: admins only).
+5. **Queue note** — webhook ingestion + dashboard reads run on Vercel, but job
+   processing (`enqueueJob` → worker: digests, alerts) needs a long-lived host
+   (`npm start` on Render/local runs the poller). Vercel-only deploys store
+   events without draining jobs.
+
+## Local dev (ngrok fallback, unsupported in prod)
 
 1. `npm install`
-2. `cp .env.example .env` (fill `DATABASE_URL` when DB is up; not needed for raw-log demo)
+2. `cp .env.example .env` (fill values; see above for the App setup)
 3. `npm run dev` → listens on `PORT` (default 3000)
 4. Expose: `ngrok http 3000`
-5. GitHub repo → Settings → Webhooks → Add → Payload URL `<ngrok>/webhook`, content type `application/json`, secret set, events: push (Phase 0), `POST /webhook` logs headers + payload, returns 200.
+5. Manual per-repo webhook (`<ngrok>/webhook`) works for local testing only —
+   production uses the GitHub App (no per-repo setup).
 
 ## Scripts
 

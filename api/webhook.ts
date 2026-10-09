@@ -31,6 +31,11 @@ const MilestoneSchema = z.object({
   repository: z.object({ full_name: z.string() }).optional(),
 });
 
+const RepositorySchema = z.object({
+  action: z.string().optional(),
+  repository: z.object({ full_name: z.string() }).optional(),
+});
+
 /**
  * POST /api/webhook — Vercel serverless GitHub webhook endpoint.
  * Mirrors `POST /webhook` in `src/webhook.ts` (used by Render/local):
@@ -121,7 +126,9 @@ export default async function handler(
           ? PushSchema
           : event === "milestone"
             ? MilestoneSchema
-            : null;
+            : event === "repository"
+              ? RepositorySchema
+              : null;
   if (schema && !schema.safeParse(parsed).success) {
     sendJson(res, 400, { ok: false, error: "invalid_payload" });
     return;

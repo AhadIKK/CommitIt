@@ -5,6 +5,7 @@ import { trim } from "./brain/trim.js";
 import { backfillInstallation } from "./backfill.js";
 import { prisma } from "./db.js";
 import { appKeys } from "./githubAuth.js";
+import { applyRepositoryChange, parseRepositoryEvent } from "./installations.js";
 import { pruneMilestone, reconcileRepo } from "./reconcile.js";
 import {
   formatCIFailed,
@@ -413,6 +414,14 @@ export async function processJob(job: JobRow): Promise<void> {
       // API and fix drift. Best-effort — null still completes the job.
       const repo = (job.payload as { repo?: string }).repo ?? "unknown";
       if (repo !== "unknown") await reconcileRepo(repo);
+      await completeJob(job.id);
+      return;
+    }
+    case "repository": {
+      // Repo deleted/renamed on GitHub — deactivate or move the row so
+      // delivery stops and future events route correctly.
+      const change = parseRepositoryEvent(job.payload);
+      if (change) await applyRepositoryChange(change);
       await completeJob(job.id);
       return;
     }

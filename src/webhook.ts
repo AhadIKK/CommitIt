@@ -83,6 +83,16 @@ export const MilestoneSchema = z.object({
   repository: z.object({ full_name: z.string() }).optional(),
 });
 
+export const RepositorySchema = z.object({
+  action: z.string().optional(),
+  repository: z.object({ full_name: z.string() }).optional(),
+  changes: z
+    .object({
+      repository: z.object({ name: z.object({ from: z.string() }).optional() }).optional(),
+    })
+    .optional(),
+});
+
 // Process-local fast path for duplicate deliveries. The DB upsert on
 // events.delivery_id remains the source of truth across instances;
 // this set just avoids re-enqueueing within one process.
@@ -138,7 +148,9 @@ export async function webhookRoutes(app: FastifyInstance) {
             ? IssuesSchema.safeParse(req.body ?? {})
             : event === "milestone"
               ? MilestoneSchema.safeParse(req.body ?? {})
-              : PushSchema.safeParse(req.body ?? {});
+              : event === "repository"
+                ? RepositorySchema.safeParse(req.body ?? {})
+                : PushSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       req.log.warn({ delivery, event }, "webhook rejected: invalid payload");
       return reply.code(400).send({ ok: false, error: "invalid_payload" });

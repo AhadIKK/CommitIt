@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "./db.js";
+import { dropCachedToken } from "./githubAuth.js";
 import { attributeInstallToSender, type InstallationChange } from "./githubApp.js";
 
 // installations.ts — install-lifecycle writes (Phase B). All best-effort at
@@ -64,6 +65,7 @@ type RemovedChange = Extract<InstallationChange, { kind: "removed" }>;
  * Otherwise clear just the listed repos (delete keeps the install alive).
  */
 export async function removeInstallRepos(change: RemovedChange): Promise<void> {
+  dropCachedToken(change.installationId); // access lost: cached token dies now
   if (change.repos.length > 0) {
     await prisma.repo.updateMany({
       where: { fullName: { in: change.repos }, installationId: change.installationId },
@@ -83,6 +85,7 @@ export async function setInstallSuspended(
   installationId: bigint,
   suspended: boolean,
 ): Promise<void> {
+  if (suspended) dropCachedToken(installationId); // access lost: cached token dies now
   await prisma.installation.upsert({
     where: { id: installationId },
     update: { suspendedAt: suspended ? new Date() : null },
@@ -120,5 +123,66 @@ export async function revokeGithubAuthorization(body: unknown): Promise<number> 
     return res.count;
   } catch {
     return 0;
+  }
+}
+
+const RepositorySchema = z.object({
+  action: z.string(),
+  repository: z.object({ full_name: z.string() }).optional(),
+  changes: z
+    .object({
+      repository: z.object({ name: z.object({ from: z.string() }).optional() }).optional(),
+    })
+    .optional(),
+});
+
+export type RepositoryChange =
+  | { kind: "deleted"; fullName: string }
+  | { kind: "renamed"; fullName: string; oldFullName: string };
+
+/** Parse `repository` events (deleted/renamed). Null = ignore. */
+export function parseRepositoryEvent(body: unknown): RepositoryChange | null {
+  const parsed = RepositorySchema.safeParse(body);
+  if (!parsed.success) return null;
+  const fullName = parsed.data.repository?.full_name;
+  if (!fullName) return null;
+  if (parsed.data.action === "deleted") return { kind: "deleted", fullName };
+  if (parsed.data.action === "renamed") {
+    const from = parsed.data.changes?.repository?.name?.from;
+    if (!from) return null;
+    const owner = fullName.split("/")[0] ?? "";
+    if (!owner) return null;
+    return { kind: "renamed", fullName, oldFullName: `${owner}/${from}` };
+  }
+  return null; // archived/publicized/etc: nothing to do
+}
+
+/**
+ * Apply a repository change. Deleted = deactivate (installActive=false,
+ * installation detached, cached token dropped) — data retained for audit,
+ * notifications stop via the delivery gates. Renamed = move the row.
+ * Best-effort: returns false only when nothing could be applied.
+ */
+export async function applyRepositoryChange(change: RepositoryChange): Promise<boolean> {
+  try {
+    if (change.kind === "deleted") {
+      const row = await prisma.repo.findUnique({
+        where: { fullName: change.fullName },
+        select: { id: true, installationId: true },
+      });
+      if (!row) return true; // already gone
+      if (row.installationId != null) dropCachedToken(row.installationId);
+      await prisma.repo.update({
+        where: { id: row.id },
+        data: { installActive: false, installationId: null },
+      });
+      return true;
+    }
+    const row = await prisma.repo.findUnique({ where: { fullName: change.oldFullName } });
+    if (!row) return true; // unknown old name: nothing to move
+    await prisma.repo.update({ where: { id: row.id }, data: { fullName: change.fullName } });
+    return true;
+  } catch {
+    return false;
   }
 }

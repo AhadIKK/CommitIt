@@ -1,6 +1,11 @@
 # Changes
 
-## 2026-10-09 — Phase E: live progress via milestone events + reconcile (spec build)
+## 2026-10-09 — Phase F: hardening + docs (spec build)
+- Added: `repository` events end-to-end (deleted → deactivate + drop cached install token, data retained; renamed → row moved); install-token cache purge on delete/suspend; fixtures repository_deleted/renamed.
+- Changed: README setup rewritten (GitHub App creation, Vercel env table, install→link→bind flow, queue-needs-a-host note, manual webhooks marked dev-only fallback).
+- Verified hardening matrix: revoked authorization kills sessions (B, tested); deleted/suspended installs flip `installActive` + stop delivery instantly incl. already-queued notes (B, tested); expired sessions rejected + near-expiry install tokens re-minted (A/C, tested); deleted repos deactivate; renamed repos keep routing.
+- Reason: close the access-loss gaps; docs match the App model.
+- Verification: installations/authApi route + unit tests extended. Gate green (28 files / 133 tests, `tsc --noEmit`, `npm run build`).
 - Added: `src/reconcile.ts` (pure `diffIssues` + `reconcileRepo` with ETag-style guarded pruning + targeted `pruneMilestone`); worker `milestone` case (prune-on-deleted, then recompute) and `progress_sync` case (operator-enqueued, like `stale_check` — no scheduler exists yet); `MilestoneSchema` routing in all four webhook shells.
 - Changed: `fetchIssues` returns `truncated` (page-cap guard so reconcile never prunes from partial listings).
 - Fixtures: milestone_closed/deleted.

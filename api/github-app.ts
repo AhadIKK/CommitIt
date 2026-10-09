@@ -147,6 +147,7 @@ export default async function handler(
     event === "push" ||
     event === "issues" ||
     event === "milestone" ||
+    event === "repository" ||
     event === "pull_request" ||
     event === "check_run"
   ) {

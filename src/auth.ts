@@ -277,6 +277,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       event === "push" ||
       event === "issues" ||
       event === "milestone" ||
+      event === "repository" ||
       event === "pull_request" ||
       event === "check_run"
     ) {

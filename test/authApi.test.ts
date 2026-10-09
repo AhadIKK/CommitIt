@@ -325,4 +325,27 @@ describe("api/github-app", () => {
       if (saved !== undefined) process.env.GITHUB_APP_WEBHOOK_SECRET = saved;
     }
   });
+
+  it("routes repository events into the pipeline", async () => {
+    const saved = process.env.GITHUB_APP_WEBHOOK_SECRET;
+    delete process.env.GITHUB_APP_WEBHOOK_SECRET; // dev-skip path
+    try {
+      const raw = JSON.stringify({
+        action: "deleted",
+        repository: { full_name: "o/gone" },
+      });
+      const { res, done } = mockRes();
+      await (appWebhookHandler as Handler)(
+        mockReq({
+          method: "POST",
+          headers: { "x-github-delivery": "d6", "x-github-event": "repository" },
+          body: raw,
+        }),
+        res,
+      );
+      expect(await done).toMatchObject({ status: 200, body: { ok: true } });
+    } finally {
+      if (saved !== undefined) process.env.GITHUB_APP_WEBHOOK_SECRET = saved;
+    }
+  });
 });
