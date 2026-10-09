@@ -6,7 +6,7 @@ import meHandler from "../api/me.js";
 import metaHandler from "../api/meta.js";
 import repoHandler from "../api/repo.js";
 import { signPayload } from "../src/verify.js";
-import { SESSION_COOKIE, signSession } from "../src/session.js";
+import { SESSION_COOKIE, sessionCookieValue } from "../src/session.js";
 import installationFixture from "./fixtures/installation.json";
 
 vi.mock("../src/db.js", () => ({
@@ -26,7 +26,15 @@ vi.mock("../src/db.js", () => ({
       deleteMany: async () => ({ count: 1 }),
     },
     userInstallation: { upsert: async () => ({}) },
-    session: { updateMany: async () => ({ count: 0 }) },
+    session: {
+      updateMany: async () => ({ count: 0 }),
+      create: async () => ({}),
+      findUnique: async () => ({
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 3600_000),
+        user: { id: "u1", githubLogin: "octocat", avatarUrl: null },
+      }),
+    },
     event: { upsert: async () => ({}) },
     job: { upsert: async () => ({}) },
   },
@@ -96,7 +104,7 @@ describe("api/me", () => {
     const saved = process.env.SESSION_SECRET;
     process.env.SESSION_SECRET = SECRET;
     try {
-      const token = signSession({ login: "octocat" }, SECRET);
+      const token = sessionCookieValue("b".repeat(64), SECRET);
       const { res, done } = mockRes();
       await (meHandler as Handler)(
         mockReq({ headers: { cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}` } }),

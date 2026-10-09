@@ -8,6 +8,7 @@ import issuesHandler from "../api/issues.js";
 import digestsHandler from "../api/digests.js";
 import { signPayload } from "../src/verify.js";
 import { clearRateLimit } from "../src/rateLimit.js";
+import { sessionCookieValue } from "../src/session.js";
 
 function mockReq(
   opts: { method?: string; headers?: Record<string, string>; body?: string } = {},
@@ -116,30 +117,83 @@ describe("api/health handler", () => {
   });
 });
 
-function mockGetReq(url: string) {
+function mockGetReq(url: string, headers: Record<string, string> = {}) {
   return {
     method: "GET",
-    headers: {},
+    headers,
     socket: { remoteAddress: "127.0.0.1" },
     url,
   } as unknown as Parameters<typeof progressHandler>[0];
 }
 
-describe("dashboard api handlers without DB", () => {
+describe("dashboard api handlers (Phase C gates)", () => {
   // Regression: these endpoints 500d on Vercel when the DB was unreachable.
-  // They must degrade to 200 + empty data instead. The prisma client is
-  // mocked to fail fast so the test never touches the network.
+  // Phase C adds gates: no session -> 401, no access -> 403, and data
+  // queries still degrade to 200 + empty on DB failure. Prisma is mocked
+  // to fail fast so the test never touches the network.
   vi.mock("../src/db.js", () => ({
     prisma: {
+      session: {
+        findUnique: async () => ({
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 3600_000),
+          user: { id: "u1", githubLogin: "octocat", avatarUrl: null },
+        }),
+      },
       repo: {
-        findUnique: async () => {
-          throw new Error("db down");
+        // Owned + active for access checks; data queries throw (db down).
+        findUnique: async (args: { where: { fullName: string } }) => {
+          if (args.where.fullName === "o/denied") {
+            return { installationId: 9n, installActive: true, ownerUserId: "u9" };
+          }
+          return { installationId: 1n, installActive: true, ownerUserId: "u1" };
         },
       },
+      userInstallation: { findUnique: async () => null },
     },
   }));
 
+  const SID = "d".repeat(64);
+  const AUTH_SECRET = "test-session-secret";
+
+  function authedHeaders(): { headers: Record<string, string>; restore: () => void } {
+    const saved = process.env.SESSION_SECRET;
+    process.env.SESSION_SECRET = AUTH_SECRET;
+    return {
+      headers: { cookie: `commitit_session=${encodeURIComponent(sessionCookieValue(SID, AUTH_SECRET))}` },
+      restore: () => {
+        if (saved !== undefined) process.env.SESSION_SECRET = saved;
+        else delete process.env.SESSION_SECRET;
+      },
+    };
+  }
+
+  it("401s without a session", async () => {
+    const { res, done } = mockRes();
+    await (progressHandler as typeof progressHandler)(
+      mockGetReq("/api/progress?repo=AhadIKK%2FCommitIt"),
+      res as never,
+    );
+    expect(await done).toEqual({ status: 401, body: { ok: false, error: "logged_out" } });
+  });
+
+  it("403s without repo access", async () => {
+    const { headers, restore } = authedHeaders();
+    try {
+      const { res, done } = mockRes();
+      await (progressHandler as typeof progressHandler)(
+        mockGetReq("/api/progress?repo=o%2Fdenied", headers),
+        res as never,
+      );
+      expect(await done).toEqual({ status: 403, body: { ok: false, error: "forbidden" } });
+    } finally {
+      restore();
+    }
+  });
+
   it("return 200 + empty data when the DB is unreachable", async () => {
+    const { headers, restore } = authedHeaders();
+    try {
     const cases = [
         {
           handler: progressHandler,
@@ -169,8 +223,11 @@ describe("dashboard api handlers without DB", () => {
       ] as const;
       for (const { handler, url, data } of cases) {
         const { res, done } = mockRes();
-        await (handler as typeof progressHandler)(mockGetReq(url), res as never);
+        await (handler as typeof progressHandler)(mockGetReq(url, headers), res as never);
         expect(await done).toEqual({ status: 200, body: { ok: true, data } });
       }
+    } finally {
+      restore();
+    }
   });
 });

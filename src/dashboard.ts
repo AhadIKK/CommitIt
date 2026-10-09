@@ -1,6 +1,8 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { checkRepoAccess, type AccessDenial } from "./access.js";
 import { prisma } from "./db.js";
 import { milestoneProgress } from "./progress.js";
+import { SESSION_COOKIE, parseCookies } from "./session.js";
 
 // dashboard.ts — read-only BFF for the Phase 7 dashboard.
 // Types here are shared with dashboard/ (imported as @src/dashboard.js).
@@ -229,27 +231,47 @@ export async function getDigests(repo: string, limit = 20): Promise<DigestEntry[
 }
 
 // --- Fastify routes (Render/local). Vercel mirrors live in api/*.ts. ---
+// Phase C: every BFF route requires a session + repo access (401 logged out,
+// 403 forbidden). DB outages still degrade to empty (200), never 500.
+
+async function accessDenial(req: FastifyRequest): Promise<AccessDenial | null> {
+  const repo = (req.query as { repo?: string }).repo ?? "";
+  const checked = await checkRepoAccess(
+    parseCookies(req.headers.cookie)[SESSION_COOKIE],
+    process.env.SESSION_SECRET ?? "",
+    repo,
+  );
+  return "denial" in checked ? checked.denial : null;
+}
 
 export async function registerDashboardRoutes(app: FastifyInstance) {
   app.get("/api/progress", async (req, reply) => {
     const repo = (req.query as { repo?: string }).repo;
     if (!repo) return reply.code(400).send({ ok: false, error: "missing_repo" });
+    const denied = await accessDenial(req);
+    if (denied) return reply.code(denied.status).send({ ok: false, error: denied.error });
     return reply.send({ ok: true, data: await getProgress(repo) });
   });
   app.get("/api/activity", async (req, reply) => {
     const q = req.query as { repo?: string; days?: string };
     if (!q.repo) return reply.code(400).send({ ok: false, error: "missing_repo" });
+    const denied = await accessDenial(req);
+    if (denied) return reply.code(denied.status).send({ ok: false, error: denied.error });
     const days = q.days ? Number(q.days) || 7 : 7;
     return reply.send({ ok: true, data: await getActivity(q.repo, days) });
   });
   app.get("/api/issues", async (req, reply) => {
     const repo = (req.query as { repo?: string }).repo;
     if (!repo) return reply.code(400).send({ ok: false, error: "missing_repo" });
+    const denied = await accessDenial(req);
+    if (denied) return reply.code(denied.status).send({ ok: false, error: denied.error });
     return reply.send({ ok: true, data: await getIssues(repo) });
   });
   app.get("/api/digests", async (req, reply) => {
     const q = req.query as { repo?: string; limit?: string };
     if (!q.repo) return reply.code(400).send({ ok: false, error: "missing_repo" });
+    const denied = await accessDenial(req);
+    if (denied) return reply.code(denied.status).send({ ok: false, error: denied.error });
     const limit = q.limit ? Number(q.limit) || 20 : 20;
     return reply.send({ ok: true, data: await getDigests(q.repo, limit) });
   });

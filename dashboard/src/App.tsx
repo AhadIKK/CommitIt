@@ -50,7 +50,14 @@ export default function App() {
       setIssues(i);
       setDigests(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "load failed");
+      const msg = e instanceof Error ? e.message : "load failed";
+      setError(
+        msg === "auth_required"
+          ? "Sign in with GitHub in the GitHub section below, then reload."
+          : msg === "forbidden"
+            ? "Your account can't access this repo (App not installed or access removed)."
+            : msg,
+      );
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,11 @@
 # Changes
 
-## 2026-10-09 — Phase B: install lifecycle (spec build)
+## 2026-10-09 — Phase C: login + server-side sessions + BFF access gates (spec build)
+- Added: server-side sessions (`Session` rows hold only the SHA-256 of a 32-byte id; cookie is `v1.<sid>.<hmac>`, HttpOnly/SameSite-Lax/Secure); `src/access.ts` (`canAccessRepo`: active install + owner/member, `checkRepoAccess` → 401/403); `/api/auth/login` canonical path (legacy `/api/auth/github` kept).
+- Changed: callbacks create session rows + revoke-safe logout (both shells); `/api/me` resolves via DB; all 4 BFF endpoints (both shells) gate on session + access — 401 logged_out / 403 forbidden, DB outages still 200-empty; dashboard maps auth errors to sign-in prompts.
+- BFF exceptions stay exactly the two allowed: POST `/api/auth/logout`, Telegram link-confirm (`link-token`/`link-code` untouched).
+- Reason: per-user repo visibility; revocation (logout, `github_app_authorization`) actually invalidates.
+- Verification: `test/access.test.ts` (owner/member/stranger/suspended/install-less matrix + 401/403/ok); rewritten `test/session.test.ts`; `api.test.ts` covers 401/403/200-empty. Gate green (24 files / 114 tests, `tsc --noEmit`, `npm run build`).
 - Added: migration `3_install_lifecycle` (Installation, UserInstallation, Session hash-only, LinkToken hash-only, Repo.installActive/syncEtag/lastSyncAt — applied to Supabase, all tables/columns verified live); `src/installations.ts` (record/remove/suspend/revoke writes); `src/backfill.ts` (per-install paginated sync with ETag 304-skip + 429/403 RateLimitedError for worker backoff); worker `backfill` job; delivery gates (`resolveRecipients` returns nobody + `dispatchDueNotifications` fails queued notes when `installActive=false`).
 - Changed: `parseInstallationEvent` (suspend/unsuspend kinds, account info, `repositories_added/_removed` shapes); install branches in `api/github-app.ts` + `src/auth.ts` route through the lifecycle module; `github-sync.ts` upserts extracted to `storeSyncedIssues()` (behavior unchanged); `attributeInstallToSender` returns userId; `claimUserRepos` writes join rows.
 - Fixtures: installation_deleted/suspend/unsuspend/repositories, github_app_authorization.

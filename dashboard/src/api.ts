@@ -8,9 +8,11 @@ import type {
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path);
+  if (res.status === 401) throw new Error("auth_required");
+  if (res.status === 403) throw new Error("forbidden");
   if (!res.ok) throw new Error(`request failed: ${res.status}`);
-  const body = (await res.json()) as { ok: boolean; data: T };
-  if (!body.ok) throw new Error("request not ok");
+  const body = (await res.json()) as { ok: boolean; data: T; error?: string };
+  if (!body.ok) throw new Error(body.error ?? "request not ok");
   return body.data;
 }
 

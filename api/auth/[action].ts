@@ -9,18 +9,21 @@ import {
   isSecureCallback,
 } from "../../src/githubApp.js";
 import {
+  SESSION_COOKIE,
   STATE_COOKIE,
   clearSessionCookieHeader,
+  createSession,
   genState,
   parseCookies,
+  revokeSession,
   sessionCookieHeader,
-  signSession,
+  sessionCookieValue,
   stateCookieHeader,
 } from "../../src/session.js";
 
-// Dynamic auth route: /api/auth/github, /api/auth/callback, /api/auth/logout
-// share ONE serverless function (Vercel Hobby caps at 12 per deployment).
-// Same semantics as the three separate handlers it replaces.
+// Dynamic auth route: /api/auth/login (+ legacy /api/auth/github),
+// /api/auth/callback, /api/auth/logout share ONE serverless function
+// (Vercel Hobby caps at 12 per deployment).
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
@@ -94,8 +97,9 @@ async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<v
     return;
   }
 
+  let userRow: { id: string };
   try {
-    await prisma.user.upsert({
+    userRow = await prisma.user.upsert({
       where: { githubLogin: login },
       update: { githubUserId: BigInt(githubId), avatarUrl: avatarUrl ?? null },
       create: { githubLogin: login, githubUserId: BigInt(githubId), avatarUrl: avatarUrl ?? null },
@@ -110,10 +114,20 @@ async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<v
   // Best-effort: never blocks the login redirect.
   await claimUserRepos(prisma, login);
 
+  // Server-side session: only the id hash hits the DB (Phase C).
+  let sid: string;
+  try {
+    sid = await createSession(userRow.id);
+  } catch {
+    res.setHeader("Set-Cookie", clearState);
+    sendJson(res, 503, { ok: false, error: "unavailable" });
+    return;
+  }
+
   const secure = (req.headers["x-forwarded-proto"] ?? "https") !== "http";
   res.statusCode = 302;
   res.setHeader("Set-Cookie", [
-    sessionCookieHeader(signSession({ login, avatarUrl }, sessionSecret), secure),
+    sessionCookieHeader(sessionCookieValue(sid, sessionSecret), secure),
     clearState,
   ]);
   res.setHeader("Location", "/?linked=github");
@@ -125,6 +139,7 @@ async function logout(req: IncomingMessage, res: ServerResponse): Promise<void> 
     sendJson(res, 405, { ok: false, error: "method_not_allowed" });
     return;
   }
+  await revokeSession(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
   res.statusCode = 200;
   res.setHeader("Set-Cookie", clearSessionCookieHeader());
   res.setHeader("content-type", "application/json");
@@ -136,7 +151,7 @@ export default async function handler(
   res: ServerResponse,
 ): Promise<void> {
   const action = actionOf(req);
-  if (action === "github") {
+  if (action === "login" || action === "github") {
     await startLogin(req, res);
     return;
   }

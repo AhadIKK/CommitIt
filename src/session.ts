@@ -1,27 +1,17 @@
 import crypto from "node:crypto";
+import { prisma } from "./db.js";
 
-// session.ts — stateless HMAC-signed session cookies (no Redis; serverless
-// safe). Pure functions: sign/verify only, no I/O. Cookie transport lives
-// in the route shells (api/*.ts, src/auth.ts). Never put secrets in payload.
+// session.ts — session cookies + server-side session records (Phase C).
+// Cookie carries only a random session id, HMAC-signed (same format family
+// as before: v1.<hex>.<hmac>). The DB stores ONLY the SHA-256 hash, so a
+// leak of either side alone is useless — and revocation actually works
+// (github_app_authorization, logout). Never log ids, hashes, or cookies.
 
-export type SessionPayload = {
-  login: string;
-  avatarUrl?: string;
-  iat: number; // issued-at, unix seconds
-  exp: number; // expiry, unix seconds
-};
+export type SessionUser = { id: string; login: string; avatarUrl: string | null };
 
 const VERSION = "v1";
 export const SESSION_TTL_SEC = 30 * 24 * 3600; // 30 days
 export const STATE_TTL_MS = 10 * 60 * 1000; // OAuth state CSRF cookie
-
-function b64urlEncode(data: string | Buffer): string {
-  return Buffer.from(data).toString("base64url");
-}
-
-function b64urlDecode(s: string): string {
-  return Buffer.from(s, "base64url").toString("utf8");
-}
 
 function hmac(secret: string, data: string): Buffer {
   return crypto.createHmac("sha256", secret).update(data).digest();
@@ -32,45 +22,99 @@ export function genState(): string {
   return crypto.randomBytes(16).toString("hex");
 }
 
-export function signSession(
-  input: { login: string; avatarUrl?: string },
-  secret: string,
-  nowSec = Math.floor(Date.now() / 1000),
-): string {
-  const payload: SessionPayload = {
-    login: input.login,
-    ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
-    iat: nowSec,
-    exp: nowSec + SESSION_TTL_SEC,
-  };
-  const body = b64urlEncode(JSON.stringify(payload));
-  const sig = hmac(secret, `${VERSION}.${body}`).toString("base64url");
-  return `${VERSION}.${body}.${sig}`;
+/** Random 32-byte session id (hex). Only its hash is ever stored. */
+export function genSessionId(): string {
+  return crypto.randomBytes(32).toString("hex");
 }
 
-/** Returns the payload on valid signature + unexpired, else null. */
-export function verifySession(
+/** SHA-256 hex of a token. Constant-time compare via safeEqual(). */
+export function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+/** Constant-time string comparison (signatures, hashes). */
+export function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+/** Cookie value for a session id: v1.<sid>.<hmac(sid)>. */
+export function sessionCookieValue(sessionId: string, secret: string): string {
+  const sig = hmac(secret, `${VERSION}.${sessionId}`).toString("base64url");
+  return `${VERSION}.${sessionId}.${sig}`;
+}
+
+/** Verify cookie HMAC and extract the session id (no DB touch). */
+export function parseSessionCookie(
   token: string | undefined,
   secret: string,
-  nowSec = Math.floor(Date.now() / 1000),
-): SessionPayload | null {
+): string | null {
   if (!token || !secret) return null;
   const parts = token.split(".");
   if (parts.length !== 3 || parts[0] !== VERSION) return null;
-  const [version, body, sig] = parts as [string, string, string];
-  const expected = hmac(secret, `${version}.${body}`);
+  const [version, sid, sig] = parts as [string, string, string];
+  if (!/^[0-9a-f]{64}$/.test(sid)) return null;
+  const expected = hmac(secret, `${version}.${sid}`);
   const actual = Buffer.from(sig, "base64url");
   if (actual.length !== expected.length) return null;
   if (!crypto.timingSafeEqual(actual, expected)) return null;
-  let payload: SessionPayload;
+  return sid;
+}
+
+/** Create a server-side session row; returns the raw id for the cookie. */
+export async function createSession(
+  userId: string,
+  ttlSec: number = SESSION_TTL_SEC,
+  nowMs: number = Date.now(),
+): Promise<string> {
+  const sid = genSessionId();
+  await prisma.session.create({
+    data: {
+      userId,
+      tokenHash: hashToken(sid),
+      expiresAt: new Date(nowMs + ttlSec * 1000),
+    },
+  });
+  return sid;
+}
+
+/** Resolve a cookie value to its user (HMAC + live DB row). Null = logged out. */
+export async function getSessionUser(
+  cookieValue: string | undefined,
+  secret: string,
+  nowMs: number = Date.now(),
+): Promise<SessionUser | null> {
+  const sid = parseSessionCookie(cookieValue, secret);
+  if (!sid) return null;
   try {
-    payload = JSON.parse(b64urlDecode(body)) as SessionPayload;
+    const row = await prisma.session.findUnique({
+      where: { tokenHash: hashToken(sid) },
+      include: { user: { select: { id: true, githubLogin: true, avatarUrl: true } } },
+    });
+    if (!row || row.revokedAt || row.expiresAt.getTime() <= nowMs) return null;
+    if (!row.user.githubLogin) return null;
+    return { id: row.user.id, login: row.user.githubLogin, avatarUrl: row.user.avatarUrl };
   } catch {
     return null;
   }
-  if (typeof payload.login !== "string" || payload.login.length === 0) return null;
-  if (typeof payload.exp !== "number" || nowSec >= payload.exp) return null;
-  return payload;
+}
+
+/** Revoke one session by cookie value. Never throws. */
+export async function revokeSession(cookieValue: string | undefined): Promise<void> {
+  if (!cookieValue) return;
+  // Hash without verifying: logout must work even on malformed cookies.
+  const sid = cookieValue.split(".")[1] ?? "";
+  if (!/^[0-9a-f]{64}$/.test(sid)) return;
+  try {
+    await prisma.session.updateMany({
+      where: { tokenHash: hashToken(sid), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  } catch {
+    // logout is best-effort; the cookie is cleared regardless
+  }
 }
 
 /** Minimal `Cookie` header parser (no new deps). First value wins. */

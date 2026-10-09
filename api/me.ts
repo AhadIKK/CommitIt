@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { prisma } from "../src/db.js";
-import { SESSION_COOKIE, parseCookies, verifySession } from "../src/session.js";
+import { SESSION_COOKIE, getSessionUser, parseCookies } from "../src/session.js";
 
-// GET /api/me — current linked GitHub account from the session cookie,
+// GET /api/me — current linked GitHub account (server-side session),
 // plus repos owned by this account. 401 when logged out.
 export default async function handler(
   req: IncomingMessage,
@@ -14,7 +14,7 @@ export default async function handler(
     res.end(JSON.stringify({ ok: false, error: "method_not_allowed" }));
     return;
   }
-  const session = verifySession(
+  const session = await getSessionUser(
     parseCookies(req.headers.cookie)[SESSION_COOKIE],
     process.env.SESSION_SECRET ?? "",
   );
@@ -26,14 +26,11 @@ export default async function handler(
   }
   let repos: string[] = [];
   try {
-    const user = await prisma.user.findUnique({ where: { githubLogin: session.login } });
-    if (user) {
-      const rows = await prisma.repo.findMany({
-        where: { ownerUserId: user.id },
-        select: { fullName: true },
-      });
-      repos = rows.map((r) => r.fullName);
-    }
+    const rows = await prisma.repo.findMany({
+      where: { ownerUserId: session.id },
+      select: { fullName: true },
+    });
+    repos = rows.map((r) => r.fullName);
   } catch {
     repos = [];
   }
@@ -42,7 +39,7 @@ export default async function handler(
   res.end(
     JSON.stringify({
       ok: true,
-      data: { login: session.login, avatarUrl: session.avatarUrl ?? null, repos },
+      data: { login: session.login, avatarUrl: session.avatarUrl, repos },
     }),
   );
 }

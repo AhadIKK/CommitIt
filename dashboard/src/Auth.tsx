@@ -74,7 +74,7 @@ export default function Auth({ repo }: { repo: string }) {
             <Button
               type="button"
               onClick={() => {
-                window.location.href = "/api/auth/github";
+                window.location.href = "/api/auth/login";
               }}
             >
               Link GitHub account

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { prisma } from "./db.js";
 import {
   buildAuthorizeUrl,
@@ -21,12 +21,14 @@ import {
   SESSION_COOKIE,
   STATE_COOKIE,
   clearSessionCookieHeader,
+  createSession,
   genState,
+  getSessionUser,
   parseCookies,
+  revokeSession,
   sessionCookieHeader,
-  signSession,
+  sessionCookieValue,
   stateCookieHeader,
-  verifySession,
 } from "./session.js";
 import { verifySignature } from "./verify.js";
 
@@ -45,7 +47,7 @@ function reqHeaders(req: {
 }
 
 export async function registerAuthRoutes(app: FastifyInstance) {
-  app.get("/api/auth/github", async (req, reply) => {
+  const startLogin = async (req: FastifyRequest, reply: FastifyReply) => {
     const clientId = (process.env.GITHUB_CLIENT_ID ?? "").trim();
     if (!clientId) {
       return reply.code(503).send({ ok: false, error: "oauth_not_configured" });
@@ -58,7 +60,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       .code(302)
       .header("Location", buildAuthorizeUrl({ clientId, redirectUri, state }))
       .send();
-  });
+  };
+  app.get("/api/auth/login", startLogin);
+  app.get("/api/auth/github", startLogin); // legacy alias
 
   app.get("/api/auth/callback", async (req, reply) => {
     const q = req.query as { code?: string; state?: string };
@@ -95,8 +99,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         .code(502)
         .send({ ok: false, error: "oauth_failed" });
     }
+    let userRow: { id: string };
     try {
-      await prisma.user.upsert({
+      userRow = await prisma.user.upsert({
         where: { githubLogin: login },
         update: { githubUserId: BigInt(githubId), avatarUrl: avatarUrl ?? null },
         create: {
@@ -114,10 +119,20 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     // Claim installs belonging to this login (installed before first login).
     // Best-effort: never blocks the login redirect.
     await claimUserRepos(prisma, login);
+    // Server-side session: only the id hash hits the DB (Phase C).
+    let sid: string;
+    try {
+      sid = await createSession(userRow.id);
+    } catch {
+      return reply
+        .header("Set-Cookie", clearState)
+        .code(503)
+        .send({ ok: false, error: "unavailable" });
+    }
     const secure = req.protocol === "https";
     return reply
       .header("Set-Cookie", [
-        sessionCookieHeader(signSession({ login, avatarUrl }, sessionSecret), secure),
+        sessionCookieHeader(sessionCookieValue(sid, sessionSecret), secure),
         clearState,
       ])
       .code(302)
@@ -125,12 +140,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       .send();
   });
 
-  app.post("/api/auth/logout", async (_req, reply) => {
+  app.post("/api/auth/logout", async (req, reply) => {
+    await revokeSession(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
     return reply.header("Set-Cookie", clearSessionCookieHeader()).send({ ok: true });
   });
 
   app.get("/api/me", async (req, reply) => {
-    const session = verifySession(
+    const session = await getSessionUser(
       parseCookies(req.headers.cookie)[SESSION_COOKIE],
       process.env.SESSION_SECRET ?? "",
     );
@@ -139,20 +155,17 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     }
     let repos: string[] = [];
     try {
-      const user = await prisma.user.findUnique({ where: { githubLogin: session.login } });
-      if (user) {
-        const rows = await prisma.repo.findMany({
-          where: { ownerUserId: user.id },
-          select: { fullName: true },
-        });
-        repos = rows.map((r) => r.fullName);
-      }
+      const rows = await prisma.repo.findMany({
+        where: { ownerUserId: session.id },
+        select: { fullName: true },
+      });
+      repos = rows.map((r) => r.fullName);
     } catch {
       repos = [];
     }
     return reply.send({
       ok: true,
-      data: { login: session.login, avatarUrl: session.avatarUrl ?? null, repos },
+      data: { login: session.login, avatarUrl: session.avatarUrl, repos },
     });
   });
 
