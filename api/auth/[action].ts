@@ -3,6 +3,7 @@ import { prisma } from "../../src/db.js";
 import {
   buildAuthorizeUrl,
   callbackUrl,
+  claimUserRepos,
   exchangeCode,
   fetchViewer,
   isSecureCallback,
@@ -104,6 +105,10 @@ async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<v
     sendJson(res, 503, { ok: false, error: "unavailable" });
     return;
   }
+
+  // Claim installs belonging to this login (installed before first login).
+  // Best-effort: never blocks the login redirect.
+  await claimUserRepos(prisma, login);
 
   const secure = (req.headers["x-forwarded-proto"] ?? "https") !== "http";
   res.statusCode = 302;

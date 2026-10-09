@@ -11,11 +11,15 @@ import installationFixture from "./fixtures/installation.json";
 
 vi.mock("../src/db.js", () => ({
   prisma: {
-    user: { upsert: async () => ({ id: "u1" }) },
+    user: {
+      upsert: async () => ({ id: "u1" }),
+      findUnique: async () => ({ id: "u1" }),
+    },
     repo: {
       upsert: async () => ({ id: "r1" }),
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => ({ installationId: 12345678n }),
+      findMany: async () => [{ fullName: "AhadIKK/CommitIt" }],
     },
     event: { upsert: async () => ({}) },
     job: { upsert: async () => ({}) },
@@ -82,7 +86,7 @@ describe("api/me", () => {
     expect(await done).toMatchObject({ status: 401, body: { ok: false } });
   });
 
-  it("returns the login for a valid session", async () => {
+  it("returns the login and owned repos for a valid session", async () => {
     const saved = process.env.SESSION_SECRET;
     process.env.SESSION_SECRET = SECRET;
     try {
@@ -94,7 +98,7 @@ describe("api/me", () => {
       );
       expect(await done).toMatchObject({
         status: 200,
-        body: { ok: true, data: { login: "octocat" } },
+        body: { ok: true, data: { login: "octocat", repos: ["AhadIKK/CommitIt"] } },
       });
     } finally {
       if (saved !== undefined) process.env.SESSION_SECRET = saved;

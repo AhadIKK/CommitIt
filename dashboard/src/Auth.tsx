@@ -52,15 +52,22 @@ export default function Auth({ repo }: { repo: string }) {
       {me === undefined ? (
         <p className="muted">Checking GitHub link…</p>
       ) : me ? (
-        <p>
-          <strong>Linked as {me.login}.</strong>{" "}
-          {me.avatarUrl && (
-            <img src={me.avatarUrl} alt="" width={20} height={20} className="avatar" />
-          )}{" "}
-          <Button type="button" variant="secondary" onClick={doLogout} disabled={busy}>
-            Unlink
-          </Button>
-        </p>
+        <>
+          <p>
+            <strong>Linked as {me.login}.</strong>{" "}
+            {me.avatarUrl && (
+              <img src={me.avatarUrl} alt="" width={20} height={20} className="avatar" />
+            )}{" "}
+            <Button type="button" variant="secondary" onClick={doLogout} disabled={busy}>
+              Unlink
+            </Button>
+          </p>
+          <p className="muted">
+            {me.repos.length > 0
+              ? `Your projects: ${me.repos.join(", ")}`
+              : "No projects owned yet — install the App on a repo to claim it."}
+          </p>
+        </>
       ) : (
         <p className="muted">
           {meta?.authEnabled ? (

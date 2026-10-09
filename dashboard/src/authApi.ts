@@ -1,6 +1,6 @@
 // authApi.ts — GitHub account linking + App install state. Reads /api/me,
 // /api/meta, /api/repo. Login itself is a redirect to /api/auth/github.
-export type Me = { login: string; avatarUrl: string | null };
+export type Me = { login: string; avatarUrl: string | null; repos: string[] };
 export type Meta = {
   appSlug: string | null;
   installUrl: string | null;

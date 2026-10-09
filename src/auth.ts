@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "./db.js";
 import {
+  attributeInstallToSender,
   buildAuthorizeUrl,
   callbackUrl,
+  claimUserRepos,
   exchangeCode,
   fetchViewer,
   isSecureCallback,
@@ -104,6 +106,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         .code(503)
         .send({ ok: false, error: "unavailable" });
     }
+    // Claim installs belonging to this login (installed before first login).
+    // Best-effort: never blocks the login redirect.
+    await claimUserRepos(prisma, login);
     const secure = req.protocol === "https";
     return reply
       .header("Set-Cookie", [
@@ -127,9 +132,22 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     if (!session) {
       return reply.code(401).send({ ok: false, error: "logged_out" });
     }
+    let repos: string[] = [];
+    try {
+      const user = await prisma.user.findUnique({ where: { githubLogin: session.login } });
+      if (user) {
+        const rows = await prisma.repo.findMany({
+          where: { ownerUserId: user.id },
+          select: { fullName: true },
+        });
+        repos = rows.map((r) => r.fullName);
+      }
+    } catch {
+      repos = [];
+    }
     return reply.send({
       ok: true,
-      data: { login: session.login, avatarUrl: session.avatarUrl ?? null },
+      data: { login: session.login, avatarUrl: session.avatarUrl ?? null, repos },
     });
   });
 
@@ -205,6 +223,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
               },
             });
           }
+          // Attribute the install to the installer's account (by sender login).
+          await attributeInstallToSender(prisma, {
+            installationId: change.installationId,
+            repos: change.repos,
+            senderLogin: change.senderLogin,
+          });
         } else if (change.repos.length > 0) {
           await prisma.repo.updateMany({
             where: { fullName: { in: change.repos }, installationId: change.installationId },

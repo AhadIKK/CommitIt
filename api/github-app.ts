@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { prisma } from "../src/db.js";
-import { parseInstallationEvent } from "../src/githubApp.js";
+import { attributeInstallToSender, parseInstallationEvent } from "../src/githubApp.js";
 import { enqueueJob } from "../src/queue.js";
 import { isRateLimited } from "../src/rateLimit.js";
 import { verifySignature } from "../src/verify.js";
@@ -106,6 +106,12 @@ export default async function handler(
             },
           });
         }
+        // Attribute the install to the installer's account (by sender login).
+        await attributeInstallToSender(prisma, {
+          installationId: change.installationId,
+          repos: change.repos,
+          senderLogin: change.senderLogin,
+        });
       } else {
         if (change.repos.length > 0) {
           await prisma.repo.updateMany({

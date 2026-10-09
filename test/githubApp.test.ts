@@ -1,10 +1,13 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  attributeInstallToSender,
   buildAppJwt,
   buildAuthorizeUrl,
   callbackUrl,
+  claimUserRepos,
   parseInstallationEvent,
+  selectUserInstallations,
 } from "../src/githubApp.js";
 import installationFixture from "./fixtures/installation.json";
 
@@ -52,16 +55,85 @@ describe("parseInstallationEvent", () => {
       kind: "installed",
       installationId: 12345678n,
       repos: ["AhadIKK/CommitIt"],
+      senderLogin: "AhadIKK",
     });
   });
 
   it("parses removal and ignores the rest", () => {
     expect(
       parseInstallationEvent({ action: "deleted", installation: { id: 9 }, repositories: [] }),
-    ).toEqual({ kind: "removed", installationId: 9n, repos: [] });
+    ).toEqual({ kind: "removed", installationId: 9n, repos: [], senderLogin: null });
     expect(parseInstallationEvent({ action: "suspend", installation: { id: 9 } })).toBeNull();
     expect(parseInstallationEvent({ action: "opened" })).toBeNull();
     expect(parseInstallationEvent(null)).toBeNull();
+  });
+});
+
+describe("selectUserInstallations", () => {
+  it("matches account login case-insensitively", () => {
+    const installs = [
+      { id: 1n, accountLogin: "AhadIKK" },
+      { id: 2n, accountLogin: "someone-else" },
+      { id: 3n, accountLogin: null },
+    ];
+    expect(selectUserInstallations(installs, "ahadikk")).toEqual([1n]);
+    expect(selectUserInstallations(installs, "nobody")).toEqual([]);
+  });
+});
+
+describe("account attribution", () => {
+  function fakeDb(user: { id: string } | null) {
+    const updates: unknown[] = [];
+    return {
+      updates,
+      db: {
+        user: { findUnique: async () => user },
+        repo: {
+          updateMany: async (args: unknown) => {
+            updates.push(args);
+            return { count: 1 };
+          },
+        },
+      } as never,
+    };
+  }
+
+  it("attributes installs to the sender's account", async () => {
+    const { updates, db } = fakeDb({ id: "u1" });
+    await attributeInstallToSender(db, {
+      installationId: 7n,
+      repos: ["AhadIKK/CommitIt"],
+      senderLogin: "AhadIKK",
+    });
+    expect(updates).toHaveLength(1);
+  });
+
+  it("skips attribution without sender or account", async () => {
+    const { updates, db } = fakeDb(null);
+    await attributeInstallToSender(db, {
+      installationId: 7n,
+      repos: ["AhadIKK/CommitIt"],
+      senderLogin: "stranger",
+    });
+    expect(updates).toHaveLength(0);
+    const second = fakeDb({ id: "u1" });
+    await attributeInstallToSender(second.db, {
+      installationId: 7n,
+      repos: ["AhadIKK/CommitIt"],
+      senderLogin: null,
+    });
+    expect(second.updates).toHaveLength(0);
+  });
+
+  it("claimUserRepos degrades to 0 without App config", async () => {
+    const saved = { ...process.env };
+    delete process.env.GITHUB_APP_ID;
+    try {
+      const { db } = fakeDb({ id: "u1" });
+      await expect(claimUserRepos(db, "AhadIKK")).resolves.toBe(0);
+    } finally {
+      process.env = saved;
+    }
   });
 });
 
