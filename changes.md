@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-10-09 — Phase A: GitHub App client (spec build)
+- Added: `src/githubAuth.ts` (App JWT reuse, in-memory installation-token cache with ~5-min refresh skew, PEM normalize for base64 + `\n`-escaped forms, authenticated API fetch wrapper). No Octokit: plain `fetch` per plan.md §18 (named deviation from spec, justified: zero new deps, matches `github-sync.ts`).
+- Changed: `.env.example` (+`GITHUB_APP_PRIVATE_KEY` raw-PEM alternative).
+- Reason: token minting/cache foundation for install lifecycle (B), login claim (C), backfill (B); tokens never persisted.
+- Verification: `test/githubAuth.test.ts` (7 tests, mocked clock + stub HTTP); full gate green (21 files / 99 tests, `tsc --noEmit`, `npm run build`).
+
 ## 2026-10-01 — Phase 6 extras + Phase 7 dashboard
 - Phase 6: `pull_request` / `check_run` webhooks (fixtures + Zod + `enqueueJob`), worker handlers (PR-merged truth incl. squash, CI fail/fixed instant alerts, secret first-class 🔑 alert with path only, `stale_check` jobs via `findStaleBranches()`), `directToMain` risk flag in digests. Duplicate-delivery fast-path (`deduped:true`) + test.
 - Phase 7: read-only Vite+React dashboard in `dashboard/` (donut, author bars, issues table, digest timeline, theme.md dark style), shared types from `src/dashboard.ts`, BFF `GET /api/progress|activity|issues|digests`, Vercel mirrors in `api/`, build output to `public/`. Root `npm run build` now compiles backend + dashboard.
