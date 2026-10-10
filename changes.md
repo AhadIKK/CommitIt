@@ -1,6 +1,9 @@
 # Changes
 
-## 2026-10-10 — Webhooks-only escape hatch for BFF gates
+## 2026-10-10 — Serverless push ingest on the Vercel webhook
+- Changed: `POST /api/webhook` now stores push commits directly (repo/author/commit upserts, raw metadata only — no AI/linking on serverless; idempotent on `(repoId, sha)`; DB failure still acks 200). Previously it only logged, so pushes changed nothing on Vercel-only deploys.
+- Reason: make "push something and see the dashboard update" actually work without a long-lived worker host.
+- Verification: `test/webhookIngest.test.ts` (direct store counts, signed-delivery 200 + stored, DB-down 200). Gate green (29 files / 136 tests, `tsc --noEmit`, `npm run build`).
 - Changed: repo-access gates enforce only when GitHub OAuth is configured (`GITHUB_CLIENT_ID` set). Without it there is no way to log in, so the read API stays public (`isAuthEnforced()` in `src/access.ts`, honored in all 4 BFF endpoints × both shells).
 - Reason: Phase C locked out webhooks-only setups (dashboard 401 with no login available). GitHub repo data is public anyway; the gate protects attribution, and snaps on the moment OAuth is configured.
 - Verification: gate tests set `GITHUB_CLIENT_ID` explicitly; public-mode covered by the degrade tests. Gate green (28 files / 133 tests, `tsc --noEmit`, `npm run build`).

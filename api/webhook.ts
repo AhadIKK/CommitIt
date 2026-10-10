@@ -1,12 +1,24 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
+import { prisma } from "../src/db.js";
 import { isRateLimited } from "../src/rateLimit.js";
 import { verifySignature } from "../src/verify.js";
 
 const PushSchema = z.object({
   ref: z.string().optional(),
   repository: z.object({ full_name: z.string() }).optional(),
-  commits: z.array(z.object({ id: z.string(), message: z.string() })).optional(),
+  commits: z
+    .array(
+      z.object({
+        id: z.string(),
+        message: z.string(),
+        timestamp: z.string().optional(),
+        author: z
+          .object({ username: z.string().optional(), name: z.string().optional() })
+          .optional(),
+      }),
+    )
+    .optional(),
 });
 
 const PullRequestSchema = z.object({
@@ -59,6 +71,55 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
   res.end(JSON.stringify(body));
+}
+
+/**
+ * Direct push ingest for serverless (no worker on Vercel). Upserts the repo,
+ * authors, and commits with raw metadata only — no AI, no linking (the
+ * long-lived worker enriches via jobs when it runs). Idempotent on
+ * (repoId, sha), so redeliveries are safe.
+ */
+export async function storePushCommits(push: z.infer<typeof PushSchema>): Promise<number> {
+  const fullName = push.repository?.full_name;
+  if (!fullName) return 0;
+  const branch = (push.ref ?? "").replace("refs/heads/", "") || null;
+  const repoRow = await prisma.repo.upsert({
+    where: { fullName },
+    update: {},
+    create: { fullName },
+  });
+  let stored = 0;
+  for (const c of push.commits ?? []) {
+    const login = c.author?.username ?? c.author?.name ?? null;
+    let authorId: string | null = null;
+    if (login) {
+      const author = await prisma.author.upsert({
+        where: { githubLogin: login },
+        update: {},
+        create: { githubLogin: login },
+      });
+      authorId = author.id;
+    }
+    let committedAt: Date | null = null;
+    if (c.timestamp) {
+      const parsed = new Date(c.timestamp);
+      if (!Number.isNaN(parsed.getTime())) committedAt = parsed;
+    }
+    await prisma.commit.upsert({
+      where: { repoId_sha: { repoId: repoRow.id, sha: c.id } },
+      update: {},
+      create: {
+        sha: c.id,
+        repoId: repoRow.id,
+        authorId,
+        message: c.message.slice(0, 2000),
+        branch,
+        committedAt,
+      },
+    });
+    stored += 1;
+  }
+  return stored;
 }
 
 export default async function handler(
@@ -129,9 +190,22 @@ export default async function handler(
             : event === "repository"
               ? RepositorySchema
               : null;
-  if (schema && !schema.safeParse(parsed).success) {
-    sendJson(res, 400, { ok: false, error: "invalid_payload" });
-    return;
+  if (schema) {
+    const checked = schema.safeParse(parsed);
+    if (!checked.success) {
+      sendJson(res, 400, { ok: false, error: "invalid_payload" });
+      return;
+    }
+    // Serverless ingest: Vercel never runs the worker poller, so push
+    // commits are stored directly (best-effort — a DB failure still acks
+    // 200; the long-lived path reprocesses via jobs). Never 500s.
+    if (event === "push") {
+      try {
+        await storePushCommits(checked.data as z.infer<typeof PushSchema>);
+      } catch (err) {
+        console.warn(JSON.stringify({ delivery, msg: "push ingest failed", err: String(err) }));
+      }
+    }
   }
 
   console.log(
