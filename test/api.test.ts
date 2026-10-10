@@ -169,15 +169,24 @@ describe("dashboard api handlers (Phase C gates)", () => {
   }
 
   it("401s without a session", async () => {
-    const { res, done } = mockRes();
-    await (progressHandler as typeof progressHandler)(
-      mockGetReq("/api/progress?repo=AhadIKK%2FCommitIt"),
-      res as never,
-    );
-    expect(await done).toEqual({ status: 401, body: { ok: false, error: "logged_out" } });
+    const savedClient = process.env.GITHUB_CLIENT_ID;
+    process.env.GITHUB_CLIENT_ID = "client-123";
+    try {
+      const { res, done } = mockRes();
+      await (progressHandler as typeof progressHandler)(
+        mockGetReq("/api/progress?repo=AhadIKK%2FCommitIt"),
+        res as never,
+      );
+      expect(await done).toEqual({ status: 401, body: { ok: false, error: "logged_out" } });
+    } finally {
+      if (savedClient !== undefined) process.env.GITHUB_CLIENT_ID = savedClient;
+      else delete process.env.GITHUB_CLIENT_ID;
+    }
   });
 
   it("403s without repo access", async () => {
+    const savedClient = process.env.GITHUB_CLIENT_ID;
+    process.env.GITHUB_CLIENT_ID = "client-123";
     const { headers, restore } = authedHeaders();
     try {
       const { res, done } = mockRes();
@@ -188,11 +197,15 @@ describe("dashboard api handlers (Phase C gates)", () => {
       expect(await done).toEqual({ status: 403, body: { ok: false, error: "forbidden" } });
     } finally {
       restore();
+      if (savedClient !== undefined) process.env.GITHUB_CLIENT_ID = savedClient;
+      else delete process.env.GITHUB_CLIENT_ID;
     }
   });
 
   it("return 200 + empty data when the DB is unreachable", async () => {
     const { headers, restore } = authedHeaders();
+    const savedClient = process.env.GITHUB_CLIENT_ID;
+    delete process.env.GITHUB_CLIENT_ID; //unenforced: public read API
     try {
     const cases = [
         {
@@ -228,6 +241,8 @@ describe("dashboard api handlers (Phase C gates)", () => {
       }
     } finally {
       restore();
+      if (savedClient !== undefined) process.env.GITHUB_CLIENT_ID = savedClient;
+      else delete process.env.GITHUB_CLIENT_ID;
     }
   });
 });

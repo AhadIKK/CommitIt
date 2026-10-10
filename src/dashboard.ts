@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { checkRepoAccess, type AccessDenial } from "./access.js";
+import { checkRepoAccess, isAuthEnforced, type AccessDenial } from "./access.js";
 import { prisma } from "./db.js";
 import { milestoneProgress } from "./progress.js";
 import { SESSION_COOKIE, parseCookies } from "./session.js";
@@ -235,6 +235,7 @@ export async function getDigests(repo: string, limit = 20): Promise<DigestEntry[
 // 403 forbidden). DB outages still degrade to empty (200), never 500.
 
 async function accessDenial(req: FastifyRequest): Promise<AccessDenial | null> {
+  if (!isAuthEnforced()) return null; // webhooks-only setup: public read API
   const repo = (req.query as { repo?: string }).repo ?? "";
   const checked = await checkRepoAccess(
     parseCookies(req.headers.cookie)[SESSION_COOKIE],

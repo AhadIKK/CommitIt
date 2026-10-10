@@ -1,6 +1,9 @@
 # Changes
 
-## 2026-10-09 — Phase F: hardening + docs (spec build)
+## 2026-10-10 — Webhooks-only escape hatch for BFF gates
+- Changed: repo-access gates enforce only when GitHub OAuth is configured (`GITHUB_CLIENT_ID` set). Without it there is no way to log in, so the read API stays public (`isAuthEnforced()` in `src/access.ts`, honored in all 4 BFF endpoints × both shells).
+- Reason: Phase C locked out webhooks-only setups (dashboard 401 with no login available). GitHub repo data is public anyway; the gate protects attribution, and snaps on the moment OAuth is configured.
+- Verification: gate tests set `GITHUB_CLIENT_ID` explicitly; public-mode covered by the degrade tests. Gate green (28 files / 133 tests, `tsc --noEmit`, `npm run build`).
 - Added: `repository` events end-to-end (deleted → deactivate + drop cached install token, data retained; renamed → row moved); install-token cache purge on delete/suspend; fixtures repository_deleted/renamed.
 - Changed: README setup rewritten (GitHub App creation, Vercel env table, install→link→bind flow, queue-needs-a-host note, manual webhooks marked dev-only fallback).
 - Verified hardening matrix: revoked authorization kills sessions (B, tested); deleted/suspended installs flip `installActive` + stop delivery instantly incl. already-queued notes (B, tested); expired sessions rejected + near-expiry install tokens re-minted (A/C, tested); deleted repos deactivate; renamed repos keep routing.

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { checkRepoAccess } from "../src/access.js";
+import { checkRepoAccess, isAuthEnforced } from "../src/access.js";
 import { getDigests } from "../src/dashboard.js";
 import type { DigestEntry } from "../src/dashboard.js";
 import { SESSION_COOKIE, parseCookies } from "../src/session.js";
@@ -25,12 +25,14 @@ export default async function handler(
     return;
   }
   const limit = Number(url.searchParams.get("limit")) || 20;
-  const checked = await checkRepoAccess(
-    parseCookies(req.headers.cookie)[SESSION_COOKIE],
-    process.env.SESSION_SECRET ?? "",
-    repo,
-  );
-  if ("denial" in checked) {
+  const checked = isAuthEnforced()
+    ? await checkRepoAccess(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+        repo,
+      )
+    : null;
+  if (checked && "denial" in checked) {
     res.statusCode = checked.denial.status;
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ ok: false, error: checked.denial.error }));
