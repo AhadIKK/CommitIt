@@ -137,6 +137,7 @@ export function parseCookies(header: string | string[] | undefined): Record<stri
 
 export const SESSION_COOKIE = "commitit_session";
 export const STATE_COOKIE = "commitit_oauth_state";
+export const SETUP_COOKIE = "commitit_setup_install";
 
 export function sessionCookieHeader(token: string, secure: boolean): string {
   return (
@@ -154,4 +155,16 @@ export function stateCookieHeader(state: string, secure: boolean): string {
     `${STATE_COOKIE}=${encodeURIComponent(state)}; Path=/api/auth; HttpOnly; SameSite=Lax; ` +
     `Max-Age=${STATE_TTL_MS / 1000}; ${secure ? "Secure; " : ""}`.trim()
   );
+}
+
+/** Short-lived Setup-URL install id stash (cleared after claim). */
+export function setupCookieHeader(installationId: string, secure: boolean): string {
+  return (
+    `${SETUP_COOKIE}=${encodeURIComponent(installationId)}; Path=/; HttpOnly; SameSite=Lax; ` +
+    `Max-Age=600; ${secure ? "Secure; " : ""}`.trim()
+  );
+}
+
+export function clearSetupCookieHeader(): string {
+  return `${SETUP_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }

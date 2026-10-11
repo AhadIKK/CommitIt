@@ -1,6 +1,9 @@
 # Changes
 
-## 2026-10-11 — Setup-URL install fallback (missing webhook events)
+## 2026-10-11 — OAuth-during-install landing (Setup URL disabled by GitHub)
+- Changed: `/api/auth/callback` (both shells) accepts install landings (`?installation_id=`, no code): stashes the id in a short-lived cookie and bounces through login, then claims the install post-session and redirects with `?setup_claimed=1` (dashboard shows a notice). Combined code+install landings claim in one pass.
+- Reason: with "Request user authorization during installation" checked, GitHub disables the Setup URL and redirects installs to the OAuth callback URL instead.
+- Verification: bounce + invalid-id tests (no network). Gate green (29 files / 141 tests, `tsc --noEmit`, `npm run build`).
 - Added: `registerInstallFromSetup()` in `src/installations.ts` — registers an install from GitHub's Setup-URL redirect (`?installation_id=`) by reading the installation + repos as the App (JWT), recording rows, attributing the owner, and queueing a backfill. Surfaced as `GET /api/repo?installation_id=` (both shells, session-required, rate-limited) + dashboard auto-claim with notice on landing.
 - Reason: some App setups don't offer the `installation` / `installation_repositories` / `github_app_authorization` webhook events; installs must still register. No new serverless function (repo endpoint reused — still 11/12).
 - Verification: setup-claim unit tests (stubbed App API + mocked DB, incl. no-config degrade) + route 401/400 tests. Gate green (29 files / 139 tests, `tsc --noEmit`, `npm run build`).

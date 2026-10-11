@@ -11,16 +11,20 @@ import {
 import { isRateLimited } from "../../src/rateLimit.js";
 import {
   SESSION_COOKIE,
+  SETUP_COOKIE,
   STATE_COOKIE,
   clearSessionCookieHeader,
+  clearSetupCookieHeader,
   createSession,
   genState,
   parseCookies,
   revokeSession,
   sessionCookieHeader,
   sessionCookieValue,
+  setupCookieHeader,
   stateCookieHeader,
 } from "../../src/session.js";
+import { registerInstallFromSetup } from "../../src/installations.js";
 
 // Dynamic auth route: /api/auth/login (+ legacy /api/auth/github),
 // /api/auth/callback, /api/auth/logout share ONE serverless function
@@ -84,9 +88,30 @@ async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<v
   const url = new URL(req.url ?? "/", "http://localhost");
   const code = url.searchParams.get("code") ?? "";
   const state = url.searchParams.get("state") ?? "";
+  const setupId = url.searchParams.get("installation_id") ?? "";
   const cookies = parseCookies(req.headers.cookie);
   const expectedState = cookies[STATE_COOKIE] ?? "";
   const clearState = `${STATE_COOKIE}=; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=0`;
+  const secure = (req.headers["x-forwarded-proto"] ?? "https") !== "http";
+
+  // OAuth-during-install landing: GitHub redirects here with installation_id
+  // (Setup URL is disabled in that mode). No code yet: stash the install id,
+  // bounce through login, claim after the session exists.
+  if (!code && setupId) {
+    try {
+      const id = BigInt(setupId);
+      if (id <= 0) throw new Error("bad id");
+      res.statusCode = 302;
+      res.setHeader("Set-Cookie", setupCookieHeader(setupId, secure));
+      res.setHeader("Location", "/api/auth/login");
+      res.end();
+      return;
+    } catch {
+      res.setHeader("Set-Cookie", clearState);
+      sendJson(res, 400, { ok: false, error: "invalid_installation" });
+      return;
+    }
+  }
 
   if (!code || !state || !expectedState || state !== expectedState) {
     res.setHeader("Set-Cookie", clearState);
@@ -132,6 +157,19 @@ async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<v
   // Best-effort: never blocks the login redirect.
   await claimUserRepos(prisma, login);
 
+  // Pending Setup-URL install (stashed pre-login, or on this landing):
+  // claim it now that the session exists.
+  const stashed = cookies[SETUP_COOKIE] ?? setupId;
+  let setupClaimed = false;
+  if (stashed) {
+    try {
+      const out = await registerInstallFromSetup(BigInt(stashed));
+      setupClaimed = out.ok;
+    } catch {
+      setupClaimed = false;
+    }
+  }
+
   // Server-side session: only the id hash hits the DB (Phase C).
   let sid: string;
   try {
@@ -142,13 +180,13 @@ async function finishLogin(req: IncomingMessage, res: ServerResponse): Promise<v
     return;
   }
 
-  const secure = (req.headers["x-forwarded-proto"] ?? "https") !== "http";
   res.statusCode = 302;
   res.setHeader("Set-Cookie", [
     sessionCookieHeader(sessionCookieValue(sid, sessionSecret), secure),
     clearState,
+    clearSetupCookieHeader(),
   ]);
-  res.setHeader("Location", "/?linked=github");
+  res.setHeader("Location", setupClaimed ? "/?linked=github&setup_claimed=1" : "/?linked=github");
   res.end();
 }
 

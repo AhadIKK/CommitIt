@@ -69,11 +69,20 @@ export default function App() {
   }, [repo, load]);
 
   // GitHub App Setup-URL landing (?installation_id=): claim the install once,
-  // show the result, then strip the params.
+  // show the result, then strip the params. setup_claimed=1 comes from the
+  // OAuth-during-install bounce (claimed post-login in the callback).
   const [setupNotice, setSetupNotice] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const installationId = params.get("installation_id");
+    if (params.get("setup_claimed") === "1") {
+      setSetupNotice("GitHub App installed — syncing repos.");
+      params.delete("setup_claimed");
+      params.delete("linked");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+      return;
+    }
     if (!installationId) return;
     claimInstallSetup(installationId)
       .then((d) => {

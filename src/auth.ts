@@ -20,8 +20,10 @@ import { enqueueJob } from "./queue.js";
 import { isRateLimited } from "./rateLimit.js";
 import {
   SESSION_COOKIE,
+  SETUP_COOKIE,
   STATE_COOKIE,
   clearSessionCookieHeader,
+  clearSetupCookieHeader,
   createSession,
   genState,
   getSessionUser,
@@ -29,6 +31,7 @@ import {
   revokeSession,
   sessionCookieHeader,
   sessionCookieValue,
+  setupCookieHeader,
   stateCookieHeader,
 } from "./session.js";
 import { verifySignature } from "./verify.js";
@@ -72,12 +75,31 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     if (isRateLimited(`oauth:${clientIp(req)}`, { max: 20 })) {
       return reply.code(429).send({ ok: false, error: "rate_limited" });
     }
-    const q = req.query as { code?: string; state?: string };
+    const q = req.query as { code?: string; state?: string; installation_id?: string };
     const code = q.code ?? "";
     const state = q.state ?? "";
+    const setupId = q.installation_id ?? "";
     const cookies = parseCookies(req.headers.cookie);
     const expectedState = cookies[STATE_COOKIE] ?? "";
     const clearState = `${STATE_COOKIE}=; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=0`;
+    const secure = req.protocol === "https";
+    // OAuth-during-install landing: stash the install id, bounce through login.
+    if (!code && setupId) {
+      try {
+        const id = BigInt(setupId);
+        if (id <= 0) throw new Error("bad id");
+        return reply
+          .header("Set-Cookie", setupCookieHeader(setupId, secure))
+          .code(302)
+          .header("Location", "/api/auth/login")
+          .send();
+      } catch {
+        return reply
+          .header("Set-Cookie", clearState)
+          .code(400)
+          .send({ ok: false, error: "invalid_installation" });
+      }
+    }
     if (!code || !state || !expectedState || state !== expectedState) {
       return reply
         .header("Set-Cookie", clearState)
@@ -126,6 +148,17 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     // Claim installs belonging to this login (installed before first login).
     // Best-effort: never blocks the login redirect.
     await claimUserRepos(prisma, login);
+    // Pending Setup-URL install (stashed pre-login, or on this landing).
+    const stashed = cookies[SETUP_COOKIE] ?? setupId;
+    let setupClaimed = false;
+    if (stashed) {
+      try {
+        const out = await registerInstallFromSetup(BigInt(stashed));
+        setupClaimed = out.ok;
+      } catch {
+        setupClaimed = false;
+      }
+    }
     // Server-side session: only the id hash hits the DB (Phase C).
     let sid: string;
     try {
@@ -136,14 +169,14 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         .code(503)
         .send({ ok: false, error: "unavailable" });
     }
-    const secure = req.protocol === "https";
     return reply
       .header("Set-Cookie", [
         sessionCookieHeader(sessionCookieValue(sid, sessionSecret), secure),
         clearState,
+        clearSetupCookieHeader(),
       ])
       .code(302)
-      .header("Location", "/?linked=github")
+      .header("Location", setupClaimed ? "/?linked=github&setup_claimed=1" : "/?linked=github")
       .send();
   });
 

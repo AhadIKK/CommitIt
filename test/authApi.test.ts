@@ -220,6 +220,29 @@ describe("api/auth/callback", () => {
     );
     expect(await done).toMatchObject({ status: 400, body: { ok: false } });
   });
+
+  it("bounces install landings through login with a setup cookie", async () => {
+    const { res, done } = mockRes();
+    await (authHandler as Handler)(
+      mockReq({ url: "/api/auth/callback?installation_id=77&setup_action=install" }),
+      res,
+    );
+    const out = await done;
+    expect(out.status).toBe(302);
+    const headers = out.headers as Record<string, unknown>;
+    expect(String(headers["Location"])).toBe("/api/auth/login");
+    expect(String(headers["Set-Cookie"])).toContain("commitit_setup_install=77");
+  });
+
+  it("rejects invalid install ids without network", async () => {
+    const { res, done } = mockRes();
+    await (authHandler as Handler)(
+      mockReq({ url: "/api/auth/callback?installation_id=nope" }),
+      res,
+    );
+    const out = await done;
+    expect(out.status).toBe(400);
+  });
 });
 
 describe("api/auth/logout", () => {
