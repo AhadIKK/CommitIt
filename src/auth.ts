@@ -11,6 +11,7 @@ import {
 } from "./githubApp.js";
 import {
   recordInstall,
+  registerInstallFromSetup,
   removeInstallRepos,
   revokeGithubAuthorization,
   setInstallSuspended,
@@ -193,7 +194,37 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/repo", async (req, reply) => {
-    const repo = (req.query as { repo?: string }).repo;
+    const q = req.query as { repo?: string; installation_id?: string };
+    if (q.installation_id) {
+      let installationId: bigint;
+      try {
+        installationId = BigInt(q.installation_id);
+        if (installationId <= 0) throw new Error("bad id");
+      } catch {
+        return reply.code(400).send({ ok: false, error: "invalid_installation" });
+      }
+      if (isRateLimited(`install-setup:${clientIp(req)}`, { max: 20 })) {
+        return reply.code(429).send({ ok: false, error: "rate_limited" });
+      }
+      const session = await getSessionUser(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+      );
+      if (!session) {
+        return reply.code(401).send({ ok: false, error: "logged_out" });
+      }
+      const out = await registerInstallFromSetup(installationId);
+      if (!out.ok) {
+        const status =
+          out.error === "app_not_configured" ? 503 : out.error === "unavailable" ? 503 : 502;
+        return reply.code(status).send({ ok: false, error: out.error });
+      }
+      return reply.send({
+        ok: true,
+        data: { installationId: installationId.toString(), repos: out.repos },
+      });
+    }
+    const repo = q.repo;
     if (!repo) return reply.code(400).send({ ok: false, error: "missing_repo" });
     let installed = false;
     try {

@@ -32,6 +32,13 @@ export function fetchRepoProfile(repo: string): Promise<RepoProfile> {
   );
 }
 
+/** Claim a Setup-URL redirect (?installation_id=) after App install. */
+export function claimInstallSetup(installationId: string): Promise<{ repos: string[] }> {
+  return fetch(`/api/repo?installation_id=${encodeURIComponent(installationId)}`).then((r) =>
+    parse<{ installationId: string; repos: string[] }>(r).then((d) => ({ repos: d.repos })),
+  );
+}
+
 export function logout(): Promise<void> {
   return fetch("/api/auth/logout", { method: "POST" })
     .then((r) => parse<unknown>(r))

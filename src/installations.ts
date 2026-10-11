@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { prisma } from "./db.js";
-import { dropCachedToken } from "./githubAuth.js";
-import { attributeInstallToSender, type InstallationChange } from "./githubApp.js";
+import { appKeys, dropCachedToken } from "./githubAuth.js";
+import {
+  attributeInstallToSender,
+  buildAppJwt,
+  type InstallationChange,
+} from "./githubApp.js";
 
 // installations.ts — install-lifecycle writes (Phase B). All best-effort at
 // the route layer: lifecycle handlers 503 only when the store is down, and
@@ -107,6 +111,95 @@ const AuthorizationSchema = z.object({
  * GitHub user so a deauthorized account goes dark immediately. Returns the
  * number of sessions revoked (0 when unknown action/user).
  */
+
+/**
+ * Register an install from the Setup-URL redirect (fallback when the
+ * installation/installation_repositories webhook events are unavailable).
+ * GitHub lands here with ?installation_id=&setup_action= after every install.
+ * Authenticates as the App (JWT), reads the installation + its repos,
+ * records everything, attributes the owner, and queues a backfill.
+ * Never throws: returns ok:false with a code the route maps to status.
+ */
+export async function registerInstallFromSetup(
+  installationId: bigint,
+  fetchFn: typeof fetch = fetch,
+): Promise<{ ok: true; repos: string[] } | { ok: false; error: string }> {
+  let keys;
+  try {
+    keys = appKeys();
+  } catch {
+    return { ok: false, error: "app_not_configured" };
+  }
+  let jwt: string;
+  try {
+    jwt = buildAppJwt({ appId: keys.appId, privateKeyPem: keys.privateKeyPem });
+  } catch {
+    return { ok: false, error: "app_not_configured" };
+  }
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    Authorization: `Bearer ${jwt}`,
+  };
+  let installation: { accountLogin: string | null; accountType: string | null };
+  try {
+    const res = await fetchFn(`https://api.github.com/app/installations/${installationId}`, {
+      headers,
+    });
+    if (!res.ok) return { ok: false, error: "install_fetch_failed" };
+    const body = (await res.json()) as {
+      account?: { login?: string; type?: string } | null;
+    };
+    installation = {
+      accountLogin: body.account?.login ?? null,
+      accountType: body.account?.type ?? null,
+    };
+  } catch {
+    return { ok: false, error: "install_fetch_failed" };
+  }
+  let repos: string[] = [];
+  try {
+    for (let page = 1; ; page++) {
+      const res = await fetchFn(
+        `https://api.github.com/app/installations/${installationId}/repositories?per_page=100&page=${page}`,
+        { headers },
+      );
+      if (!res.ok) break;
+      const body = (await res.json()) as { repositories?: { full_name?: string }[] };
+      const names = (body.repositories ?? [])
+        .map((r) => r.full_name)
+        .filter((n): n is string => Boolean(n));
+      repos = repos.concat(names);
+      if (names.length < 100) break;
+      if (page >= 10) break;
+    }
+  } catch {
+    return { ok: false, error: "install_fetch_failed" };
+  }
+  try {
+    await recordInstall({
+      kind: "installed",
+      installationId,
+      repos,
+      senderLogin: installation.accountLogin,
+      accountLogin: installation.accountLogin,
+      accountType: installation.accountType,
+    });
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+  try {
+    const { enqueueJob } = await import("./queue.js");
+    await enqueueJob(
+      "backfill",
+      `setup-${installationId.toString()}-${Date.now()}`,
+      { installationId: installationId.toString() },
+    );
+  } catch {
+    // backfill is best-effort; the install itself is recorded
+  }
+  return { ok: true, repos };
+}
 export async function revokeGithubAuthorization(body: unknown): Promise<number> {
   const parsed = AuthorizationSchema.safeParse(body);
   if (!parsed.success) return 0;

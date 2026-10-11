@@ -158,6 +158,22 @@ describe("api/repo", () => {
     await (repoHandler as Handler)(mockReq({ url: "/api/repo" }), res);
     expect((await done).status).toBe(400);
   });
+
+  it("setup claim needs a session and a valid id", async () => {
+    const noSession = mockRes();
+    await (repoHandler as Handler)(
+      mockReq({ url: "/api/repo?installation_id=77" }),
+      noSession.res,
+    );
+    expect(await noSession.done).toMatchObject({ status: 401, body: { ok: false } });
+
+    const badId = mockRes();
+    await (repoHandler as Handler)(
+      mockReq({ url: "/api/repo?installation_id=nope" }),
+      badId.res,
+    );
+    expect(await badId.done).toMatchObject({ status: 400, body: { ok: false } });
+  });
 });
 
 describe("api/auth/github", () => {

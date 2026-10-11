@@ -1,6 +1,9 @@
 # Changes
 
-## 2026-10-10 — Serverless push ingest on the Vercel webhook
+## 2026-10-11 — Setup-URL install fallback (missing webhook events)
+- Added: `registerInstallFromSetup()` in `src/installations.ts` — registers an install from GitHub's Setup-URL redirect (`?installation_id=`) by reading the installation + repos as the App (JWT), recording rows, attributing the owner, and queueing a backfill. Surfaced as `GET /api/repo?installation_id=` (both shells, session-required, rate-limited) + dashboard auto-claim with notice on landing.
+- Reason: some App setups don't offer the `installation` / `installation_repositories` / `github_app_authorization` webhook events; installs must still register. No new serverless function (repo endpoint reused — still 11/12).
+- Verification: setup-claim unit tests (stubbed App API + mocked DB, incl. no-config degrade) + route 401/400 tests. Gate green (29 files / 139 tests, `tsc --noEmit`, `npm run build`).
 - Changed: `POST /api/webhook` now stores push commits directly (repo/author/commit upserts, raw metadata only — no AI/linking on serverless; idempotent on `(repoId, sha)`; DB failure still acks 200). Previously it only logged, so pushes changed nothing on Vercel-only deploys.
 - Reason: make "push something and see the dashboard update" actually work without a long-lived worker host.
 - Verification: `test/webhookIngest.test.ts` (direct store counts, signed-delivery 200 + stored, DB-down 200). Gate green (29 files / 136 tests, `tsc --noEmit`, `npm run build`).

@@ -1,8 +1,10 @@
+import crypto from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyRepositoryChange,
   parseRepositoryEvent,
   recordInstall,
+  registerInstallFromSetup,
   removeInstallRepos,
   revokeGithubAuthorization,
   setInstallSuspended,
@@ -68,6 +70,12 @@ vi.mock("../src/db.js", () => ({
       updateMany: async (args: unknown) => {
         calls.push({ op: "session.updateMany", args });
         return { count: 2 };
+      },
+    },
+    job: {
+      upsert: async (args: unknown) => {
+        calls.push({ op: "job.upsert", args });
+        return {};
       },
     },
   },
@@ -139,8 +147,7 @@ describe("install lifecycle", () => {
     await expect(revokeGithubAuthorization(null)).resolves.toBe(0);
   });
 
-  it("deactivates deleted repos and moves renamed ones", async () => {
-    reset();
+  it("deactivates deleted repos and moves renamed ones", async () => {    reset();
     const del = parseRepositoryEvent(repoDeletedFixture);
     expect(del).toEqual({ kind: "deleted", fullName: "AhadIKK/old-repo" });
     if (!del) return;
@@ -166,5 +173,53 @@ describe("install lifecycle", () => {
 
     expect(parseRepositoryEvent({ action: "archived", repository: { full_name: "o/r" } })).toBeNull();
     expect(parseRepositoryEvent({ action: "renamed" })).toBeNull();
+  });
+
+  it("registers installs from the setup redirect without webhooks", async () => {
+    reset();
+    const saved = { ...process.env };
+    const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+    process.env.GITHUB_APP_ID = "42";
+    process.env.GITHUB_APP_PRIVATE_KEY_BASE64 = Buffer.from(pem).toString("base64");
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      if (target.endsWith("/app/installations/77")) {
+        return new Response(JSON.stringify({ account: { login: "AhadIKK", type: "User" } }), {
+          status: 200,
+        });
+      }
+      if (target.includes("/app/installations/77/repositories")) {
+        return new Response(JSON.stringify({ repositories: [{ full_name: "o/r" }] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    try {
+      const out = await registerInstallFromSetup(77n);
+      expect(out).toEqual({ ok: true, repos: ["o/r"] });
+      const ops = calls.map((c) => c.op);
+      expect(ops).toContain("installation.upsert");
+      expect(ops).toContain("repo.upsert");
+      expect(ops).toContain("job.upsert"); // backfill queued
+    } finally {
+      process.env = saved;
+      globalThis.fetch = savedFetch;
+    }
+  });
+
+  it("setup registration degrades without App config", async () => {
+    const saved = { ...process.env };
+    delete process.env.GITHUB_APP_ID;
+    try {
+      await expect(registerInstallFromSetup(77n)).resolves.toEqual({
+        ok: false,
+        error: "app_not_configured",
+      });
+    } finally {
+      process.env = saved;
+    }
   });
 });

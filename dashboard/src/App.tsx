@@ -6,6 +6,7 @@ import type {
   RepoProgress,
 } from "@src/dashboard.js";
 import { fetchActivity, fetchDigests, fetchIssues, fetchProgress } from "./api.js";
+import { claimInstallSetup } from "./authApi.js";
 import { AuthorBars, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
 import { Button } from "./components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card.js";
@@ -67,6 +68,32 @@ export default function App() {
     void load(repo);
   }, [repo, load]);
 
+  // GitHub App Setup-URL landing (?installation_id=): claim the install once,
+  // show the result, then strip the params.
+  const [setupNotice, setSetupNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const installationId = params.get("installation_id");
+    if (!installationId) return;
+    claimInstallSetup(installationId)
+      .then((d) => {
+        setSetupNotice(
+          d.repos.length > 0
+            ? `App installed on: ${d.repos.join(", ")}.`
+            : "App installed. No repos synced yet.",
+        );
+      })
+      .catch(() => {
+        setSetupNotice("Install recorded, but claiming needs login — link GitHub first.");
+      })
+      .finally(() => {
+        params.delete("installation_id");
+        params.delete("setup_action");
+        const query = params.toString();
+        window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+      });
+  }, []);
+
   return (
     <div className="app">
       <div className="topbar">
@@ -96,6 +123,7 @@ export default function App() {
 
       {loading && <p className="muted">Loading…</p>}
       {error && <p className="error">Error: {error}</p>}
+      {setupNotice && <p className="notice">{setupNotice}</p>}
 
       <Tabs value={view} onValueChange={(v) => setView(v as View)}>
         <TabsList aria-label="Views">
