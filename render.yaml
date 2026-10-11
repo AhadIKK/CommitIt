@@ -3,23 +3,22 @@
 # Env vars to set in dashboard (never commit secrets):
 #   DATABASE_URL (Supabase pooled 6543 + ?pgbouncer=true),
 #   DIRECT_URL (Supabase direct 5432, for `prisma migrate deploy`),
-#   GITHUB_WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_DEFAULT_CHAT_ID,
-#   AI_PROVIDER, AI_API_KEY (Phase 4+). PORT is set below.
+#   GITHUB_WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_NAME,
+#   TELEGRAM_DEFAULT_CHAT_ID, GitHub App vars (see .env.example),
+#   SESSION_SECRET. PORT is auto-injected by Render — do NOT hardcode it.
 
 services:
   - type: web
     name: commitit
     runtime: node
     plan: free
-    buildCommand: npm install && npx prisma generate && npm run build && npx prisma migrate deploy
+    buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
         value: "22"
-      - key: PORT
-        value: "3000"
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL
@@ -28,5 +27,21 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: TELEGRAM_BOT_NAME
+        sync: false
       - key: TELEGRAM_DEFAULT_CHAT_ID
+        sync: false
+      - key: GITHUB_APP_ID
+        sync: false
+      - key: GITHUB_APP_SLUG
+        sync: false
+      - key: GITHUB_APP_PRIVATE_KEY_BASE64
+        sync: false
+      - key: GITHUB_APP_WEBHOOK_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
         sync: false

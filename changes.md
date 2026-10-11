@@ -1,6 +1,9 @@
 # Changes
 
-## 2026-10-11 — Combined install+authorize landing (stateless OAuth code)
+## 2026-10-12 — Render worker blueprint fixed
+- Changed: `render.yaml` — dropped hardcoded `PORT` (Render injects its own; hardcoding fails health checks), dropped `prisma migrate deploy` from build (this DB has no migration history and `DIRECT_URL` points at the pooler, where deploy locks fail — migrations stay manually applied, idempotent SQL), declared all runtime env vars (Telegram bot + name, GitHub App set, session secret).
+- Reason: make the Blueprint deployable as the worker host (API + poller + bot polling via `npm start`).
+- Verification: YAML-only change; no code touched (no test/build impact).
 - Changed: `/api/auth/callback` (both shells) accepts GitHub's combined landing (`?code=&installation_id=`, no state): when the code owner's login matches the installation account, login completes immediately with the install claimed; otherwise it stashes the id and bounces through a state-bound login. Secret check moved after state resolution; `syncUserInstalls()` (rows + owner + member + backfill) replaces `claimUserRepos` everywhere.
 - Reason: with OAuth-during-install checked, GitHub never runs our login starter, so no state cookie exists — the old code 400d a perfectly valid landing.
 - Verification: bounce/invalid-id tests (no network); full gate green (29 files / 141 tests, `tsc --noEmit`, `npm run build`).
