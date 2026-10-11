@@ -229,7 +229,7 @@ type AttributionDb = Pick<PrismaClient, "repo" | "user" | "userInstallation">;
  * Attribute freshly-installed repos to the installer's CommitIt account
  * (matched by installer GitHub login). Best-effort: never throws, never
  * blocks the install ack. Returns the user id, or null when the installer
- * has no account yet — login claims it later via claimUserRepos().
+ * has no account yet — login claims it later via syncUserInstalls().
  */
 export async function attributeInstallToSender(
   db: AttributionDb,
@@ -247,46 +247,6 @@ export async function attributeInstallToSender(
   } catch {
     // attribution is best-effort; the install itself is already applied
     return null;
-  }
-}
-
-/**
- * Claim repos for a freshly logged-in account: list App installations as
- * the App, match by account login, set owner. Returns installs claimed.
- * Best-effort: returns 0 (never throws) when the App isn't configured.
- */
-export async function claimUserRepos(db: AttributionDb, login: string): Promise<number> {
-  let userId: string;
-  try {
-    const user = await db.user.findUnique({ where: { githubLogin: login } });
-    if (!user) return 0;
-    userId = user.id;
-  } catch {
-    return 0;
-  }
-  let installs: AppInstallation[];
-  try {
-    installs = await fetchAppInstallations();
-  } catch {
-    return 0;
-  }
-  const ids = selectUserInstallations(installs, login);
-  if (ids.length === 0) return 0;
-  try {
-    await db.repo.updateMany({
-      where: { installationId: { in: ids } },
-      data: { ownerUserId: userId },
-    });
-    for (const installationId of ids) {
-      await db.userInstallation.upsert({
-        where: { userId_installationId: { userId, installationId } },
-        update: {},
-        create: { userId, installationId },
-      });
-    }
-    return ids.length;
-  } catch {
-    return 0;
   }
 }
 

@@ -1,6 +1,9 @@
 # Changes
 
-## 2026-10-11 — OAuth-during-install landing (Setup URL disabled by GitHub)
+## 2026-10-11 — Combined install+authorize landing (stateless OAuth code)
+- Changed: `/api/auth/callback` (both shells) accepts GitHub's combined landing (`?code=&installation_id=`, no state): when the code owner's login matches the installation account, login completes immediately with the install claimed; otherwise it stashes the id and bounces through a state-bound login. Secret check moved after state resolution; `syncUserInstalls()` (rows + owner + member + backfill) replaces `claimUserRepos` everywhere.
+- Reason: with OAuth-during-install checked, GitHub never runs our login starter, so no state cookie exists — the old code 400d a perfectly valid landing.
+- Verification: bounce/invalid-id tests (no network); full gate green (29 files / 141 tests, `tsc --noEmit`, `npm run build`).
 - Changed: `/api/auth/callback` (both shells) accepts install landings (`?installation_id=`, no code): stashes the id in a short-lived cookie and bounces through login, then claims the install post-session and redirects with `?setup_claimed=1` (dashboard shows a notice). Combined code+install landings claim in one pass.
 - Reason: with "Request user authorization during installation" checked, GitHub disables the Setup URL and redirects installs to the OAuth callback URL instead.
 - Verification: bounce + invalid-id tests (no network). Gate green (29 files / 141 tests, `tsc --noEmit`, `npm run build`).

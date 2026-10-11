@@ -3,18 +3,19 @@ import { prisma } from "./db.js";
 import {
   buildAuthorizeUrl,
   callbackUrl,
-  claimUserRepos,
   exchangeCode,
   fetchViewer,
   isSecureCallback,
   parseInstallationEvent,
 } from "./githubApp.js";
 import {
+  fetchAppInstallation,
   recordInstall,
   registerInstallFromSetup,
   removeInstallRepos,
   revokeGithubAuthorization,
   setInstallSuspended,
+  syncUserInstalls,
 } from "./installations.js";
 import { enqueueJob } from "./queue.js";
 import { isRateLimited } from "./rateLimit.js";
@@ -100,18 +101,110 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           .send({ ok: false, error: "invalid_installation" });
       }
     }
-    if (!code || !state || !expectedState || state !== expectedState) {
-      return reply
-        .header("Set-Cookie", clearState)
-        .code(400)
-        .send({ ok: false, error: "invalid_state" });
-    }
     const sessionSecret = process.env.SESSION_SECRET ?? "";
     if (!sessionSecret) {
       return reply
         .header("Set-Cookie", clearState)
         .code(503)
         .send({ ok: false, error: "sessions_not_configured" });
+    }
+    const completeLogin = async (
+      login: string,
+      avatarUrl: string | undefined,
+      githubId: number,
+      setupClaimed: boolean,
+    ) => {
+      if (!sessionSecret) {
+        return reply
+          .header("Set-Cookie", clearState)
+          .code(503)
+          .send({ ok: false, error: "sessions_not_configured" });
+      }
+      let userRow: { id: string };
+      try {
+        userRow = await prisma.user.upsert({
+          where: { githubLogin: login },
+          update: { githubUserId: BigInt(githubId), avatarUrl: avatarUrl ?? null },
+          create: {
+            githubLogin: login,
+            githubUserId: BigInt(githubId),
+            avatarUrl: avatarUrl ?? null,
+          },
+        });
+      } catch {
+        return reply
+          .header("Set-Cookie", clearState)
+          .code(503)
+          .send({ ok: false, error: "unavailable" });
+      }
+      // Full install sync (installs owned by this login get rows + backfill).
+      await syncUserInstalls(login);
+      if (!setupClaimed) {
+        const stashed = cookies[SETUP_COOKIE] ?? setupId;
+        if (stashed) {
+          try {
+            const out = await registerInstallFromSetup(BigInt(stashed));
+            setupClaimed = out.ok;
+          } catch {
+            setupClaimed = false;
+          }
+        }
+      }
+      let sid: string;
+      try {
+        sid = await createSession(userRow.id);
+      } catch {
+        return reply
+          .header("Set-Cookie", clearState)
+          .code(503)
+          .send({ ok: false, error: "unavailable" });
+      }
+      return reply
+        .header("Set-Cookie", [
+          sessionCookieHeader(sessionCookieValue(sid, sessionSecret), secure),
+          clearState,
+          clearSetupCookieHeader(),
+        ])
+        .code(302)
+        .header("Location", setupClaimed ? "/?linked=github&setup_claimed=1" : "/?linked=github")
+        .send();
+    };
+    const stateOk = Boolean(code && state && expectedState && state === expectedState);
+    if (!stateOk) {
+      // Combined install+authorize landing: accept the code only when its
+      // owner matches the installation account; else stash + bounce.
+      if (code && setupId) {
+        try {
+          const viewer = await fetchViewer(await exchangeCode(code));
+          const inst = await fetchAppInstallation(BigInt(setupId));
+          if (
+            inst?.accountLogin &&
+            viewer.login.toLowerCase() === inst.accountLogin.toLowerCase()
+          ) {
+            await completeLogin(viewer.login, viewer.avatarUrl, viewer.id, true);
+            return;
+          }
+        } catch {
+          // fall through to stash-and-bounce
+        }
+        try {
+          if (BigInt(setupId) <= 0) throw new Error("bad id");
+          return reply
+            .header("Set-Cookie", setupCookieHeader(setupId, secure))
+            .code(302)
+            .header("Location", "/api/auth/login")
+            .send();
+        } catch {
+          return reply
+            .header("Set-Cookie", clearState)
+            .code(400)
+            .send({ ok: false, error: "invalid_installation" });
+        }
+      }
+      return reply
+        .header("Set-Cookie", clearState)
+        .code(400)
+        .send({ ok: false, error: "invalid_state" });
     }
     let login = "";
     let avatarUrl: string | undefined;
@@ -128,56 +221,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         .code(502)
         .send({ ok: false, error: "oauth_failed" });
     }
-    let userRow: { id: string };
-    try {
-      userRow = await prisma.user.upsert({
-        where: { githubLogin: login },
-        update: { githubUserId: BigInt(githubId), avatarUrl: avatarUrl ?? null },
-        create: {
-          githubLogin: login,
-          githubUserId: BigInt(githubId),
-          avatarUrl: avatarUrl ?? null,
-        },
-      });
-    } catch {
-      return reply
-        .header("Set-Cookie", clearState)
-        .code(503)
-        .send({ ok: false, error: "unavailable" });
-    }
-    // Claim installs belonging to this login (installed before first login).
-    // Best-effort: never blocks the login redirect.
-    await claimUserRepos(prisma, login);
-    // Pending Setup-URL install (stashed pre-login, or on this landing).
-    const stashed = cookies[SETUP_COOKIE] ?? setupId;
-    let setupClaimed = false;
-    if (stashed) {
-      try {
-        const out = await registerInstallFromSetup(BigInt(stashed));
-        setupClaimed = out.ok;
-      } catch {
-        setupClaimed = false;
-      }
-    }
-    // Server-side session: only the id hash hits the DB (Phase C).
-    let sid: string;
-    try {
-      sid = await createSession(userRow.id);
-    } catch {
-      return reply
-        .header("Set-Cookie", clearState)
-        .code(503)
-        .send({ ok: false, error: "unavailable" });
-    }
-    return reply
-      .header("Set-Cookie", [
-        sessionCookieHeader(sessionCookieValue(sid, sessionSecret), secure),
-        clearState,
-        clearSetupCookieHeader(),
-      ])
-      .code(302)
-      .header("Location", setupClaimed ? "/?linked=github&setup_claimed=1" : "/?linked=github")
-      .send();
+    await completeLogin(login, avatarUrl, githubId, false);
   });
 
   app.post("/api/auth/logout", async (req, reply) => {

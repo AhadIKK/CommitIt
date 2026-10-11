@@ -8,6 +8,7 @@ import {
   removeInstallRepos,
   revokeGithubAuthorization,
   setInstallSuspended,
+  syncUserInstalls,
 } from "../src/installations.js";
 import deletedFixture from "./fixtures/installation_deleted.json";
 import suspendFixture from "./fixtures/installation_suspend.json";
@@ -220,6 +221,43 @@ describe("install lifecycle", () => {
       });
     } finally {
       process.env = saved;
+    }
+  });
+
+  it("syncs a user's installs end to end (stubbed App API)", async () => {
+    reset();
+    const saved = { ...process.env };
+    const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    process.env.GITHUB_APP_ID = "42";
+    process.env.GITHUB_APP_PRIVATE_KEY_BASE64 = Buffer.from(
+      privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    ).toString("base64");
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      if (target.endsWith("/app/installations?per_page=100")) {
+        return new Response(JSON.stringify([{ id: 77, account: { login: "AhadIKK", type: "User" } }]), {
+          status: 200,
+        });
+      }
+      if (target.includes("/app/installations/77/repositories")) {
+        return new Response(JSON.stringify({ repositories: [{ full_name: "o/r" }] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    try {
+      await expect(syncUserInstalls("AhadIKK")).resolves.toBe(1);
+      const ops = calls.map((c) => c.op);
+      expect(ops).toContain("installation.upsert");
+      expect(ops).toContain("repo.upsert");
+      expect(ops).toContain("userInstallation.upsert");
+      expect(ops).toContain("job.upsert");
+      await expect(syncUserInstalls("stranger")).resolves.toBe(0);
+    } finally {
+      process.env = saved;
+      globalThis.fetch = savedFetch;
     }
   });
 });

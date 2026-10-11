@@ -5,7 +5,6 @@ import {
   buildAppJwt,
   buildAuthorizeUrl,
   callbackUrl,
-  claimUserRepos,
   parseInstallationEvent,
   selectUserInstallations,
 } from "../src/githubApp.js";
@@ -147,17 +146,6 @@ describe("account attribution", () => {
       senderLogin: null,
     });
     expect(second.updates).toHaveLength(0);
-  });
-
-  it("claimUserRepos degrades to 0 without App config", async () => {
-    const saved = { ...process.env };
-    delete process.env.GITHUB_APP_ID;
-    try {
-      const { db } = fakeDb({ id: "u1" });
-      await expect(claimUserRepos(db, "AhadIKK")).resolves.toBe(0);
-    } finally {
-      process.env = saved;
-    }
   });
 });
 

@@ -4,6 +4,9 @@ import { appKeys, dropCachedToken } from "./githubAuth.js";
 import {
   attributeInstallToSender,
   buildAppJwt,
+  fetchAppInstallations,
+  selectUserInstallations,
+  type AppInstallation,
   type InstallationChange,
 } from "./githubApp.js";
 
@@ -278,4 +281,138 @@ export async function applyRepositoryChange(change: RepositoryChange): Promise<b
   } catch {
     return false;
   }
+}
+
+/** List an installation's repo full names as the App (JWT, paginated). */
+export async function listInstallRepos(
+  installationId: bigint,
+  jwt: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string[] | null> {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    Authorization: `Bearer ${jwt}`,
+  };
+  try {
+    const repos: string[] = [];
+    for (let page = 1; ; page++) {
+      const res = await fetchFn(
+        `https://api.github.com/app/installations/${installationId.toString()}/repositories?per_page=100&page=${page}`,
+        { headers },
+      );
+      if (!res.ok) return null;
+      const body = (await res.json()) as { repositories?: { full_name?: string }[] };
+      const names = (body.repositories ?? [])
+        .map((r) => r.full_name)
+        .filter((n): n is string => Boolean(n));
+      repos.push(...names);
+      if (names.length < 100) break;
+      if (page >= 10) break;
+    }
+    return repos;
+  } catch {
+    return null;
+  }
+}
+
+/** Read one installation as the App. Null on any failure. */
+export async function fetchAppInstallation(
+  installationId: bigint,
+  fetchFn: typeof fetch = fetch,
+): Promise<{ accountLogin: string | null; accountType: string | null } | null> {
+  let keys;
+  try {
+    keys = appKeys();
+  } catch {
+    return null;
+  }
+  let jwt: string;
+  try {
+    jwt = buildAppJwt({ appId: keys.appId, privateKeyPem: keys.privateKeyPem });
+  } catch {
+    return null;
+  }
+  try {
+    const res = await fetchFn(`https://api.github.com/app/installations/${installationId}`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        Authorization: `Bearer ${jwt}`,
+      },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { account?: { login?: string; type?: string } | null };
+    return { accountLogin: body.account?.login ?? null, accountType: body.account?.type ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Full per-user install sync (login-time): list App installations, keep the
+ * ones owned by this login, and record each (rows + owner + member +
+ * backfill). Best-effort: returns installs recorded, never throws.
+ */
+export async function syncUserInstalls(login: string): Promise<number> {
+  let userId: string;
+  try {
+    const user = await prisma.user.findUnique({ where: { githubLogin: login } });
+    if (!user) return 0;
+    userId = user.id;
+  } catch {
+    return 0;
+  }
+  let installs: AppInstallation[];
+  try {
+    installs = await fetchAppInstallations();
+  } catch {
+    return 0;
+  }
+  const ids = selectUserInstallations(installs, login);
+  let keys;
+  try {
+    keys = appKeys();
+  } catch {
+    return 0;
+  }
+  let jwt: string;
+  try {
+    jwt = buildAppJwt({ appId: keys.appId, privateKeyPem: keys.privateKeyPem });
+  } catch {
+    return 0;
+  }
+  let done = 0;
+  for (const id of ids) {
+    try {
+      const inst = await fetchAppInstallation(id);
+      const repos = await listInstallRepos(id, jwt);
+      if (!repos) continue;
+      await recordInstall({
+        kind: "installed",
+        installationId: id,
+        repos,
+        senderLogin: login,
+        accountLogin: inst?.accountLogin ?? login,
+        accountType: inst?.accountType ?? null,
+      });
+      await prisma.userInstallation.upsert({
+        where: { userId_installationId: { userId, installationId: id } },
+        update: {},
+        create: { userId, installationId: id },
+      });
+      try {
+        const { enqueueJob } = await import("./queue.js");
+        await enqueueJob("backfill", `sync-${id.toString()}-${Date.now()}`, {
+          installationId: id.toString(),
+        });
+      } catch {
+        // backfill is best-effort
+      }
+      done += 1;
+    } catch {
+      // one bad install never blocks the rest
+    }
+  }
+  return done;
 }
