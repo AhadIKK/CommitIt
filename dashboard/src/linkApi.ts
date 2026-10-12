@@ -9,7 +9,7 @@ async function parse<T>(res: Response): Promise<T> {
 }
 
 export function issueLinkToken(repo: string): Promise<LinkToken> {
-  return fetch("/api/link-token", {
+  return fetch("/api/link?op=issue", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repo }),
@@ -17,13 +17,13 @@ export function issueLinkToken(repo: string): Promise<LinkToken> {
 }
 
 export function pollLinkToken(code: string): Promise<{ claimed: boolean }> {
-  return fetch(`/api/link-token/${encodeURIComponent(code)}`).then((r) =>
+  return fetch(`/api/link?op=poll&code=${encodeURIComponent(code)}`).then((r) =>
     parse<{ claimed: boolean }>(r),
   );
 }
 
 export function claimLinkCode(code: string, repo: string): Promise<void> {
-  return fetch("/api/link-code", {
+  return fetch("/api/link?op=claim", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, repo }),

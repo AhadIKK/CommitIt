@@ -35,9 +35,55 @@ function botDeepLink(code: string): string | null {
 }
 
 export async function registerLinkingRoutes(app: FastifyInstance) {
-  app.post("/api/link-token", async (req, reply) => {
+  app.post("/api/link", async (req, reply) => {
+    const q = req.query as { op?: string };
+    if (q.op === "claim") {
+      if (isRateLimited(`link-code:${clientIp(req)}`, { max: 20 })) {
+        return reply.code(429).send({ ok: false, error: "rate_limited" });
+      }
+      const parsed = LinkCodeBody.safeParse(req.body ?? {});
+      const code = (parsed.success ? parsed.data.code : "").trim().toUpperCase();
+      const repo = parsed.success ? parsed.data.repo : "";
+      if (!parsed.success || !CODE_RE.test(code) || !REPO_RE.test(repo)) {
+        return reply.code(400).send({ ok: false, error: "invalid_input" });
+      }
+      try {
+        const row = await prisma.telegramLink.findUnique({ where: { code } });
+        if (
+          !row ||
+          row.kind !== "code" ||
+          !row.chatId ||
+          row.usedAt ||
+          row.expiresAt < new Date()
+        ) {
+          return reply.code(404).send({ ok: false, error: "invalid_or_expired" });
+        }
+        const repoRow = await prisma.repo.upsert({
+          where: { fullName: repo },
+          update: {},
+          create: { fullName: repo },
+        });
+        const chat = await prisma.chat.upsert({
+          where: { telegramChatId: row.chatId },
+          update: {},
+          create: { telegramChatId: row.chatId, type: "dm" },
+        });
+        await prisma.subscription.upsert({
+          where: { chatId_repoId: { chatId: chat.id, repoId: repoRow.id } },
+          update: {},
+          create: { chatId: chat.id, repoId: repoRow.id },
+        });
+        await prisma.telegramLink.update({ where: { code }, data: { usedAt: new Date() } });
+        return reply.send({ ok: true });
+      } catch {
+        return reply.code(503).send({ ok: false, error: "unavailable" });
+      }
+    }
     if (isRateLimited(`link-token:${clientIp(req)}`, { max: 20 })) {
       return reply.code(429).send({ ok: false, error: "rate_limited" });
+    }
+    if ((q.op ?? "issue") !== "issue") {
+      return reply.code(404).send({ ok: false, error: "not_found" });
     }
     const parsed = LinkTokenBody.safeParse(req.body ?? {});
     if (!parsed.success || !REPO_RE.test(parsed.data.repo)) {
@@ -57,8 +103,12 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get("/api/link-token/:code", async (req, reply) => {
-    const code = (req.params as { code?: string }).code ?? "";
+  app.get("/api/link", async (req, reply) => {
+    const q = req.query as { op?: string; code?: string };
+    if (q.op !== "poll") {
+      return reply.code(404).send({ ok: false, error: "not_found" });
+    }
+    const code = q.code ?? "";
     if (!TOKEN_RE.test(code)) {
       return reply.code(404).send({ ok: false, error: "not_found" });
     }
@@ -77,49 +127,6 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
     } catch {
       // degraded: keep the website polling instead of erroring the UI
       return reply.send({ ok: true, data: { claimed: false } });
-    }
-  });
-
-  app.post("/api/link-code", async (req, reply) => {
-    if (isRateLimited(`link-code:${clientIp(req)}`, { max: 20 })) {
-      return reply.code(429).send({ ok: false, error: "rate_limited" });
-    }
-    const parsed = LinkCodeBody.safeParse(req.body ?? {});
-    const code = (parsed.success ? parsed.data.code : "").trim().toUpperCase();
-    const repo = parsed.success ? parsed.data.repo : "";
-    if (!parsed.success || !CODE_RE.test(code) || !REPO_RE.test(repo)) {
-      return reply.code(400).send({ ok: false, error: "invalid_input" });
-    }
-    try {
-      const row = await prisma.telegramLink.findUnique({ where: { code } });
-      if (
-        !row ||
-        row.kind !== "code" ||
-        !row.chatId ||
-        row.usedAt ||
-        row.expiresAt < new Date()
-      ) {
-        return reply.code(404).send({ ok: false, error: "invalid_or_expired" });
-      }
-      const repoRow = await prisma.repo.upsert({
-        where: { fullName: repo },
-        update: {},
-        create: { fullName: repo },
-      });
-      const chat = await prisma.chat.upsert({
-        where: { telegramChatId: row.chatId },
-        update: {},
-        create: { telegramChatId: row.chatId, type: "dm" },
-      });
-      await prisma.subscription.upsert({
-        where: { chatId_repoId: { chatId: chat.id, repoId: repoRow.id } },
-        update: {},
-        create: { chatId: chat.id, repoId: repoRow.id },
-      });
-      await prisma.telegramLink.update({ where: { code }, data: { usedAt: new Date() } });
-      return reply.send({ ok: true });
-    } catch {
-      return reply.code(503).send({ ok: false, error: "unavailable" });
     }
   });
 }

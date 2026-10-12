@@ -1,6 +1,10 @@
 # Changes
 
-## 2026-10-12 — All-time totals on activity
+## 2026-10-12 — Telegram linking on production (single-function link endpoint)
+- Added: `api/link.ts` (issue/poll/claim via `?op=`, one function — still 11/12 slots); dashboard `linkApi` points at it.
+- Changed: Fastify linking routes merged to the same `POST|GET /api/link?op=` contract (single contract everywhere; old paths retired).
+- Reason: the Connect button called `POST /api/link-token`, which existed only on the local server — production 404d.
+- Verification: `test/linkApi.test.ts` (issue/poll/claim/validation) + updated `linking.test.ts`. Gate green (30 files / 145 tests, `tsc --noEmit`, `npm run build`).
 - Changed: `ActivitySnapshot` gains `totalCommitsAllTime` / `totalMergedPRsAllTime` (two extra counts in `getActivity`); dashboard Activity heading shows them next to the 7d view.
 - Reason: the 7d window silently slid past the first backfill batch (19 shown vs 33+ total); all-time figures stop the confusion.
 - Verification: shape expectations updated. Gate green (29 files / 141 tests, `tsc --noEmit`, `npm run build`).

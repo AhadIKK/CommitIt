@@ -19,7 +19,7 @@ describe("link-token", () => {
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
-      url: "/api/link-token",
+      url: "/api/link?op=issue",
       payload: { repo: "not-a-repo" },
     });
     expect(res.statusCode).toBe(400);
@@ -31,7 +31,7 @@ describe("link-token", () => {
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
-      url: "/api/link-token",
+      url: "/api/link?op=issue",
       payload: { repo: "AhadIKK/CommitIt" },
     });
     expect(res.statusCode).toBe(503);
@@ -43,7 +43,7 @@ describe("link-token", () => {
 describe("link-token status", () => {
   it("404s a malformed code without touching the DB", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/api/link-token/zzz" });
+    const res = await app.inject({ method: "GET", url: "/api/link?op=poll&code=zzz" });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ ok: false, error: "not_found" });
     await app.close();
@@ -55,7 +55,7 @@ describe("link-code", () => {
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
-      url: "/api/link-code",
+      url: "/api/link?op=claim",
       payload: { code: "!!", repo: "AhadIKK/CommitIt" },
     });
     expect(res.statusCode).toBe(400);
