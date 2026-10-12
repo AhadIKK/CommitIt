@@ -6,7 +6,7 @@ import type {
   RepoProgress,
 } from "@src/dashboard.js";
 import { fetchActivity, fetchDigests, fetchIssues, fetchProgress } from "./api.js";
-import { claimInstallSetup } from "./authApi.js";
+import { claimInstallSetup, fetchMe } from "./authApi.js";
 import { AuthorBars, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
 import { Button } from "./components/ui/button.js";
 import NotifyPrefs from "./NotifyPrefs.js";
@@ -23,13 +23,19 @@ import { ThemeSwitch, useTheme } from "./theme.js";
 
 const DEFAULT_REPO = "AhadIKK/CommitIt";
 
+// Deep-linkable repo: ?repo=owner/name wins (shareable links, fresh tabs).
+function initialRepo(): string {
+  if (typeof window === "undefined") return DEFAULT_REPO;
+  return new URLSearchParams(window.location.search).get("repo")?.trim() || DEFAULT_REPO;
+}
+
 type View = "dashboard" | "review" | "help";
 
 export default function App() {
-  const [repo, setRepo] = useState(DEFAULT_REPO);
+  const [repo, setRepo] = useState(initialRepo);
   const [view, setView] = useState<View>("dashboard");
   const [theme, toggleTheme] = useTheme();
-  const [input, setInput] = useState(DEFAULT_REPO);
+  const [input, setInput] = useState(repo);
   const [progress, setProgress] = useState<RepoProgress | null>(null);
   const [activity, setActivity] = useState<ActivitySnapshot | null>(null);
   const [issues, setIssues] = useState<IssueRow[]>([]);
@@ -68,6 +74,25 @@ export default function App() {
   useEffect(() => {
     void load(repo);
   }, [repo, load]);
+
+  // Smart default: with no ?repo= in the URL, a logged-in user with owned
+  // repos lands on their first repo instead of the hardcoded default.
+  // Never overrides an explicit choice (URL param or typed input).
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("repo")) return;
+    let alive = true;
+    fetchMe()
+      .then((me) => {
+        if (!alive || !me || me.repos.length === 0) return;
+        const first = me.repos[0] as string;
+        setRepo((cur) => (cur === DEFAULT_REPO ? first : cur));
+        setInput((cur) => (cur === DEFAULT_REPO ? first : cur));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // GitHub App Setup-URL landing (?installation_id=): claim the install once,
   // show the result, then strip the params. setup_claimed=1 comes from the
@@ -116,7 +141,11 @@ export default function App() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              setRepo(input.trim() || DEFAULT_REPO);
+              const next = input.trim() || DEFAULT_REPO;
+              setRepo(next);
+              const url = new URL(window.location.href);
+              url.searchParams.set("repo", next);
+              window.history.replaceState(null, "", url);
             }}
           >
             <input
