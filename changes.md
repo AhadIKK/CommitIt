@@ -1,5 +1,10 @@
 # Changes
 
+## 2026-10-12 — All-time totals on activity
+- Changed: `ActivitySnapshot` gains `totalCommitsAllTime` / `totalMergedPRsAllTime` (two extra counts in `getActivity`); dashboard Activity heading shows them next to the 7d view.
+- Reason: the 7d window silently slid past the first backfill batch (19 shown vs 33+ total); all-time figures stop the confusion.
+- Verification: shape expectations updated. Gate green (29 files / 141 tests, `tsc --noEmit`, `npm run build`).
+
 ## 2026-10-12 — Render worker blueprint fixed
 - Changed: `render.yaml` — dropped hardcoded `PORT` (Render injects its own; hardcoding fails health checks), dropped `prisma migrate deploy` from build (this DB has no migration history and `DIRECT_URL` points at the pooler, where deploy locks fail — migrations stay manually applied, idempotent SQL), declared all runtime env vars (Telegram bot + name, GitHub App set, session secret).
 - Reason: make the Blueprint deployable as the worker host (API + poller + bot polling via `npm start`).

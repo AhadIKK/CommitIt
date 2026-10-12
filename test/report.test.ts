@@ -16,6 +16,8 @@ const activity = {
   authors: [{ login: "a", commits: 3, mergedPRs: 1 }],
   totalCommits: 3,
   totalMergedPRs: 1,
+  totalCommitsAllTime: 10,
+  totalMergedPRsAllTime: 4,
 };
 
 const progress = {

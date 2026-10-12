@@ -221,6 +221,8 @@ describe("dashboard api handlers (Phase C gates)", () => {
             authors: [],
             totalCommits: 0,
             totalMergedPRs: 0,
+            totalCommitsAllTime: 0,
+            totalMergedPRsAllTime: 0,
           },
         },
         {

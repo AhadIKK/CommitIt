@@ -42,7 +42,14 @@ export default async function handler(
   try {
     data = await getActivity(repo, days);
   } catch {
-    data = { repo, authors: [], totalCommits: 0, totalMergedPRs: 0 };
+    data = {
+      repo,
+      authors: [],
+      totalCommits: 0,
+      totalMergedPRs: 0,
+      totalCommitsAllTime: 0,
+      totalMergedPRsAllTime: 0,
+    };
   }
   res.statusCode = 200;
   res.setHeader("content-type", "application/json");

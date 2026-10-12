@@ -33,6 +33,8 @@ export type ActivitySnapshot = {
   authors: AuthorStat[];
   totalCommits: number;
   totalMergedPRs: number;
+  totalCommitsAllTime: number;
+  totalMergedPRsAllTime: number;
 };
 
 export type IssueRow = {
@@ -156,19 +158,30 @@ export async function getProgress(repo: string): Promise<RepoProgress> {
 }
 
 export async function getActivity(repo: string, days = 7): Promise<ActivitySnapshot> {
-  const empty: ActivitySnapshot = { repo, authors: [], totalCommits: 0, totalMergedPRs: 0 };
+  const empty: ActivitySnapshot = {
+    repo,
+    authors: [],
+    totalCommits: 0,
+    totalMergedPRs: 0,
+    totalCommitsAllTime: 0,
+    totalMergedPRsAllTime: 0,
+  };
   const repoRow = await findRepo(repo);
   if (!repoRow) return empty;
   try {
     const since = new Date(Date.now() - days * 86_400_000);
-    const commits = await prisma.commit.findMany({
-      where: { repoId: repoRow.id, createdAt: { gte: since } },
-      include: { author: { select: { githubLogin: true } } },
-    });
-    const prs = await prisma.pullRequest.findMany({
-      where: { repoId: repoRow.id, state: "merged", mergedAt: { gte: since } },
-      include: { author: { select: { githubLogin: true } } },
-    });
+    const [commits, prs, allCommits, allPrs] = await Promise.all([
+      prisma.commit.findMany({
+        where: { repoId: repoRow.id, createdAt: { gte: since } },
+        include: { author: { select: { githubLogin: true } } },
+      }),
+      prisma.pullRequest.findMany({
+        where: { repoId: repoRow.id, state: "merged", mergedAt: { gte: since } },
+        include: { author: { select: { githubLogin: true } } },
+      }),
+      prisma.commit.count({ where: { repoId: repoRow.id } }),
+      prisma.pullRequest.count({ where: { repoId: repoRow.id, state: "merged" } }),
+    ]);
     const authors = shapeActivity(
       commits.map((c) => ({ authorLogin: c.author?.githubLogin ?? "unknown" })),
       prs.map((p) => ({ authorLogin: p.author?.githubLogin ?? "unknown" })),
@@ -178,6 +191,8 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
       authors,
       totalCommits: commits.length,
       totalMergedPRs: prs.length,
+      totalCommitsAllTime: allCommits,
+      totalMergedPRsAllTime: allPrs,
     };
   } catch {
     return empty;

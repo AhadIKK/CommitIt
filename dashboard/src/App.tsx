@@ -159,7 +159,16 @@ export default function App() {
 
       <section aria-label="Activity">
         <div className="section-head">
-          <h2>Activity (7d)</h2>
+          <h2>
+            Activity (7d)
+            {activity && (
+              <span className="muted">
+                {" "}
+                · {activity.totalCommitsAllTime} commits, {activity.totalMergedPRsAllTime}{" "}
+                merged PRs all-time
+              </span>
+            )}
+          </h2>
           {activity && activity.authors.length > 0 && (
             <Button
               type="button"
