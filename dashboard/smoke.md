@@ -4,7 +4,7 @@ Backend first: `npm run dev` (:3000), then `npm run dashboard:dev` (:5173).
 Work through each line with DevTools open (Console + Network, no errors).
 
 ## Load
-- [ ] Repo input prefilled with `AhadIKK/CommitIt`; page loads with no console errors
+- [ ] Repo input prefilled with the default repo; page loads with no console errors
 - [ ] Loading state appears, then sections populate (or honest empty states)
 
 ## Views (tablist above content)

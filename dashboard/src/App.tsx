@@ -21,7 +21,7 @@ import Auth from "./Auth.js";
 import "./styles.css";
 import { ThemeSwitch, useTheme } from "./theme.js";
 
-const DEFAULT_REPO = "AhadIKK/CommitIt";
+const DEFAULT_REPO = "nope/nothing-here";
 
 // Deep-linkable repo: ?repo=owner/name wins (shareable links, fresh tabs).
 function initialRepo(): string {
