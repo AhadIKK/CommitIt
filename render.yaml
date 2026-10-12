@@ -45,3 +45,21 @@ services:
         sync: false
       - key: SESSION_SECRET
         sync: false
+      - key: AI_PROVIDER
+        sync: false
+      - key: AI_MODEL
+        sync: false
+      - key: AI_BASE_URL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_INPUT_PRICE
+        sync: false
+      - key: AI_OUTPUT_PRICE
+        sync: false
+      - key: AI_MONTHLY_CAP_USD
+        sync: false
+      - key: STALE_CHECK_REPOS
+        sync: false
+      - key: STALE_DAYS
+        sync: false

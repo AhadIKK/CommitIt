@@ -1,6 +1,7 @@
 // scheduler.ts — digest batching + quiet hours.
 // Quiet hours reschedule (not drop). Pure helpers; persistence via
 // notifications table (status queued/sent/skipped_quiet_hours/failed).
+import { enqueueJob } from "./queue.js";
 
 export function inQuietHours(
   now: Date,
@@ -47,4 +48,48 @@ export function quietEndsAt(now: Date, start: string, end: string): Date {
   const e = Number(end.split(":")[0]) ?? 0;
   if (s > e && h >= s) d.setUTCDate(d.getUTCDate() + 1);
   return d;
+}
+
+const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
+
+/** Parse STALE_CHECK_REPOS (comma-separated owner/name). Pure, tested. */
+export function parseStaleRepos(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => REPO_RE.test(s));
+}
+
+// Enqueues one `stale_check` job per configured repo, keyed by day so
+// re-runs are idempotent (enqueueJob upserts on delivery_id). Ticks hourly
+// so restarts self-correct. Returns null when unconfigured.
+export function startStaleScheduler(
+  log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void },
+  intervalMs = 3_600_000,
+): NodeJS.Timeout | null {
+  const repos = parseStaleRepos(process.env.STALE_CHECK_REPOS);
+  if (repos.length === 0) {
+    log.info({}, "STALE_CHECK_REPOS empty — stale scheduler disabled");
+    return null;
+  }
+  const days = Number(process.env.STALE_DAYS ?? 6) || 6;
+  const tick = async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    for (const repo of repos) {
+      try {
+        await enqueueJob("stale_check", `stale-check:${repo}:${day}`, {
+          repo,
+          thresholdDays: days,
+        });
+      } catch (err) {
+        log.error({ err, repo }, "stale enqueue failed");
+      }
+    }
+  };
+  void tick();
+  const timer = setInterval(() => {
+    void tick().catch((err) => log.error({ err }, "stale tick failed"));
+  }, intervalMs);
+  timer.unref?.();
+  return timer;
 }

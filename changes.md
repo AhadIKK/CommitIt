@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-10-13 — Real AI provider + stale-check scheduling
+- Added: `src/ai/providers/openaiCompatible.ts` (`AI_PROVIDER=openai`, `AI_MODEL`, `AI_BASE_URL`, key, per-1M prices, `AI_MONTHLY_CAP_USD`); usage + spend logged as JSON per call, cap enforced by degrading to raw-message fallback. Spend ledger is in-memory (resets on restart; logs are the durable record).
+- Added: `startStaleScheduler()` (`scheduler.ts`, wired in `index.ts`) — hourly tick enqueues one dated `stale_check` job per `STALE_CHECK_REPOS` entry (idempotent via delivery id); no-op when unconfigured. `STALE_DAYS` is the default threshold.
+- Env parity: new AI/STALE keys in `.env.example` + `render.yaml` (all `sync: false`).
+- Reason: close the two remaining build-list items (5: real AI + cap, 6: stale scheduling).
+- Verification: new `aiProvider` (6) + `staleScheduler` (3) tests; gate green below.
+
 ## 2026-10-12 — Telegram sender joined to GitHub account on /start
 - Added: migration `4_link_token_owner` (`LinkToken.githubLogin`, applied live); deep-link tokens issued for the logged-in website user; `/start` claim joins the Telegram sender id to that account (first-wins, never steals).
 - Reason: `/repos` and `/bind` identify the sender via `User.telegramUserId`, but no flow ever set it — every sender looked unlinked.
