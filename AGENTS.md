@@ -7,7 +7,7 @@ GitHub → Telegram progress tracker. Single-stack Node.js + TypeScript. Chat-fi
 - Dev: run Postgres locally, `npm run dev` (:3000). No compose services beyond DB in MVP.
 - Webhook local test: `ngrok http 3000`, replay fixtures in `test/fixtures/*.json` to `POST /webhook`.
 - Tests: `npm test` (vitest: formatter, progress, verify, classifier, trim, scan). Required before merge.
-- DB: Postgres via Prisma; migrations in `prisma/`. Never hand-edit DB; add a migration.
+- DB: Postgres via Prisma; migrations in `prisma/`. Never hand-edit DB; add a migration. See `prisma/BASELINE.md` — history table was never created, so `migrate deploy` is unsupported; schema changes ship as reviewed `migration.sql` applied via API.
 
 ## Hard rules (from gap fixes — do not regress)
 1. **Verify HMAC** `X-Hub-Signature-256` on every webhook. Reject on mismatch. Rate-limit endpoint (`src/rateLimit.ts`).

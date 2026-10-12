@@ -32,3 +32,12 @@ Work through each line with DevTools open (Console + Network, no errors).
 ## Failure paths
 - [ ] Backend down: error message names the failure, no blank page
 - [ ] Unknown repo: empty states render, summary reads "No commits…"
+
+## Run log — 2026-10-13 (local dev, :3000 + :5173)
+Pass: load with prefilled repo; tabs + aria-selected; Review arrows + counter;
+Help matches data; theme toggle + persist across reload (light screenshot OK);
+real activity data renders; unknown repo settles to honest empties, no errors.
+Console shows only expected logged-out `/api/me` 401s (handled in UI).
+Not run live: file downloads (buttons present, content unit-tested), print
+preview (code-reviewed), 360px viewport (no resize tool; 640px breakpoint +
+table-wrap scroll in code), backend-down kill, reduced-motion toggle.
