@@ -107,3 +107,73 @@ export async function isTokenClaimed(token: string): Promise<boolean> {
     return false;
   }
 }
+
+export type UnlinkResult = { deleted: number } | { error: "invalid" | "unavailable" };
+
+// Resolve the telegram chat bound to a claimed link proof (deep-link token
+// hash or legacy /link code). Null when the proof is unknown or unclaimed.
+// Throws on DB failure so callers report "unavailable" instead of "invalid".
+async function chatIdByProof(proof: string): Promise<string | null> {
+  const tokenHash = hashToken(proof.trim().toLowerCase());
+  const tok = await prisma.linkToken.findUnique({ where: { tokenHash } });
+  if (
+    tok &&
+    tok.purpose === PURPOSE_TELEGRAM_LINK &&
+    safeEqual(tok.tokenHash, tokenHash) &&
+    tok.usedAt &&
+    tok.chatId
+  ) {
+    return tok.chatId;
+  }
+  const legacy = await prisma.telegramLink.findUnique({
+    where: { code: proof.trim().toUpperCase() },
+  });
+  if (legacy?.chatId && legacy.usedAt) return legacy.chatId;
+  return null;
+}
+
+/** Does this browser proof still map to a live subscription for the repo? */
+export async function linkStatusByProof(
+  proof: string,
+  repoFullName: string,
+): Promise<{ linked: boolean } | { error: "unavailable" }> {
+  try {
+    const telegramChatId = await chatIdByProof(proof);
+    if (!telegramChatId) return { linked: false };
+    const chat = await prisma.chat.findUnique({ where: { telegramChatId } });
+    const repoRow = await prisma.repo.findUnique({ where: { fullName: repoFullName } });
+    if (!chat || !repoRow) return { linked: false };
+    const sub = await prisma.subscription.findUnique({
+      where: { chatId_repoId: { chatId: chat.id, repoId: repoRow.id } },
+    });
+    return { linked: sub !== null };
+  } catch {
+    return { error: "unavailable" };
+  }
+}
+
+/**
+ * Delete a chat's subscription for a repo on proof of a completed link.
+ * Accepts a deep-link token (hashed lookup, constant-time re-compare) or a
+ * legacy /link code (raw lookup). Only claimed proofs count — possession of
+ * the unguessable token (or the single-use code) is the ownership check,
+ * mirroring the bot's chat-proven /unlink for the website's anonymous flow.
+ */
+export async function unlinkByProof(
+  proof: string,
+  repoFullName: string,
+): Promise<UnlinkResult> {
+  try {
+    const telegramChatId = await chatIdByProof(proof);
+    if (!telegramChatId) return { error: "invalid" };
+    const chat = await prisma.chat.findUnique({ where: { telegramChatId } });
+    const repoRow = await prisma.repo.findUnique({ where: { fullName: repoFullName } });
+    if (!chat || !repoRow) return { error: "invalid" };
+    const res = await prisma.subscription.deleteMany({
+      where: { chatId: chat.id, repoId: repoRow.id },
+    });
+    return { deleted: res.count };
+  } catch {
+    return { error: "unavailable" };
+  }
+}

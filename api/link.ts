@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { prisma } from "../src/db.js";
-import { TOKEN_RE, createLinkToken, isTokenClaimed } from "../src/linkTokens.js";
+import { TOKEN_RE, createLinkToken, isTokenClaimed, linkStatusByProof, unlinkByProof } from "../src/linkTokens.js";
 import { isDigestMode, mySubscriptions, setMyDigestMode } from "../src/notifyPrefs.js";
 import { isRateLimited } from "../src/rateLimit.js";
 import { SESSION_COOKIE, getSessionUser, parseCookies } from "../src/session.js";
@@ -11,6 +11,8 @@ import { SESSION_COOKIE, getSessionUser, parseCookies } from "../src/session.js"
 // - POST /api/link?op=claim {code, repo} → claims a /link backup code
 // - GET  /api/link?op=my-subscriptions → my DM subscriptions (session)
 // - POST /api/link?op=set-digest {repo, mode} → digest mode (session)
+// - GET  /api/link?op=link-status&repo=..&code=.. → stored proof still linked
+// - POST /api/link?op=unlink-sub {repo, proof} → delete that chat's sub
 // Mirrors src/linking.ts (local/Render). Same rate limits + error codes.
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
 const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
@@ -220,6 +222,47 @@ export default async function handler(
     } catch {
       sendJson(res, 503, { ok: false, error: "unavailable" });
     }
+    return;
+  }
+
+  if (op === "link-status" && (req.method ?? "GET") === "GET") {
+    const proof = url.searchParams.get("code") ?? "";
+    const repo = url.searchParams.get("repo") ?? "";
+    if (!REPO_RE.test(repo) || proof.length === 0) {
+      sendJson(res, 400, { ok: false, error: "invalid_input" });
+      return;
+    }
+    const st = await linkStatusByProof(proof, repo);
+    if ("error" in st) {
+      sendJson(res, 503, { ok: false, error: "unavailable" });
+      return;
+    }
+    sendJson(res, 200, { ok: true, data: { linked: st.linked } });
+    return;
+  }
+
+  if (op === "unlink-sub" && req.method === "POST") {
+    if (isRateLimited(`unlink-sub:${ipOf(req)}`, { max: 20 })) {
+      sendJson(res, 429, { ok: false, error: "rate_limited" });
+      return;
+    }
+    const body = (await readBody(req)) as { repo?: unknown; proof?: unknown };
+    const repo = typeof body?.repo === "string" ? body.repo : "";
+    const proof = typeof body?.proof === "string" ? body.proof.trim() : "";
+    const proofOk = TOKEN_RE.test(proof.toLowerCase()) || CODE_RE.test(proof.toUpperCase());
+    if (!REPO_RE.test(repo) || !proofOk) {
+      sendJson(res, 400, { ok: false, error: "invalid_input" });
+      return;
+    }
+    const out = await unlinkByProof(proof, repo);
+    if ("error" in out) {
+      sendJson(res, out.error === "invalid" ? 404 : 503, {
+        ok: false,
+        error: out.error === "invalid" ? "invalid_or_expired" : "unavailable",
+      });
+      return;
+    }
+    sendJson(res, 200, { ok: true, data: { deleted: out.deleted } });
     return;
   }
 

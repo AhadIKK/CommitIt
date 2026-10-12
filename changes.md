@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-10-13 — Persistent website link state + explicit unlink
+- Fixed: `Connect` forgot the link on refresh (local-only state). It now persists the link proof per repo in localStorage, re-verifies against the server on mount, and drops stale proofs.
+- Added: website Unlink — `unlinkByProof()` (`linkTokens.ts`) deletes a chat's subscription on proof of a completed link (deep-link token hash or legacy code, claimed-only), mirrored as `op=unlink-sub` on both backends; `op=link-status` answers whether a stored proof is still live. Unlink only ever happens on explicit user action (button or bot /unlink).
+- Reason: refresh must never look like an unlink; unlink must never happen without the user asking.
+- Verification: new `unlink` tests (8: helper, both backends, validation, degraded paths); full gate green (35 files / 178 tests, both typechecks, dashboard build).
+
 ## 2026-10-13 — Real AI provider + stale-check scheduling
 - Added: `src/ai/providers/openaiCompatible.ts` (`AI_PROVIDER=openai`, `AI_MODEL`, `AI_BASE_URL`, key, per-1M prices, `AI_MONTHLY_CAP_USD`); usage + spend logged as JSON per call, cap enforced by degrading to raw-message fallback. Spend ledger is in-memory (resets on restart; logs are the durable record).
 - Added: `startStaleScheduler()` (`scheduler.ts`, wired in `index.ts`) — hourly tick enqueues one dated `stale_check` job per `STALE_CHECK_REPOS` entry (idempotent via delivery id); no-op when unconfigured. `STALE_DAYS` is the default threshold.

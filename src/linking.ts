@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { isRateLimited } from "./rateLimit.js";
-import { TOKEN_RE, createLinkToken, isTokenClaimed } from "./linkTokens.js";
+import { TOKEN_RE, createLinkToken, isTokenClaimed, linkStatusByProof, unlinkByProof } from "./linkTokens.js";
 import { SESSION_COOKIE, getSessionUser, parseCookies } from "./session.js";
 import { isDigestMode, mySubscriptions, setMyDigestMode } from "./notifyPrefs.js";
 
@@ -105,6 +105,27 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
         return reply.code(503).send({ ok: false, error: "unavailable" });
       }
     }
+    if (q.op === "unlink-sub") {
+      if (isRateLimited(`unlink-sub:${clientIp(req)}`, { max: 20 })) {
+        return reply.code(429).send({ ok: false, error: "rate_limited" });
+      }
+      const UnlinkBody = z.object({ repo: z.string(), proof: z.string() });
+      const parsed = UnlinkBody.safeParse(req.body ?? {});
+      const proof = parsed.success ? parsed.data.proof.trim() : "";
+      const repo = parsed.success ? parsed.data.repo : "";
+      const proofOk = TOKEN_RE.test(proof.toLowerCase()) || CODE_RE.test(proof.toUpperCase());
+      if (!parsed.success || !REPO_RE.test(repo) || !proofOk) {
+        return reply.code(400).send({ ok: false, error: "invalid_input" });
+      }
+      const res = await unlinkByProof(proof, repo);
+      if ("error" in res) {
+        const status = res.error === "invalid" ? 404 : 503;
+        return reply
+          .code(status)
+          .send({ ok: false, error: res.error === "invalid" ? "invalid_or_expired" : "unavailable" });
+      }
+      return reply.send({ ok: true, data: { deleted: res.deleted } });
+    }
     if (isRateLimited(`link-token:${clientIp(req)}`, { max: 20 })) {
       return reply.code(429).send({ ok: false, error: "rate_limited" });
     }
@@ -145,6 +166,20 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
       const subs = await mySubscriptions(me.id);
       if (!subs) return reply.code(503).send({ ok: false, error: "unavailable" });
       return reply.send({ ok: true, data: subs });
+    }
+    if (q.op === "link-status") {
+      // Anonymous proof check for the website's stored link (see Connect):
+      // answers whether this browser's proof still maps to a live link.
+      const proof = q.code ?? "";
+      const repo = (req.query as { repo?: string }).repo ?? "";
+      if (!REPO_RE.test(repo) || proof.length === 0) {
+        return reply.code(400).send({ ok: false, error: "invalid_input" });
+      }
+      const st = await linkStatusByProof(proof, repo);
+      if ("error" in st) {
+        return reply.code(503).send({ ok: false, error: "unavailable" });
+      }
+      return reply.send({ ok: true, data: { linked: st.linked } });
     }
     if (q.op !== "poll") {
       return reply.code(404).send({ ok: false, error: "not_found" });

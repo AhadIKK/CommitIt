@@ -44,6 +44,43 @@ export function setDigestMode(repo: string, mode: string): Promise<{ updated: nu
   }).then((r) => parse<{ updated: number }>(r));
 }
 
+const PROOF_PREFIX = "commitit-link-proof:";
+
+export function proofKey(repo: string): string {
+  return `${PROOF_PREFIX}${repo}`;
+}
+
+export function readProof(repo: string): string | null {
+  try {
+    return localStorage.getItem(proofKey(repo));
+  } catch {
+    return null;
+  }
+}
+
+export function writeProof(repo: string, proof: string | null): void {
+  try {
+    if (proof) localStorage.setItem(proofKey(repo), proof);
+    else localStorage.removeItem(proofKey(repo));
+  } catch {
+    // private mode etc. — linking still works, just not remembered
+  }
+}
+
+export function linkStatus(repo: string, proof: string): Promise<{ linked: boolean }> {
+  return fetch(
+    `/api/link?op=link-status&repo=${encodeURIComponent(repo)}&code=${encodeURIComponent(proof)}`,
+  ).then((r) => parse<{ linked: boolean }>(r));
+}
+
+export function unlinkSubscription(repo: string, proof: string): Promise<{ deleted: number }> {
+  return fetch("/api/link?op=unlink-sub", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo, proof }),
+  }).then((r) => parse<{ deleted: number }>(r));
+}
+
 const LINK_ERRORS: Record<string, string> = {
   invalid_repo: "Enter a repo as owner/name.",
   invalid_input: "Enter a 6-letter code and a repo as owner/name.",
