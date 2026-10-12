@@ -177,6 +177,24 @@ table.issues th, table.issues td { text-align: left; padding: 6px 8px; border-bo
   text-transform: uppercase;
 }
 
+.notify-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+}
+.notify-row label { font-size: var(--type-sm); }
+.notify-row select {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: var(--type-sm);
+  min-height: 44px;
+}
+
 .badge {
   display: inline-block;
   min-width: 22px;

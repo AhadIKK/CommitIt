@@ -3,6 +3,7 @@ import { prisma } from "./db.js";
 import { accessibleRepos, checkBindAllowed, getChatMemberStatus, type Sender } from "./chatAccess.js";
 import { isRateLimited } from "./rateLimit.js";
 import { claimLinkToken } from "./linkTokens.js";
+import { isDigestMode } from "./notifyPrefs.js";
 import { sendMessage } from "./telegram.js";
 
 // Telegram inbound: getUpdates long-poll loop (Render service only;
@@ -12,6 +13,7 @@ import { sendMessage } from "./telegram.js";
 // - /repos — repos your linked GitHub account can access (+ bound marks)
 // - /bind owner/repo — subscribe this chat (group: admin only)
 // - /unlink [owner/repo] — unsubscribe (group: admin only)
+// - /digest [mode] [owner/repo] — show/set notification frequency
 // - anything else — short help.
 
 export const LINK_TTL_MS = 10 * 60 * 1000;
@@ -135,7 +137,8 @@ async function boundRepos(chatDbId: string): Promise<Set<string>> {
 
 const HELP =
   "Commands: /start (after tapping your Join link), /link (short code instead), " +
-  "/repos (your accessible repos), /bind owner/repo, /unlink [owner/repo].";
+  "/repos (your accessible repos), /bind owner/repo, /unlink [owner/repo], " +
+  "/digest [instant|hourly|daily|weekly] [owner/repo].";
 
 function limited(cmd: string, chatId: string): boolean {
   return isRateLimited(`tg:${cmd}:${chatId}`, { max: 20 });
@@ -285,6 +288,95 @@ export async function handleMessage(chatId: string, text?: string, sender?: Send
       }
     } catch {
       await sendMessage(chatId, "Unlinking failed — try again soon.");
+    }
+    return;
+  }
+  if (parsed.cmd === "digest") {
+    const parts = (parsed.arg ?? "").trim().split(/\s+/).filter(Boolean);
+    const [first, ...rest] = parts;
+    if (!first) {
+      // List this chat's subscriptions with modes.
+      try {
+        const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
+        const subs = chat
+          ? await prisma.subscription.findMany({
+              where: { chatId: chat.id },
+              include: { repo: { select: { fullName: true } } },
+              orderBy: { createdAt: "asc" },
+            })
+          : [];
+        if (subs.length === 0) {
+          await sendMessage(chatId, "This chat has no subscriptions.");
+        } else {
+          const lines = subs.map(
+            (s) => `<code>${s.repo.fullName}</code> → ${s.digestMode}${s.isMuted ? " (muted)" : ""}`,
+          );
+          await sendMessage(
+            chatId,
+            `Notifications for this chat:\n${lines.join("\n")}\n/digest <instant|hourly|daily|weekly> [owner/repo] to change.`,
+          );
+        }
+      } catch {
+        await sendMessage(chatId, "Reading subscriptions failed — try again soon.");
+      }
+      return;
+    }
+    const mode = first.toLowerCase();
+    if (!isDigestMode(mode)) {
+      await sendMessage(chatId, "Usage: /digest [instant|hourly|daily|weekly] [owner/repo].");
+      return;
+    }
+    const repo = rest.join(" ").trim();
+    if (repo && !REPO_RE.test(repo)) {
+      await sendMessage(chatId, "Usage: /digest [instant|hourly|daily|weekly] [owner/repo].");
+      return;
+    }
+    if (!repo && (sender?.chatType === "group" || sender?.chatType === "supergroup")) {
+      // Changing everything is chat-wide: require admin, mirroring /unlink.
+      const status = sender?.telegramUserId
+        ? await getChatMemberStatus(chatId, sender.telegramUserId)
+        : null;
+      if (status !== "creator" && status !== "administrator") {
+        await sendMessage(chatId, "Only group admins may change this chat's subscriptions.");
+        return;
+      }
+    }
+    if (repo) {
+      const check = await checkBindAllowed(chatId, sender ?? {}, repo);
+      if (!check.ok) {
+        await sendMessage(
+          chatId,
+          check.reason === "group_needs_admin"
+            ? "Only group admins may change this chat's subscriptions."
+            : "You can't change this chat's subscription to that repo.",
+        );
+        return;
+      }
+    }
+    try {
+      const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
+      const where = chat
+        ? repo
+          ? await prisma.repo
+              .findUnique({ where: { fullName: repo }, select: { id: true } })
+              .then((r) => (r ? { chatId: chat.id, repoId: r.id } : null))
+          : { chatId: chat.id }
+        : null;
+      if (!where) {
+        await sendMessage(chatId, "This chat has no subscriptions.");
+        return;
+      }
+      const res = await prisma.subscription.updateMany({ where, data: { digestMode: mode } });
+      if (res.count === 0) {
+        await sendMessage(chatId, "This chat has no subscriptions.");
+        return;
+      }
+      await sendMessage(
+        chatId,
+        repo ? `<code>${repo}</code> → ${mode}.` : `All ${res.count} subscription(s) → ${mode}.`,
+      );
+    } catch {
+      await sendMessage(chatId, "Saving failed — try again soon.");
     }
     return;
   }

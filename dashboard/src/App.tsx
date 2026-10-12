@@ -9,6 +9,7 @@ import { fetchActivity, fetchDigests, fetchIssues, fetchProgress } from "./api.j
 import { claimInstallSetup } from "./authApi.js";
 import { AuthorBars, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
 import { Button } from "./components/ui/button.js";
+import NotifyPrefs from "./NotifyPrefs.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs.js";
 import { activityToCsv, downloadCsv, downloadDoc, exportFilename, issuesToCsv } from "./export.js";
@@ -244,6 +245,7 @@ export default function App() {
           <h2>Telegram</h2>
         </div>
         <Connect repo={repo} />
+        <NotifyPrefs repo={repo} />
       </section>
       <section aria-label="GitHub">
         <div className="section-head">

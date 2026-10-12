@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { prisma } from "../src/db.js";
 import { TOKEN_RE, createLinkToken, isTokenClaimed } from "../src/linkTokens.js";
+import { isDigestMode, mySubscriptions, setMyDigestMode } from "../src/notifyPrefs.js";
 import { isRateLimited } from "../src/rateLimit.js";
 import { SESSION_COOKIE, getSessionUser, parseCookies } from "../src/session.js";
 
@@ -8,6 +9,8 @@ import { SESSION_COOKIE, getSessionUser, parseCookies } from "../src/session.js"
 // - POST /api/link?op=issue {repo} → {code, url} (deep-link primary flow)
 // - GET  /api/link?op=poll&code=.. → {claimed} (website polls while tapping)
 // - POST /api/link?op=claim {code, repo} → claims a /link backup code
+// - GET  /api/link?op=my-subscriptions → my DM subscriptions (session)
+// - POST /api/link?op=set-digest {repo, mode} → digest mode (session)
 // Mirrors src/linking.ts (local/Render). Same rate limits + error codes.
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
 const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
@@ -154,6 +157,66 @@ export default async function handler(
       });
       await prisma.telegramLink.update({ where: { code }, data: { usedAt: new Date() } });
       sendJson(res, 200, { ok: true });
+    } catch {
+      sendJson(res, 503, { ok: false, error: "unavailable" });
+    }
+    return;
+  }
+
+  if (op === "my-subscriptions" && (req.method ?? "GET") === "GET") {
+    try {
+      const me = await getSessionUser(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+      );
+      if (!me) {
+        sendJson(res, 401, { ok: false, error: "logged_out" });
+        return;
+      }
+      const subs = await mySubscriptions(me.id);
+      if (!subs) {
+        sendJson(res, 503, { ok: false, error: "unavailable" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, data: subs });
+    } catch {
+      sendJson(res, 503, { ok: false, error: "unavailable" });
+    }
+    return;
+  }
+
+  if (op === "set-digest" && req.method === "POST") {
+    if (isRateLimited(`set-digest:${ipOf(req)}`, { max: 20 })) {
+      sendJson(res, 429, { ok: false, error: "rate_limited" });
+      return;
+    }
+    const body = (await readBody(req)) as { repo?: unknown; mode?: unknown };
+    const repo = typeof body?.repo === "string" ? body.repo : "";
+    const mode = typeof body?.mode === "string" ? body.mode : "";
+    if (!REPO_RE.test(repo)) {
+      sendJson(res, 400, { ok: false, error: "invalid_input" });
+      return;
+    }
+    if (!isDigestMode(mode)) {
+      sendJson(res, 400, { ok: false, error: "invalid_mode" });
+      return;
+    }
+    try {
+      const me = await getSessionUser(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+      );
+      if (!me) {
+        sendJson(res, 401, { ok: false, error: "logged_out" });
+        return;
+      }
+      const out = await setMyDigestMode(me.id, repo, mode);
+      if ("error" in out) {
+        const status = out.error === "forbidden" ? 403 : out.error === "no_subscription" ? 404 : 503;
+        sendJson(res, status, { ok: false, error: out.error });
+        return;
+      }
+      sendJson(res, 200, { ok: true, data: { updated: out.updated } });
     } catch {
       sendJson(res, 503, { ok: false, error: "unavailable" });
     }

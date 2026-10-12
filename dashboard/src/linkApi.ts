@@ -30,14 +30,32 @@ export function claimLinkCode(code: string, repo: string): Promise<void> {
   }).then((r) => parse<unknown>(r).then(() => undefined));
 }
 
+export type MySubscription = { repo: string; digestMode: string; isMuted: boolean };
+
+export function fetchMySubscriptions(): Promise<MySubscription[]> {
+  return fetch("/api/link?op=my-subscriptions").then((r) => parse<MySubscription[]>(r));
+}
+
+export function setDigestMode(repo: string, mode: string): Promise<{ updated: number }> {
+  return fetch("/api/link?op=set-digest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo, mode }),
+  }).then((r) => parse<{ updated: number }>(r));
+}
+
 const LINK_ERRORS: Record<string, string> = {
   invalid_repo: "Enter a repo as owner/name.",
   invalid_input: "Enter a 6-letter code and a repo as owner/name.",
   invalid_or_expired: "That code is wrong, used, or expired. Send /link to the bot for a fresh one.",
+  invalid_mode: "Pick instant, hourly, daily, or weekly.",
   bot_not_configured: "Telegram bot is not configured yet.",
   rate_limited: "Too many tries — wait a minute.",
   unavailable: "Linking is temporarily unavailable, try again soon.",
   not_found: "That link does not exist.",
+  logged_out: "Link your GitHub account first.",
+  forbidden: "Your account can't change that repo.",
+  no_subscription: "No Telegram subscription for that repo yet — link a chat first.",
 };
 
 export function linkErrorMessage(err: unknown): string {

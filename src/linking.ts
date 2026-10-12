@@ -4,6 +4,7 @@ import { prisma } from "./db.js";
 import { isRateLimited } from "./rateLimit.js";
 import { TOKEN_RE, createLinkToken, isTokenClaimed } from "./linkTokens.js";
 import { SESSION_COOKIE, getSessionUser, parseCookies } from "./session.js";
+import { isDigestMode, mySubscriptions, setMyDigestMode } from "./notifyPrefs.js";
 
 // linking.ts — website side of Telegram chat linking (no website accounts;
 // the chat subscription IS the user). Pairs with src/telegramBot.ts:
@@ -20,6 +21,7 @@ const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
 
 const LinkTokenBody = z.object({ repo: z.string() });
 const LinkCodeBody = z.object({ code: z.string(), repo: z.string() });
+const SetDigestBody = z.object({ repo: z.string(), mode: z.string() });
 
 function clientIp(req: { ip?: string; headers: Record<string, unknown> }): string {
   return req.ip ?? req.headers["x-forwarded-for"]?.toString() ?? "unknown";
@@ -38,6 +40,29 @@ function botDeepLink(code: string): string | null {
 export async function registerLinkingRoutes(app: FastifyInstance) {
   app.post("/api/link", async (req, reply) => {
     const q = req.query as { op?: string };
+    if (q.op === "set-digest") {
+      if (isRateLimited(`set-digest:${clientIp(req)}`, { max: 20 })) {
+        return reply.code(429).send({ ok: false, error: "rate_limited" });
+      }
+      const me = await getSessionUser(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+      );
+      if (!me) return reply.code(401).send({ ok: false, error: "logged_out" });
+      const parsed = SetDigestBody.safeParse(req.body ?? {});
+      if (!parsed.success || !REPO_RE.test(parsed.data.repo)) {
+        return reply.code(400).send({ ok: false, error: "invalid_input" });
+      }
+      if (!isDigestMode(parsed.data.mode)) {
+        return reply.code(400).send({ ok: false, error: "invalid_mode" });
+      }
+      const res = await setMyDigestMode(me.id, parsed.data.repo, parsed.data.mode);
+      if ("error" in res) {
+        const status = res.error === "forbidden" ? 403 : res.error === "no_subscription" ? 404 : 503;
+        return reply.code(status).send({ ok: false, error: res.error });
+      }
+      return reply.send({ ok: true, data: { updated: res.updated } });
+    }
     if (q.op === "claim") {
       if (isRateLimited(`link-code:${clientIp(req)}`, { max: 20 })) {
         return reply.code(429).send({ ok: false, error: "rate_limited" });
@@ -111,6 +136,16 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
 
   app.get("/api/link", async (req, reply) => {
     const q = req.query as { op?: string; code?: string };
+    if (q.op === "my-subscriptions") {
+      const me = await getSessionUser(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+      );
+      if (!me) return reply.code(401).send({ ok: false, error: "logged_out" });
+      const subs = await mySubscriptions(me.id);
+      if (!subs) return reply.code(503).send({ ok: false, error: "unavailable" });
+      return reply.send({ ok: true, data: subs });
+    }
     if (q.op !== "poll") {
       return reply.code(404).send({ ok: false, error: "not_found" });
     }
