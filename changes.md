@@ -1,6 +1,9 @@
 # Changes
 
-## 2026-10-12 — Telegram linking on production (single-function link endpoint)
+## 2026-10-12 — Telegram sender joined to GitHub account on /start
+- Added: migration `4_link_token_owner` (`LinkToken.githubLogin`, applied live); deep-link tokens issued for the logged-in website user; `/start` claim joins the Telegram sender id to that account (first-wins, never steals).
+- Reason: `/repos` and `/bind` identify the sender via `User.telegramUserId`, but no flow ever set it — every sender looked unlinked.
+- Verification: binding/first-wins/anonymous tests. Gate green (30 files / 147 tests, `tsc --noEmit`, `npm run build`).
 - Added: `api/link.ts` (issue/poll/claim via `?op=`, one function — still 11/12 slots); dashboard `linkApi` points at it.
 - Changed: Fastify linking routes merged to the same `POST|GET /api/link?op=` contract (single contract everywhere; old paths retired).
 - Reason: the Connect button called `POST /api/link-token`, which existed only on the local server — production 404d.

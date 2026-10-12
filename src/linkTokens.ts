@@ -21,7 +21,10 @@ export function linkTokenExpiry(now: number = Date.now()): Date {
 }
 
 /** Mint a deep-link token. Returns the raw token (shown once); stores hash. */
-export async function createLinkToken(repoFullName: string): Promise<{ token: string } | null> {
+export async function createLinkToken(
+  repoFullName: string,
+  githubLogin?: string,
+): Promise<{ token: string } | null> {
   const token = genLinkToken();
   try {
     await prisma.linkToken.create({
@@ -29,6 +32,7 @@ export async function createLinkToken(repoFullName: string): Promise<{ token: st
         tokenHash: hashToken(token),
         purpose: PURPOSE_TELEGRAM_LINK,
         repoFullName,
+        githubLogin: githubLogin ?? null,
         expiresAt: linkTokenExpiry(),
       },
     });
@@ -45,9 +49,15 @@ export type ClaimResult =
 
 /**
  * Claim a deep-link token for a chat. Hash recomputed + constant-time
- * re-compared after lookup; expiry + single-use enforced.
+ * re-compared after lookup; expiry + single-use enforced. When the token was
+ * issued by a logged-in website user, joins the Telegram sender to that
+ * account (first-wins: never steals an existing mapping).
  */
-export async function claimLinkToken(token: string, chatId: string): Promise<ClaimResult> {
+export async function claimLinkToken(
+  token: string,
+  chatId: string,
+  senderUserId?: string,
+): Promise<ClaimResult> {
   const clean = token.trim().toLowerCase();
   if (!TOKEN_RE.test(clean)) return { status: "invalid" };
   try {
@@ -65,6 +75,21 @@ export async function claimLinkToken(token: string, chatId: string): Promise<Cla
       where: { tokenHash: row.tokenHash },
       data: { chatId, usedAt: new Date() },
     });
+    if (row.githubLogin && senderUserId) {
+      try {
+        const existing = await prisma.user.findUnique({
+          where: { githubLogin: row.githubLogin },
+        });
+        if (existing && !existing.telegramUserId) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: { telegramUserId: senderUserId },
+          });
+        }
+      } catch {
+        // identity join is best-effort; the link itself already succeeded
+      }
+    }
     return { status: "linked", repoFullName: row.repoFullName };
   } catch {
     return { status: "error" };

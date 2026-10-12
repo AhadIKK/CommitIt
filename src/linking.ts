@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "./db.js";
 import { isRateLimited } from "./rateLimit.js";
 import { TOKEN_RE, createLinkToken, isTokenClaimed } from "./linkTokens.js";
+import { SESSION_COOKIE, getSessionUser, parseCookies } from "./session.js";
 
 // linking.ts — website side of Telegram chat linking (no website accounts;
 // the chat subscription IS the user). Pairs with src/telegramBot.ts:
@@ -93,7 +94,12 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
       return reply.code(503).send({ ok: false, error: "bot_not_configured" });
     }
     try {
-      const issued = await createLinkToken(parsed.data.repo);
+      // Bind the token to the logged-in website user when present (see api).
+      const me = await getSessionUser(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+      );
+      const issued = await createLinkToken(parsed.data.repo, me?.login);
       if (!issued) {
         return reply.code(503).send({ ok: false, error: "unavailable" });
       }

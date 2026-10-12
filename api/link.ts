@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { prisma } from "../src/db.js";
 import { TOKEN_RE, createLinkToken, isTokenClaimed } from "../src/linkTokens.js";
 import { isRateLimited } from "../src/rateLimit.js";
+import { SESSION_COOKIE, getSessionUser, parseCookies } from "../src/session.js";
 
 // Shared link endpoint (ONE serverless function for the Hobby 12-cap):
 // - POST /api/link?op=issue {repo} → {code, url} (deep-link primary flow)
@@ -70,7 +71,14 @@ export default async function handler(
       return;
     }
     try {
-      const issued = await createLinkToken(repo);
+      // Bind the token to the logged-in website user when present, so /start
+      // can join their Telegram sender to this account. Anonymous issue
+      // still works (no binding) — same as before.
+      const me = await getSessionUser(
+        parseCookies(req.headers.cookie)[SESSION_COOKIE],
+        process.env.SESSION_SECRET ?? "",
+      );
+      const issued = await createLinkToken(repo, me?.login);
       if (!issued) {
         sendJson(res, 503, { ok: false, error: "unavailable" });
         return;

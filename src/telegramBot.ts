@@ -45,10 +45,14 @@ export function parseCommand(text?: string): ParsedCommand {
   return { cmd: raw.split("@")[0]!.toLowerCase(), arg: rest.join(" ") || undefined };
 }
 
-async function claimToken(code: string, chatId: string) {
+async function claimToken(
+  code: string,
+  chatId: string,
+  senderUserId?: string,
+) {
   // Legacy TelegramLink rows (raw 32-hex codes, pre-Phase D) stay claimable
   // until they expire; new deep-link tokens live hashed in LinkToken.
-  const fresh = await claimLinkToken(code, chatId);
+  const fresh = await claimLinkToken(code, chatId, senderUserId);
   if (fresh.status !== "invalid") return fresh;
   try {
     const row = await prisma.telegramLink.findUnique({ where: { code } });
@@ -153,7 +157,7 @@ export async function handleMessage(chatId: string, text?: string, sender?: Send
       );
       return;
     }
-    const res = await claimToken(parsed.arg.trim(), chatId);
+    const res = await claimToken(parsed.arg.trim(), chatId, sender?.telegramUserId);
     if (res.status !== "linked") {
       await sendMessage(
         chatId,
@@ -201,7 +205,8 @@ export async function handleMessage(chatId: string, text?: string, sender?: Send
     if (repos.length === 0) {
       await sendMessage(
         chatId,
-        "No accessible repos. Link your GitHub account on the website, then install the App.",
+        "No accessible repos. Link your GitHub account on the website, install the App, " +
+          "then tap a fresh Join link (older links predate account binding).",
       );
       return;
     }

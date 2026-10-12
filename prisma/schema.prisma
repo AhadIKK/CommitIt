@@ -254,6 +254,7 @@ model LinkToken {
   purpose      String    // "telegram_link"
   chatId       String?
   repoFullName String?
+  githubLogin  String?   // website user who issued it (binds claimer on /start)
   expiresAt    DateTime
   usedAt       DateTime?
   createdAt    DateTime  @default(now())
