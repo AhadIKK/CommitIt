@@ -79,28 +79,56 @@ export default function Auth({ repo }: { repo: string }) {
   };
 
   return (
-    <div className="auth">
+    <div className="connect">
       {me === undefined ? (
         <p className="muted">Checking GitHub link…</p>
       ) : me ? (
         <>
-          <p>
-            <strong>Linked as {me.login}.</strong>{" "}
+          <div className="connect-row">
             {me.avatarUrl && (
               <img src={me.avatarUrl} alt="" width={20} height={20} className="avatar" />
-            )}{" "}
-            <Button type="button" variant="secondary" onClick={doLogout} disabled={busy}>
+            )}
+            <strong>Linked as {me.login}</strong>
+            <Button type="button" variant="secondary" onClick={doLogout} disabled={busy} className="row-end">
               Unlink
             </Button>
-          </p>
+          </div>
           <p className="muted">
             {me.repos.length > 0
               ? `Your projects: ${me.repos.join(", ")}`
               : "No projects owned yet — install the App on a repo to claim it."}
           </p>
+          <div className="connect-row">
+            {installed === null ? (
+              <span className="muted">Checking App install…</span>
+            ) : installed ? (
+              <span className="muted">
+                GitHub App installed on this repo — events arrive automatically.
+              </span>
+            ) : meta?.installUrl ? (
+              <>
+                <span className="muted">No GitHub App on this repo yet.</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => window.open(meta.installUrl as string, "_blank", "noopener")}
+                >
+                  Install GitHub App
+                </Button>
+              </>
+            ) : (
+              <span className="muted">Manual webhooks only — set the App slug to offer one-click install.</span>
+            )}
+          </div>
+          <div className="connect-row">
+            <Button type="button" variant="secondary" onClick={doSync} disabled={syncing}>
+              {syncing ? "Syncing…" : "Sync now"}
+            </Button>
+          </div>
+          {syncMsg && <p className="muted">{syncMsg}</p>}
         </>
       ) : (
-        <p className="muted">
+        <div className="connect-row">
           {meta?.authEnabled ? (
             <Button
               type="button"
@@ -111,37 +139,9 @@ export default function Auth({ repo }: { repo: string }) {
               Link GitHub account
             </Button>
           ) : (
-            "GitHub login is not configured yet."
+            <span className="muted">GitHub login is not configured yet.</span>
           )}
-        </p>
-      )}
-      <p className="muted">
-        {installed === null
-          ? "Checking App install…"
-          : installed
-            ? "GitHub App installed on this repo — events arrive automatically."
-            : meta?.installUrl
-              ? (
-                <>
-                  No GitHub App on this repo yet.{" "}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => window.open(meta.installUrl as string, "_blank", "noopener")}
-                  >
-                    Install GitHub App
-                  </Button>
-                </>
-              )
-              : "Manual webhooks only — set the App slug to offer one-click install."}
-      </p>
-      {me && (
-        <p>
-          <Button type="button" variant="secondary" onClick={doSync} disabled={syncing}>
-            {syncing ? "Syncing…" : "Sync now"}
-          </Button>
-          {syncMsg && <> {syncMsg}</>}
-        </p>
+        </div>
       )}
     </div>
   );
