@@ -1,5 +1,10 @@
 # Changes
 
+## 2026-10-14 — Authors attributed + PR history backfilled
+- "unknown" authors: the live worker path (`processPush`) never set `authorId` — only the serverless path did. Now both attribute via `commitAuthorLogin()` (username, else display name). Avatars were always identicons by design; they differentiate correctly once names resolve.
+- 0 merged PRs: backfill explicitly skipped PRs and only live `pull_request` events recorded — pre-install history read 0 forever. New `backfillRepoPRs` (closed → merged only, no body fetch) rides `backfillInstallation`, so the next Sync now heals PR counts. `repairCommitAuthors` heals up to 50 unattributed SHAs per sync the same way.
+- Tests: PR backfill, author repair, login helper; suite 38 files / 200 green.
+
 ## 2026-10-14 — Topbar brand settled into two-line lockup
 - Tagline floated mid-height beside the name (ragged row). Brand is now logo + stacked name/tagline, left-aligned; input/Load/theme row untouched. Dashboard rebuilt.
 

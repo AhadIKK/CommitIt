@@ -43,6 +43,18 @@ type PushPayload = {
   commits?: PushCommit[];
 };
 
+/**
+ * Pure: display login for a push commit author. Prefers the GitHub username
+ * (exact login); falls back to the display name (better than "unknown" for
+ * activity grouping); "unknown" only when both are absent.
+ */
+export function commitAuthorLogin(author?: { username?: string; name?: string }): string {
+  const username = (author?.username ?? "").trim();
+  if (username) return username;
+  const name = (author?.name ?? "").trim();
+  return name || "unknown";
+}
+
 type PullRequestPayload = {
   action?: string;
   number?: number;
@@ -101,6 +113,24 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
     const link = linkCommit({ message: c.message, branch });
     void link;
     const author = c.author?.username ?? c.author?.name ?? "unknown";
+    // Author attribution (mirrors api/webhook storePushCommits): every push
+    // commit gets an Author row. Missing this once rendered the whole
+    // dashboard as "unknown" — the worker path is the live one.
+    const login = commitAuthorLogin(c.author);
+    let authorId: string | undefined;
+    try {
+      const authorRow = await prisma.author.upsert({
+        where: { githubLogin: login },
+        update: {},
+        create: {
+          githubLogin: login,
+          displayName: c.author?.username && author !== login ? author : undefined,
+        },
+      });
+      authorId = authorRow.id;
+    } catch {
+      // attribution best-effort; the commit itself still records below
+    }
     if (!isMerge && isProtectedBranch(branch)) directToMain = true;
     if (secretFlag) {
       // First-class secret notification: path only, never the value.
@@ -154,6 +184,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           secretFlag,
           isMerge,
           isForcePushContext: payload.forced ?? false,
+          ...(authorId ? { authorId } : {}),
         },
         create: {
           repoId: repoRow.id,
@@ -164,6 +195,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           isMerge,
           isForcePushContext: payload.forced ?? false,
           aiSummary: aiSummary?.slice(0, 2000),
+          ...(authorId ? { authorId } : {}),
         },
       });
     } catch {

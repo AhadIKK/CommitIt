@@ -21,6 +21,7 @@ GitHub → Telegram progress tracker. Single-stack Node.js + TypeScript. Chat-fi
 9. **Merges/force-push:** `is_merge` → link via PR, no AI summary. `forced:true` → risk alert, exclude from activity. Squash → PR merged event is truth.
 10. **Prefs scope:** per-`subscriptions` row (chat × repo). Never put digest/quiet-hours on `users`.
 11. **Linking:** strong (`closes #N`) > weak (`#N`/branch) > PR inherit > heuristic suggest as `Unlinked work`. Never auto-assign suggestion.
+12. **Author attribution:** every commit store sets `authorId` (username, else display name via `commitAuthorLogin`). Both ingest paths (serverless + worker) — unattributed rows render the whole dashboard as "unknown".
 
 ## Code conventions
 - Single language (TS). No second service. Brain logic lives in `src/brain/` as pure in-process functions, not HTTP calls.

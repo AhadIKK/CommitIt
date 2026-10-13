@@ -158,15 +158,167 @@ export async function backfillRepoIssues(
   return { ...stored, skipped: false };
 }
 
+const PullResponse = z.array(
+  z.object({
+    number: z.number(),
+    title: z.string(),
+    state: z.string(),
+    merged_at: z.string().nullable(),
+    user: z.object({ login: z.string() }).nullish(),
+    base: z.object({ ref: z.string() }).nullish(),
+    head: z.object({ ref: z.string() }).nullish(),
+  }),
+);
+
+/**
+ * Backfill merged PRs. The `pull_request` webhook only records PRs from
+ * install onward, so history otherwise reads 0 forever. Closed-but-unmerged
+ * PRs are skipped (activity = merges). Bodies are NOT fetched — linkedIssueIds
+ * stays [] here; the live PR webhook fills links going forward.
+ */
+export async function backfillRepoPRs(
+  fullName: string,
+  token: string,
+  deps: BackfillDeps = {},
+): Promise<{ prs: number; merged: number } | null> {
+  const fetchFn = deps.fetchFn ?? fetch;
+  const perPage = Math.min(Math.max(deps.perPage ?? 100, 1), 100);
+  const maxPages = Math.min(Math.max(deps.maxPages ?? 10, 1), 10);
+  let repoRow;
+  try {
+    repoRow = await prisma.repo.upsert({
+      where: { fullName },
+      update: {},
+      create: { fullName },
+    });
+  } catch {
+    return null;
+  }
+  let merged = 0;
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await authedGet(
+      `https://api.github.com/repos/${fullName}/pulls?state=closed&sort=updated&direction=desc&per_page=${perPage}&page=${page}`,
+      token,
+      {},
+      fetchFn,
+    );
+    const waitMs = rateLimitWaitMs(res);
+    if (waitMs !== null) throw new RateLimitedError(waitMs);
+    if (!res.ok) return null;
+    const parsed = PullResponse.safeParse(await res.json());
+    if (!parsed.success) return null;
+    if (parsed.data.length === 0) break;
+    for (const p of parsed.data) {
+      if (!p.merged_at) continue;
+      try {
+        let authorId: string | undefined;
+        if (p.user?.login) {
+          const author = await prisma.author.upsert({
+            where: { githubLogin: p.user.login },
+            update: {},
+            create: { githubLogin: p.user.login },
+          });
+          authorId = author.id;
+        }
+        await prisma.pullRequest.upsert({
+          where: { repoId_number: { repoId: repoRow.id, number: p.number } },
+          update: {
+            title: p.title.slice(0, 500),
+            state: "merged",
+            mergedAt: new Date(p.merged_at),
+            baseBranch: p.base?.ref,
+            headBranch: p.head?.ref,
+          },
+          create: {
+            repoId: repoRow.id,
+            number: p.number,
+            title: p.title.slice(0, 500),
+            state: "merged",
+            authorId,
+            baseBranch: p.base?.ref,
+            headBranch: p.head?.ref,
+            mergedAt: new Date(p.merged_at),
+            linkedIssueIds: [],
+          },
+        });
+        merged += 1;
+      } catch {
+        // one bad row never blocks the page
+      }
+    }
+    if (parsed.data.length < perPage) break;
+  }
+  return { prs: merged, merged };
+}
+
+const CommitShaResponse = z.object({
+  sha: z.string(),
+  author: z.object({ login: z.string() }).nullish(),
+  commit: z.object({ author: z.object({ name: z.string() }).nullish() }).nullish(),
+});
+
+/**
+ * Heal commit rows stored without an author (pre-attribution pushes).
+ * Resolves up to 50 recent unattributed SHAs via the API — best-effort,
+ * never throws, never blocks the backfill on rate limits.
+ */
+export async function repairCommitAuthors(
+  fullName: string,
+  token: string,
+  deps: BackfillDeps = {},
+): Promise<{ repaired: number }> {
+  const fetchFn = deps.fetchFn ?? fetch;
+  let rows: { id: string; sha: string }[];
+  try {
+    const repoRow = await prisma.repo.findUnique({ where: { fullName } });
+    if (!repoRow) return { repaired: 0 };
+    rows = await prisma.commit.findMany({
+      where: { repoId: repoRow.id, authorId: null },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, sha: true },
+    });
+  } catch {
+    return { repaired: 0 };
+  }
+  let repaired = 0;
+  for (const row of rows) {
+    try {
+      const res = await authedGet(
+        `https://api.github.com/repos/${fullName}/commits/${row.sha}`,
+        token,
+        {},
+        fetchFn,
+      );
+      if (rateLimitWaitMs(res) !== null) break; // quota first, healing later
+      if (!res.ok) continue;
+      const parsed = CommitShaResponse.safeParse(await res.json());
+      if (!parsed.success) continue;
+      const login =
+        parsed.data.author?.login ?? parsed.data.commit?.author?.name ?? null;
+      if (!login) continue;
+      const author = await prisma.author.upsert({
+        where: { githubLogin: login },
+        update: {},
+        create: { githubLogin: login },
+      });
+      await prisma.commit.update({ where: { id: row.id }, data: { authorId: author.id } });
+      repaired += 1;
+    } catch {
+      // one bad SHA never blocks the rest
+    }
+  }
+  return { repaired };
+}
 /** Backfill every repo on an installation. Returns per-repo outcomes. */
 export async function backfillInstallation(
   installationId: bigint | number | string,
   keys: KeyMaterial,
   deps: BackfillDeps = {},
-): Promise<{ repos: number; issues: number; milestones: number }> {
+): Promise<{ repos: number; issues: number; milestones: number; prs: number; authorsRepaired: number }> {
   const fetchFn = deps.fetchFn ?? fetch;
   const token = await getInstallationToken(installationId, keys, { fetchFn });
-  const totals = { repos: 0, issues: 0, milestones: 0 };
+  const totals = { repos: 0, issues: 0, milestones: 0, prs: 0, authorsRepaired: 0 };
   const perPage = 100;
   for (let page = 1; ; page++) {
     const res = await authedGet(
@@ -187,6 +339,15 @@ export async function backfillInstallation(
         totals.issues += out.issues;
         totals.milestones += out.milestones;
       }
+      // PR history + author healing ride the same install sync (Sync now
+      // re-runs this). PR rate-limits propagate for worker backoff like
+      // issues; repair is fully best-effort and never throws.
+      const prOut = await backfillRepoPRs(r.full_name, token, deps);
+      if (prOut) totals.prs += prOut.merged;
+      const fixed = await repairCommitAuthors(r.full_name, token, deps).catch(() => ({
+        repaired: 0,
+      }));
+      totals.authorsRepaired += fixed.repaired;
     }
     if (parsed.data.repositories.length < perPage) break;
   }
