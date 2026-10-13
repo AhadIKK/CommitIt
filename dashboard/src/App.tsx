@@ -45,13 +45,6 @@ export default function App() {
   const [errorKind, setErrorKind] = useState<"auth_required" | "forbidden" | "other" | null>(null);
   const [linked, setLinked] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(() => {
-    try {
-      return localStorage.getItem("commitit-autorefresh") === "1";
-    } catch {
-      return false;
-    }
-  });
 
   const load = useCallback(async (r: string, quiet = false) => {
     if (!quiet) {
@@ -90,14 +83,10 @@ export default function App() {
     }
   }, []);
 
-  // Auto-refresh: quiet 30s polling + reload on tab refocus, only while on.
+  // Live by default: quiet 30s polling + reload on tab refocus.
   // Polling (not push-triggered) is the mechanism — the client can't hear
-  // webhooks. Preference persists per browser.
+  // webhooks. Quiet ticks never flash banners or clobber data.
   useEffect(() => {
-    try {
-      localStorage.setItem("commitit-autorefresh", autoRefresh ? "1" : "0");
-    } catch {}
-    if (!autoRefresh) return;
     const tick = setInterval(() => void load(repo, true), 30_000);
     const onFocus = () => {
       if (!document.hidden) void load(repo, true);
@@ -107,7 +96,7 @@ export default function App() {
       clearInterval(tick);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [autoRefresh, repo, load]);
+  }, [repo, load]);
 
   // Soft landing: first-run states (logged out / repo not accessible) with
   // no data get the Welcome steps instead of the red error wall.
@@ -248,14 +237,6 @@ export default function App() {
             )}
           </h2>
           <div className="connect-row">
-            <label className="muted auto-refresh">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />{" "}
-              Auto-refresh
-            </label>
             <Button type="button" variant="secondary" onClick={() => void load(repo)}>
               Refresh
             </Button>

@@ -1,5 +1,8 @@
 # Changes
 
+## 2026-10-14 — Auto-refresh always on, checkbox removed
+- Dropped the oversized checkbox: dashboard is live by default (quiet 30s poll + refocus reload). Only Refresh + Export CSV buttons remain in the Activity head.
+
 ## 2026-10-14 — Activity totals match GitHub live + auto-refresh
 - Why 61 vs 53: our rows span every pushed branch plus force-push orphans; GitHub counts the default branch only. 0 merged PRs is real (direct-push workflow — PR events are handled).
 - New `src/githubCounts.ts`: default-branch commit count straight from GitHub (Link-header page count, installation token when available, 90s cache, null on any failure). `getActivity` carries it as `githubMainCommits`; header shows "N commits on main", falling back to "N commits tracked" offline.
