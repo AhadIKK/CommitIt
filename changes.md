@@ -1,5 +1,8 @@
 # Changes
 
+## 2026-10-14 — Topbar brand settled into two-line lockup
+- Tagline floated mid-height beside the name (ragged row). Brand is now logo + stacked name/tagline, left-aligned; input/Load/theme row untouched. Dashboard rebuilt.
+
 ## 2026-10-14 — Auto-refresh always on, checkbox removed
 - Dropped the oversized checkbox: dashboard is live by default (quiet 30s poll + refocus reload). Only Refresh + Export CSV buttons remain in the Activity head.
 

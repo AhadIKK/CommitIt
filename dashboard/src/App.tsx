@@ -174,8 +174,10 @@ export default function App() {
         <div className="topbar-inner">
           <div className="brand">
             <Logo />
-            <h1 className="brand-name">CommitIt</h1>
-            <span className="brand-tag">who did what, how close to done</span>
+            <div className="brand-text">
+              <h1 className="brand-name">CommitIt</h1>
+              <span className="brand-tag">who did what, how close to done</span>
+            </div>
           </div>
           <form
             onSubmit={(e) => {

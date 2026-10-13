@@ -41,6 +41,7 @@ body:focus-visible, :focus-visible {
 }
 
 .brand { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
 .brand-name { margin: 0; font-size: var(--type-lg); font-weight: 650; white-space: nowrap; }
 .brand-tag {
   font-size: var(--type-xs);
