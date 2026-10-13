@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-10-14 — GitHub section remapped into clean rows
+- `Auth.tsx`: account row (avatar + name + right-aligned Unlink), projects line, install-status row (with inline Install button when missing), sync row + message on its own line. Logged-out state keeps single login row. Avatar no longer orphans onto its own line.
+- `.connect-row` wraps on mobile; new `.row-end` helper. Dashboard rebuilt; suite green (186).
+
 ## 2026-10-14 — Soft landing Welcome card replaces forbidden/auth error wall
 - New `dashboard/src/Welcome.tsx`: first-run states (logged out / repo not accessible, no data) get a 3-step card (link account → install App → connect Telegram) with smooth-scroll buttons to the Telegram/GitHub sections, instead of the red `Error: Your account can't access this repo…`.
 - `App.tsx` tracks error kind; empty Milestones/Activity/Issues/Digests sections hide while Welcome shows; genuine errors still render red. Dashboard rebuilt.
