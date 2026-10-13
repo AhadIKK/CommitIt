@@ -83,11 +83,16 @@ export default function App() {
     }
   }, []);
 
-  // Live by default: quiet 30s polling + reload on tab refocus.
+  // Live by default: quiet 30s polling while visible + reload on tab refocus.
   // Polling (not push-triggered) is the mechanism — the client can't hear
-  // webhooks. Quiet ticks never flash banners or clobber data.
+  // webhooks. Hidden tabs skip ticks entirely so idle tabs cost zero
+  // function execution; refocus triggers a single reload instead.
+  // Quiet ticks never flash banners or clobber data.
   useEffect(() => {
-    const tick = setInterval(() => void load(repo, true), 30_000);
+    const poll = () => {
+      if (!document.hidden) void load(repo, true);
+    };
+    const tick = setInterval(poll, 30_000);
     const onFocus = () => {
       if (!document.hidden) void load(repo, true);
     };
