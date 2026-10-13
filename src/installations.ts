@@ -406,6 +406,7 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
     return syncFail("app_not_configured", "app_jwt", err);
   }
   let done = 0;
+  let woken = false;
   for (const id of ids) {
     try {
       const inst = await fetchAppInstallation(id);
@@ -455,6 +456,7 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
         await enqueueJob("backfill", `sync-${id.toString()}-${Date.now()}`, {
           installationId: id.toString(),
         });
+        woken = true;
       } catch {
         // backfill is best-effort
       }
@@ -465,6 +467,12 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
         JSON.stringify({ msg: "install_sync_skipped", installationId: id.toString(), err: String(err) }),
       );
     }
+  }
+  // Wake the worker so the queued backfills actually run: the free Render
+  // instance sleeps, and its poller only lives while awake. Best-effort.
+  if (woken) {
+    const { pingWorker } = await import("./workerWake.js");
+    await pingWorker();
   }
   return { synced: done, status: "synced" };
 }

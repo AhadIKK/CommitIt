@@ -1,5 +1,10 @@
 # Changes
 
+## 2026-10-14 — Sync wakes the sleeping worker so backfills actually run
+- Root cause of stuck unknowns/0 PRs: backfill jobs queue in Supabase but the free Render worker sleeps — its poller only lives while awake, and nothing wakes it. Zero Render POSTs in 24h + 22s cold start proved it.
+- `syncUserInstalls` now pings `WORKER_URL/health` (new `src/workerWake.ts`, 5s cap, never throws, skipped when unset) after enqueueing backfills. Set `WORKER_URL` on Vercel Production. Render wakes on the incoming connection even if we stop waiting.
+- Tests: `workerWake` suite (skip/ok/down); 39 files / 203 green.
+
 ## 2026-10-14 — Authors attributed + PR history backfilled
 - "unknown" authors: the live worker path (`processPush`) never set `authorId` — only the serverless path did. Now both attribute via `commitAuthorLogin()` (username, else display name). Avatars were always identicons by design; they differentiate correctly once names resolve.
 - 0 merged PRs: backfill explicitly skipped PRs and only live `pull_request` events recorded — pre-install history read 0 forever. New `backfillRepoPRs` (closed → merged only, no body fetch) rides `backfillInstallation`, so the next Sync now heals PR counts. `repairCommitAuthors` heals up to 50 unattributed SHAs per sync the same way.
