@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { appKeys } from "./githubAuth.js";
 
 // githubApp.ts — GitHub App installs (replaces manual webhooks) + GitHub
 // OAuth login (user identity). Pure builders/parsers are unit-tested; the
@@ -179,10 +180,9 @@ export function buildAppJwt(opts: {
   return `${signingInput}.${signature}`;
 }
 
-function appPrivateKey(): string {
-  const b64 = (process.env.GITHUB_APP_PRIVATE_KEY_BASE64 ?? "").trim();
-  if (!b64) throw new Error("app_not_configured");
-  return Buffer.from(b64, "base64").toString("utf8");
+/** App credentials from env (either key form). Throws app_not_configured. */
+function appCredentials(): { appId: string; privateKeyPem: string } {
+  return appKeys();
 }
 
 const AppInstallationsResponse = z.array(
@@ -196,9 +196,8 @@ export type AppInstallation = { id: bigint; accountLogin: string | null };
 
 /** List all installations of this App (authenticates as the App via JWT). */
 export async function fetchAppInstallations(): Promise<AppInstallation[]> {
-  const appId = (process.env.GITHUB_APP_ID ?? "").trim();
-  if (!appId) throw new Error("app_not_configured");
-  const jwt = buildAppJwt({ appId, privateKeyPem: appPrivateKey() });
+  const { appId, privateKeyPem } = appCredentials();
+  const jwt = buildAppJwt({ appId, privateKeyPem });
   const res = await fetch("https://api.github.com/app/installations?per_page=100", {
     headers: {
       Accept: "application/vnd.github+json",
@@ -252,9 +251,8 @@ export async function attributeInstallToSender(
 
 /** Mint a short-lived installation token for API calls as the App. */
 export async function mintInstallationToken(installationId: bigint): Promise<string> {
-  const appId = (process.env.GITHUB_APP_ID ?? "").trim();
-  if (!appId) throw new Error("app_not_configured");
-  const jwt = buildAppJwt({ appId, privateKeyPem: appPrivateKey() });
+  const { appId, privateKeyPem } = appCredentials();
+  const jwt = buildAppJwt({ appId, privateKeyPem });
   const res = await fetch(
     `https://api.github.com/app/installations/${installationId.toString()}/access_tokens`,
     {

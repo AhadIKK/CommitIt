@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-10-14 — Sync now reports honest statuses (not silent zero)
+- `syncUserInstalls()` returns `{ synced, status }`: `synced` / `no_installs` / `app_not_configured` / `github_error`, with server-side `install_sync_failed` warns. Unknown login maps to `no_installs`; down store / GitHub failure maps to `github_error`.
+- Both shells (`api/me.ts`, `src/auth.ts`) pass the status through; dashboard shows "not configured — check env" / "couldn't reach GitHub" instead of blaming the user.
+- `fetchAppInstallations` / `mintInstallationToken` now use `appKeys()` (raw PEM or base64) — previously base64-only, so Render-style raw-PEM deploys always reported `app_not_configured`.
+- Tests: updated sync contract, added `app_not_configured` + `github_error` cases; fixed stale `authApi` 405 test (pre-existing red on clean HEAD — POST without op is 404, PUT is 405). Suite: 36 files / 185 tests green. Dashboard rebuilt.
+
 ## 2026-10-13 — Persistent website link state + explicit unlink
 - Fixed: `Connect` forgot the link on refresh (local-only state). It now persists the link proof per repo in localStorage, re-verifies against the server on mount, and drops stale proofs.
 - Added: website Unlink — `unlinkByProof()` (`linkTokens.ts`) deletes a chat's subscription on proof of a completed link (deep-link token hash or legacy code, claimed-only), mirrored as `op=unlink-sub` on both backends; `op=link-status` answers whether a stored proof is still live. Unlink only ever happens on explicit user action (button or bot /unlink).

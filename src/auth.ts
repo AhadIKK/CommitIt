@@ -268,8 +268,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     if (!session) {
       return reply.code(401).send({ ok: false, error: "logged_out" });
     }
-    const synced = await syncUserInstalls(session.login);
-    return reply.send({ ok: true, data: { synced } });
+    const result = await syncUserInstalls(session.login);
+    return reply.send({ ok: true, data: result });
   });
 
   app.get("/api/meta", async (_req, reply) => {

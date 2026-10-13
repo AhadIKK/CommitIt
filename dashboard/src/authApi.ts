@@ -23,7 +23,8 @@ export async function fetchMe(): Promise<Me | null> {
 }
 
 /** Re-run install attribution for this account ("Sync now" repair). */
-export function syncMyInstalls(): Promise<{ synced: number }> {
+export type SyncStatus = "synced" | "no_installs" | "app_not_configured" | "github_error";
+export function syncMyInstalls(): Promise<{ synced: number; status: SyncStatus }> {
   return fetch("/api/me?op=sync", { method: "POST" }).then((r) =>
     parse<{ synced: number }>(r),
   );

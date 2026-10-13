@@ -88,10 +88,16 @@ const SECRET = "test-session-secret";
 const APP_SECRET = "test-app-webhook-secret";
 
 describe("api/me", () => {
-  it("rejects non-GET with 405", async () => {
+  it("rejects wrong methods with 405", async () => {
+    const { res, done } = mockRes();
+    await (meHandler as Handler)(mockReq({ method: "PUT" }), res);
+    expect((await done).status).toBe(405);
+  });
+
+  it("404s POST without a known op", async () => {
     const { res, done } = mockRes();
     await (meHandler as Handler)(mockReq({ method: "POST" }), res);
-    expect((await done).status).toBe(405);
+    expect((await done).status).toBe(404);
   });
 
   it("returns 401 when logged out", async () => {

@@ -248,13 +248,51 @@ describe("install lifecycle", () => {
       throw new Error(`unexpected ${target}`);
     }) as typeof fetch;
     try {
-      await expect(syncUserInstalls("AhadIKK")).resolves.toBe(1);
+      await expect(syncUserInstalls("AhadIKK")).resolves.toEqual({ synced: 1, status: "synced" });
       const ops = calls.map((c) => c.op);
       expect(ops).toContain("installation.upsert");
       expect(ops).toContain("repo.upsert");
       expect(ops).toContain("userInstallation.upsert");
       expect(ops).toContain("job.upsert");
-      await expect(syncUserInstalls("stranger")).resolves.toBe(0);
+      await expect(syncUserInstalls("stranger")).resolves.toEqual({
+        synced: 0,
+        status: "no_installs",
+      });
+    } finally {
+      process.env = saved;
+      globalThis.fetch = savedFetch;
+    }
+  });
+
+  it("sync reports app_not_configured instead of silent zero", async () => {
+    const saved = { ...process.env };
+    delete process.env.GITHUB_APP_ID;
+    delete process.env.GITHUB_APP_PRIVATE_KEY;
+    delete process.env.GITHUB_APP_PRIVATE_KEY_BASE64;
+    try {
+      await expect(syncUserInstalls("AhadIKK")).resolves.toEqual({
+        synced: 0,
+        status: "app_not_configured",
+      });
+    } finally {
+      process.env = saved;
+    }
+  });
+
+  it("sync reports github_error when the App API is down", async () => {
+    const saved = { ...process.env };
+    const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    process.env.GITHUB_APP_ID = "42";
+    process.env.GITHUB_APP_PRIVATE_KEY_BASE64 = Buffer.from(
+      privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    ).toString("base64");
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("boom", { status: 500 })) as typeof fetch;
+    try {
+      await expect(syncUserInstalls("AhadIKK")).resolves.toEqual({
+        synced: 0,
+        status: "github_error",
+      });
     } finally {
       process.env = saved;
       globalThis.fetch = savedFetch;

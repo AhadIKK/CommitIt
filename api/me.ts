@@ -42,10 +42,10 @@ export default async function handler(
       res.end(JSON.stringify({ ok: false, error: "logged_out" }));
       return;
     }
-    const synced = await syncUserInstalls(session.login);
+    const result = await syncUserInstalls(session.login);
     res.statusCode = 200;
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ ok: true, data: { synced } }));
+    res.end(JSON.stringify({ ok: true, data: result }));
     return;
   }
   if ((req.method ?? "GET") !== "GET") {

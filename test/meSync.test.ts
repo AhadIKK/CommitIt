@@ -69,10 +69,13 @@ describe("api/me sync op", () => {
     expect(await done).toEqual({ status: 401, body: { ok: false, error: "logged_out" } });
   });
 
-  it("syncs and reports zero installs without app keys", async () => {
+  it("reports app_not_configured without app keys (not silent zero)", async () => {
     const { res, done } = mockRes();
     await (meHandler as Handler)(mockReq({ method: "POST", url: "/api/me?op=sync" }), res);
-    expect(await done).toEqual({ status: 200, body: { ok: true, data: { synced: 0 } } });
+    expect(await done).toEqual({
+      status: 200,
+      body: { ok: true, data: { synced: 0, status: "app_not_configured" } },
+    });
   });
 
   it("404s unknown ops and keeps GET working", async () => {

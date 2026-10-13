@@ -53,7 +53,7 @@ export default function Auth({ repo }: { repo: string }) {
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const { synced } = await syncMyInstalls();
+      const { synced, status } = await syncMyInstalls();
       const [m, p] = await Promise.all([
         fetchMe().catch(() => null),
         fetchRepoProfile(repo).catch(() => null),
@@ -61,9 +61,15 @@ export default function Auth({ repo }: { repo: string }) {
       if (m) setMe(m);
       if (p) setInstalled(p.installed);
       setSyncMsg(
-        synced > 0
-          ? `Synced ${synced} install(s) — projects update above.`
-          : "No installs found — install the App on a repo first.",
+        status === "app_not_configured"
+          ? "GitHub App isn't configured on the server — check GITHUB_APP_ID / private key env vars."
+          : status === "github_error"
+            ? "Couldn't reach GitHub or the database — try again soon."
+            : synced > 0
+              ? `Synced ${synced} install(s) — projects update above.`
+              : status === "synced"
+                ? "Found your install(s) but couldn't read their repos — try again soon."
+                : "No installs found — install the App on a repo first.",
       );
     } catch {
       setSyncMsg("Sync failed — try again soon.");

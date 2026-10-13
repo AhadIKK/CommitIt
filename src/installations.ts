@@ -352,35 +352,57 @@ export async function fetchAppInstallation(
 /**
  * Full per-user install sync (login-time): list App installations, keep the
  * ones owned by this login, and record each (rows + owner + member +
- * backfill). Best-effort: returns installs recorded, never throws.
+ * backfill). Best-effort: never throws.
+ *
+ * The status distinguishes "genuinely no installs" from server-side failure
+ * so the UI never blames the user for a misconfigured server:
+ * - "synced": listing succeeded (synced may still be 0 when every install
+ *   failed per-install fetching — those are logged, not hidden).
+ * - "no_installs": GitHub reachable, none belong to this login.
+ * - "app_not_configured": GITHUB_APP_ID / private key missing or unusable.
+ * - "github_error": store down, GitHub unreachable/invalid, or no user row.
  */
-export async function syncUserInstalls(login: string): Promise<number> {
+export type InstallSyncStatus = "synced" | "no_installs" | "app_not_configured" | "github_error";
+export type InstallSyncResult = { synced: number; status: InstallSyncStatus };
+
+function syncFail(status: InstallSyncStatus, stage: string, err: unknown): InstallSyncResult {
+  console.warn(JSON.stringify({ msg: "install_sync_failed", stage, err: String(err) }));
+  return { synced: 0, status };
+}
+
+export async function syncUserInstalls(login: string): Promise<InstallSyncResult> {
   let userId: string;
   try {
     const user = await prisma.user.findUnique({ where: { githubLogin: login } });
-    if (!user) return 0;
+    // No account row: nothing can belong to this login. Benign (session is
+    // still valid) — report no_installs, not an error. A down store throws
+    // below and maps to github_error instead.
+    if (!user) return { synced: 0, status: "no_installs" };
     userId = user.id;
-  } catch {
-    return 0;
+  } catch (err) {
+    return syncFail("github_error", "user_lookup", err);
   }
   let installs: AppInstallation[];
   try {
     installs = await fetchAppInstallations();
-  } catch {
-    return 0;
+  } catch (err) {
+    const code = err instanceof Error ? err.message : "unknown";
+    if (code === "app_not_configured") return syncFail("app_not_configured", "app_list", err);
+    return syncFail("github_error", "app_list", err);
   }
   const ids = selectUserInstallations(installs, login);
+  if (ids.length === 0) return { synced: 0, status: "no_installs" };
   let keys;
   try {
     keys = appKeys();
-  } catch {
-    return 0;
+  } catch (err) {
+    return syncFail("app_not_configured", "app_keys", err);
   }
   let jwt: string;
   try {
     jwt = buildAppJwt({ appId: keys.appId, privateKeyPem: keys.privateKeyPem });
-  } catch {
-    return 0;
+  } catch (err) {
+    return syncFail("app_not_configured", "app_jwt", err);
   }
   let done = 0;
   for (const id of ids) {
@@ -410,9 +432,12 @@ export async function syncUserInstalls(login: string): Promise<number> {
         // backfill is best-effort
       }
       done += 1;
-    } catch {
+    } catch (err) {
       // one bad install never blocks the rest
+      console.warn(
+        JSON.stringify({ msg: "install_sync_skipped", installationId: id.toString(), err: String(err) }),
+      );
     }
   }
-  return done;
+  return { synced: done, status: "synced" };
 }
