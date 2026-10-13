@@ -409,7 +409,12 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
     try {
       const inst = await fetchAppInstallation(id);
       const repos = await listInstallRepos(id, jwt);
-      if (!repos) continue;
+      if (!repos) {
+        console.warn(
+          JSON.stringify({ msg: "install_sync_skipped", installationId: id.toString(), err: "repos_list_null" }),
+        );
+        continue;
+      }
       await recordInstall({
         kind: "installed",
         installationId: id,
