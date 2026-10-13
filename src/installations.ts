@@ -283,12 +283,12 @@ export async function applyRepositoryChange(change: RepositoryChange): Promise<b
   }
 }
 
-/** List an installation's repo full names as the App (JWT, paginated). */
+/** List an installation's repo full names as the App (JWT, paginated). Throws repos_list_<status> on HTTP failure so callers log the real cause instead of a bare null. */
 export async function listInstallRepos(
   installationId: bigint,
   jwt: string,
   fetchFn: typeof fetch = fetch,
-): Promise<string[] | null> {
+): Promise<string[]> {
   const headers = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
@@ -301,7 +301,7 @@ export async function listInstallRepos(
         `https://api.github.com/app/installations/${installationId.toString()}/repositories?per_page=100&page=${page}`,
         { headers },
       );
-      if (!res.ok) return null;
+      if (!res.ok) throw new Error(`repos_list_${res.status}`);
       const body = (await res.json()) as { repositories?: { full_name?: string }[] };
       const names = (body.repositories ?? [])
         .map((r) => r.full_name)
@@ -311,8 +311,9 @@ export async function listInstallRepos(
       if (page >= 10) break;
     }
     return repos;
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("repos_list_")) throw err;
+    throw new Error("repos_list_fetch_failed");
   }
 }
 
@@ -409,12 +410,6 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
     try {
       const inst = await fetchAppInstallation(id);
       const repos = await listInstallRepos(id, jwt);
-      if (!repos) {
-        console.warn(
-          JSON.stringify({ msg: "install_sync_skipped", installationId: id.toString(), err: "repos_list_null" }),
-        );
-        continue;
-      }
       await recordInstall({
         kind: "installed",
         installationId: id,
