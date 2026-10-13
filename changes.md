@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-10-14 — Backfill outcome logging ends the blind debugging
+- `backfill_done` (with totals: repos/issues/milestones/prs/authorsRepaired) and `backfill_failed` now log on the worker; sync logs `install_sync_wake` (woke true/false) on Vercel. Next Sync click leaves a complete trail across both hosts.
+- Test: worker backfill job asserts the done log + totals; 40 files / 204 green.
+
 ## 2026-10-14 — Sync wakes the sleeping worker so backfills actually run
 - Root cause of stuck unknowns/0 PRs: backfill jobs queue in Supabase but the free Render worker sleeps — its poller only lives while awake, and nothing wakes it. Zero Render POSTs in 24h + 22s cold start proved it.
 - `syncUserInstalls` now pings `WORKER_URL/health` (new `src/workerWake.ts`, 5s cap, never throws, skipped when unset) after enqueueing backfills. Set `WORKER_URL` on Vercel Production. Render wakes on the incoming connection even if we stop waiting.

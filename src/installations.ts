@@ -472,7 +472,8 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
   // instance sleeps, and its poller only lives while awake. Best-effort.
   if (woken) {
     const { pingWorker } = await import("./workerWake.js");
-    await pingWorker();
+    const woke = await pingWorker();
+    console.warn(JSON.stringify({ msg: "install_sync_wake", woke }));
   }
   return { synced: done, status: "synced" };
 }

@@ -476,7 +476,27 @@ export async function processJob(job: JobRow): Promise<void> {
         await completeJob(job.id);
         return;
       }
-      await backfillInstallation(installationId, keys);
+      try {
+        const totals = await backfillInstallation(installationId, keys);
+        console.log(
+          JSON.stringify({
+            msg: "backfill_done",
+            jobId: job.id,
+            installationId: String(installationId),
+            totals,
+          }),
+        );
+      } catch (err) {
+        console.warn(
+          JSON.stringify({
+            msg: "backfill_failed",
+            jobId: job.id,
+            installationId: String(installationId),
+            err: String(err),
+          }),
+        );
+        throw err;
+      }
       await completeJob(job.id);
       return;
     }
