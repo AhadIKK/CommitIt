@@ -49,6 +49,7 @@ export default async function handler(
       totalMergedPRs: 0,
       totalCommitsAllTime: 0,
       totalMergedPRsAllTime: 0,
+      githubMainCommits: null,
     };
   }
   res.statusCode = 200;

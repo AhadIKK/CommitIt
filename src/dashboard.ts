@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { checkRepoAccess, isAuthEnforced, type AccessDenial } from "./access.js";
 import { prisma } from "./db.js";
+import { getMainBranchCommitCount } from "./githubCounts.js";
 import { milestoneProgress } from "./progress.js";
 import { SESSION_COOKIE, parseCookies } from "./session.js";
 
@@ -35,6 +36,8 @@ export type ActivitySnapshot = {
   totalMergedPRs: number;
   totalCommitsAllTime: number;
   totalMergedPRsAllTime: number;
+  /** Live default-branch count from GitHub; null when unreachable (use totalCommitsAllTime). */
+  githubMainCommits: number | null;
 };
 
 export type IssueRow = {
@@ -165,12 +168,13 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
     totalMergedPRs: 0,
     totalCommitsAllTime: 0,
     totalMergedPRsAllTime: 0,
+    githubMainCommits: null,
   };
   const repoRow = await findRepo(repo);
   if (!repoRow) return empty;
   try {
     const since = new Date(Date.now() - days * 86_400_000);
-    const [commits, prs, allCommits, allPrs] = await Promise.all([
+    const [commits, prs, allCommits, allPrs, live] = await Promise.all([
       prisma.commit.findMany({
         where: { repoId: repoRow.id, createdAt: { gte: since } },
         include: { author: { select: { githubLogin: true } } },
@@ -181,6 +185,10 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
       }),
       prisma.commit.count({ where: { repoId: repoRow.id } }),
       prisma.pullRequest.count({ where: { repoId: repoRow.id, state: "merged" } }),
+      getMainBranchCommitCount(repo, {
+        installationId: repoRow.installationId,
+        defaultBranch: repoRow.defaultBranch,
+      }).catch(() => ({ count: null as number | null, defaultBranch: null as string | null })),
     ]);
     const authors = shapeActivity(
       commits.map((c) => ({ authorLogin: c.author?.githubLogin ?? "unknown" })),
@@ -193,6 +201,7 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
       totalMergedPRs: prs.length,
       totalCommitsAllTime: allCommits,
       totalMergedPRsAllTime: allPrs,
+      githubMainCommits: live.count,
     };
   } catch {
     return empty;

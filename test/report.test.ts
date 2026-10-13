@@ -18,6 +18,7 @@ const activity = {
   totalMergedPRs: 1,
   totalCommitsAllTime: 10,
   totalMergedPRsAllTime: 4,
+  githubMainCommits: null,
 };
 
 const progress = {

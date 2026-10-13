@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-10-14 — Activity totals match GitHub live + auto-refresh
+- Why 61 vs 53: our rows span every pushed branch plus force-push orphans; GitHub counts the default branch only. 0 merged PRs is real (direct-push workflow — PR events are handled).
+- New `src/githubCounts.ts`: default-branch commit count straight from GitHub (Link-header page count, installation token when available, 90s cache, null on any failure). `getActivity` carries it as `githubMainCommits`; header shows "N commits on main", falling back to "N commits tracked" offline.
+- Dashboard Activity head: Refresh button + Auto-refresh toggle (quiet 30s poll + reload on tab refocus, persisted per browser). Quiet ticks never flash banners or clobber data.
+- Tests: new `githubCounts` suite (Link parse, branch resolve, single-page, 404, cache); suite 37 files / 193 green. Dashboard rebuilt.
+
 ## 2026-10-14 — GitHub section remapped into clean rows
 - `Auth.tsx`: account row (avatar + name + right-aligned Unlink), projects line, install-status row (with inline Install button when missing), sync row + message on its own line. Logged-out state keeps single login row. Avatar no longer orphans onto its own line.
 - `.connect-row` wraps on mobile; new `.row-end` helper. Dashboard rebuilt; suite green (186).

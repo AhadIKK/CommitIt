@@ -45,11 +45,20 @@ export default function App() {
   const [errorKind, setErrorKind] = useState<"auth_required" | "forbidden" | "other" | null>(null);
   const [linked, setLinked] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(() => {
+    try {
+      return localStorage.getItem("commitit-autorefresh") === "1";
+    } catch {
+      return false;
+    }
+  });
 
-  const load = useCallback(async (r: string) => {
-    setLoading(true);
-    setError(null);
-    setErrorKind(null);
+  const load = useCallback(async (r: string, quiet = false) => {
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+      setErrorKind(null);
+    }
     try {
       const [p, a, i, d] = await Promise.all([
         fetchProgress(r),
@@ -61,7 +70,12 @@ export default function App() {
       setActivity(a);
       setIssues(i);
       setDigests(d);
+      if (quiet) {
+        setError(null);
+        setErrorKind(null);
+      }
     } catch (e) {
+      if (quiet) return; // keep stale data, no banner flash on background ticks
       const msg = e instanceof Error ? e.message : "load failed";
       setErrorKind(msg === "auth_required" || msg === "forbidden" ? msg : "other");
       setError(
@@ -72,9 +86,28 @@ export default function App() {
             : msg,
       );
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
+
+  // Auto-refresh: quiet 30s polling + reload on tab refocus, only while on.
+  // Polling (not push-triggered) is the mechanism — the client can't hear
+  // webhooks. Preference persists per browser.
+  useEffect(() => {
+    try {
+      localStorage.setItem("commitit-autorefresh", autoRefresh ? "1" : "0");
+    } catch {}
+    if (!autoRefresh) return;
+    const tick = setInterval(() => void load(repo, true), 30_000);
+    const onFocus = () => {
+      if (!document.hidden) void load(repo, true);
+    };
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [autoRefresh, repo, load]);
 
   // Soft landing: first-run states (logged out / repo not accessible) with
   // no data get the Welcome steps instead of the red error wall.
@@ -208,20 +241,34 @@ export default function App() {
             {activity && (
               <span className="muted">
                 {" "}
-                · {activity.totalCommitsAllTime} commits, {activity.totalMergedPRsAllTime}{" "}
-                merged PRs all-time
+                · {activity.githubMainCommits ?? activity.totalCommitsAllTime}{" "}
+                {activity.githubMainCommits != null ? "commits on main" : "commits tracked"},{" "}
+                {activity.totalMergedPRsAllTime} merged PRs all-time
               </span>
             )}
           </h2>
-          {activity && activity.authors.length > 0 && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => downloadCsv(exportFilename(repo, "activity"), activityToCsv(activity.authors))}
-            >
-              Export CSV
+          <div className="connect-row">
+            <label className="muted auto-refresh">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+              />{" "}
+              Auto-refresh
+            </label>
+            <Button type="button" variant="secondary" onClick={() => void load(repo)}>
+              Refresh
             </Button>
-          )}
+            {activity && activity.authors.length > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => downloadCsv(exportFilename(repo, "activity"), activityToCsv(activity.authors))}
+              >
+                Export CSV
+              </Button>
+            )}
+          </div>
         </div>
         {activity && <AuthorBars authors={activity.authors} />}
       </section>

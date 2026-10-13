@@ -223,6 +223,7 @@ describe("dashboard api handlers (Phase C gates)", () => {
             totalMergedPRs: 0,
             totalCommitsAllTime: 0,
             totalMergedPRsAllTime: 0,
+            githubMainCommits: null,
           },
         },
         {
