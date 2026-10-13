@@ -253,6 +253,25 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     });
   });
 
+  app.post("/api/me", async (req, reply) => {
+    const q = req.query as { op?: string };
+    if (q.op !== "sync") {
+      return reply.code(404).send({ ok: false, error: "not_found" });
+    }
+    if (isRateLimited(`me-sync:${clientIp(req)}`, { max: 5 })) {
+      return reply.code(429).send({ ok: false, error: "rate_limited" });
+    }
+    const session = await getSessionUser(
+      parseCookies(req.headers.cookie)[SESSION_COOKIE],
+      process.env.SESSION_SECRET ?? "",
+    );
+    if (!session) {
+      return reply.code(401).send({ ok: false, error: "logged_out" });
+    }
+    const synced = await syncUserInstalls(session.login);
+    return reply.send({ ok: true, data: { synced } });
+  });
+
   app.get("/api/meta", async (_req, reply) => {
     const slug = (process.env.GITHUB_APP_SLUG ?? "").trim();
     return reply.send({

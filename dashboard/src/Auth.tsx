@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchMe, fetchMeta, fetchRepoProfile, logout, type Me, type Meta } from "./authApi.js";
+import { fetchMe, fetchMeta, fetchRepoProfile, logout, syncMyInstalls, type Me, type Meta } from "./authApi.js";
 import { Button } from "./components/ui/button.js";
 
 // Auth — GitHub account linking + project profile (App install state).
@@ -10,6 +10,8 @@ export default function Auth({ repo }: { repo: string }) {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -44,6 +46,29 @@ export default function Auth({ repo }: { repo: string }) {
       // cookie clear is best-effort; keep the UI honest on next load
     } finally {
       setBusy(false);
+    }
+  };
+
+  const doSync = async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const { synced } = await syncMyInstalls();
+      const [m, p] = await Promise.all([
+        fetchMe().catch(() => null),
+        fetchRepoProfile(repo).catch(() => null),
+      ]);
+      if (m) setMe(m);
+      if (p) setInstalled(p.installed);
+      setSyncMsg(
+        synced > 0
+          ? `Synced ${synced} install(s) — projects update above.`
+          : "No installs found — install the App on a repo first.",
+      );
+    } catch {
+      setSyncMsg("Sync failed — try again soon.");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -104,6 +129,14 @@ export default function Auth({ repo }: { repo: string }) {
               )
               : "Manual webhooks only — set the App slug to offer one-click install."}
       </p>
+      {me && (
+        <p>
+          <Button type="button" variant="secondary" onClick={doSync} disabled={syncing}>
+            {syncing ? "Syncing…" : "Sync now"}
+          </Button>
+          {syncMsg && <> {syncMsg}</>}
+        </p>
+      )}
     </div>
   );
 }

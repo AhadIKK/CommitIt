@@ -22,6 +22,13 @@ export async function fetchMe(): Promise<Me | null> {
   return parse<Me>(res);
 }
 
+/** Re-run install attribution for this account ("Sync now" repair). */
+export function syncMyInstalls(): Promise<{ synced: number }> {
+  return fetch("/api/me?op=sync", { method: "POST" }).then((r) =>
+    parse<{ synced: number }>(r),
+  );
+}
+
 export function fetchMeta(): Promise<Meta> {
   return fetch("/api/meta").then((r) => parse<Meta>(r));
 }
