@@ -409,7 +409,34 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
   for (const id of ids) {
     try {
       const inst = await fetchAppInstallation(id);
-      const repos = await listInstallRepos(id, jwt);
+      let repos: string[];
+      try {
+        repos = await listInstallRepos(id, jwt);
+      } catch (listErr) {
+        // GitHub won't serve this install's repo list (404/403/rate-limit):
+        // fall back to repos our webhooks already recorded for it. The
+        // install row exists locally (that's how /api/repo knows), so
+        // attribution + membership can still complete.
+        let rows: { fullName: string }[] = [];
+        try {
+          rows = await prisma.repo.findMany({
+            where: { installationId: id },
+            select: { fullName: true },
+          });
+        } catch {
+          rows = [];
+        }
+        if (rows.length === 0) throw listErr; // nothing locally either: log original
+        repos = rows.map((r) => r.fullName);
+        console.warn(
+          JSON.stringify({
+            msg: "install_sync_db_fallback",
+            installationId: id.toString(),
+            repoCount: repos.length,
+            err: String(listErr),
+          }),
+        );
+      }
       await recordInstall({
         kind: "installed",
         installationId: id,

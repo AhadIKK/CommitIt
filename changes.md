@@ -1,5 +1,10 @@
 # Changes
 
+## 2026-10-14 — Sync falls back to DB repos on GitHub 404 + surfaces list status
+- Prod showed `repos_list_404`: GitHub lists install 170384988 but won't serve its repo list. `listInstallRepos` now throws `repos_list_<status>` instead of a bare null.
+- `syncUserInstalls` falls back to repo rows our webhooks already recorded for that install (attribution + membership + backfill still complete); new `install_sync_db_fallback` log. Only skips when GitHub and DB both have nothing.
+- Test: 404 + local row → `{ synced: 1, status: "synced" }`.
+
 ## 2026-10-14 — Sync now reports honest statuses (not silent zero)
 - `syncUserInstalls()` returns `{ synced, status }`: `synced` / `no_installs` / `app_not_configured` / `github_error`, with server-side `install_sync_failed` warns. Unknown login maps to `no_installs`; down store / GitHub failure maps to `github_error`.
 - Both shells (`api/me.ts`, `src/auth.ts`) pass the status through; dashboard shows "not configured — check env" / "couldn't reach GitHub" instead of blaming the user.

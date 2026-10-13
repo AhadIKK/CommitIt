@@ -37,6 +37,10 @@ vi.mock("../src/db.js", () => ({
         calls.push({ op: "repo.upsert", args });
         return { id: "r1" };
       },
+      findMany: async (args: unknown) => {
+        calls.push({ op: "repo.findMany", args });
+        return [];
+      },
       findUnique: async (args: { where: { fullName?: string } }) => {
         if (args.where.fullName === "AhadIKK/old-repo") {
           return { id: "r9", installationId: 5n };
@@ -259,6 +263,50 @@ describe("install lifecycle", () => {
         status: "no_installs",
       });
     } finally {
+      process.env = saved;
+      globalThis.fetch = savedFetch;
+    }
+  });
+
+  it("sync falls back to DB repos when GitHub 404s the repo list", async () => {
+    reset();
+    const saved = { ...process.env };
+    const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    process.env.GITHUB_APP_ID = "42";
+    process.env.GITHUB_APP_PRIVATE_KEY_BASE64 = Buffer.from(
+      privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    ).toString("base64");
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      if (target.endsWith("/app/installations?per_page=100")) {
+        return new Response(JSON.stringify([{ id: 77, account: { login: "AhadIKK", type: "User" } }]), {
+          status: 200,
+        });
+      }
+      if (target.endsWith("/app/installations/77")) {
+        return new Response(JSON.stringify({ account: { login: "AhadIKK", type: "User" } }), {
+          status: 200,
+        });
+      }
+      if (target.includes("/app/installations/77/repositories")) {
+        return new Response("not found", { status: 404 });
+      }
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    // Local webhook truth: this install already has a repo row.
+    const { prisma } = await import("../src/db.js");
+    const origFindMany = prisma.repo.findMany;
+    (prisma.repo as unknown as { findMany: unknown }).findMany = async () => [
+      { fullName: "AhadIKK/CommitIt" },
+    ];
+    try {
+      await expect(syncUserInstalls("AhadIKK")).resolves.toEqual({ synced: 1, status: "synced" });
+      const ops = calls.map((c) => c.op);
+      expect(ops).toContain("installation.upsert");
+      expect(ops).toContain("userInstallation.upsert");
+    } finally {
+      (prisma.repo as unknown as { findMany: unknown }).findMany = origFindMany;
       process.env = saved;
       globalThis.fetch = savedFetch;
     }
