@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-10-14 — Soft landing Welcome card replaces forbidden/auth error wall
+- New `dashboard/src/Welcome.tsx`: first-run states (logged out / repo not accessible, no data) get a 3-step card (link account → install App → connect Telegram) with smooth-scroll buttons to the Telegram/GitHub sections, instead of the red `Error: Your account can't access this repo…`.
+- `App.tsx` tracks error kind; empty Milestones/Activity/Issues/Digests sections hide while Welcome shows; genuine errors still render red. Dashboard rebuilt.
+
 ## 2026-10-14 — Sync falls back to DB repos on GitHub 404 + surfaces list status
 - Prod showed `repos_list_404`: GitHub lists install 170384988 but won't serve its repo list. `listInstallRepos` now throws `repos_list_<status>` instead of a bare null.
 - `syncUserInstalls` falls back to repo rows our webhooks already recorded for that install (attribution + membership + backfill still complete); new `install_sync_db_fallback` log. Only skips when GitHub and DB both have nothing.

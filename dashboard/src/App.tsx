@@ -18,6 +18,7 @@ import { buildWeeklySummary, digestToDoc, weekLabel } from "./report.js";
 import Review from "./Review.js";
 import Connect from "./Connect.js";
 import Auth from "./Auth.js";
+import Welcome from "./Welcome.js";
 import "./styles.css";
 import { ThemeSwitch, useTheme } from "./theme.js";
 
@@ -41,11 +42,14 @@ export default function App() {
   const [issues, setIssues] = useState<IssueRow[]>([]);
   const [digests, setDigests] = useState<DigestEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<"auth_required" | "forbidden" | "other" | null>(null);
+  const [linked, setLinked] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async (r: string) => {
     setLoading(true);
     setError(null);
+    setErrorKind(null);
     try {
       const [p, a, i, d] = await Promise.all([
         fetchProgress(r),
@@ -59,6 +63,7 @@ export default function App() {
       setDigests(d);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "load failed";
+      setErrorKind(msg === "auth_required" || msg === "forbidden" ? msg : "other");
       setError(
         msg === "auth_required"
           ? "Sign in with GitHub in the GitHub section below, then reload."
@@ -70,6 +75,11 @@ export default function App() {
       setLoading(false);
     }
   }, []);
+
+  // Soft landing: first-run states (logged out / repo not accessible) with
+  // no data get the Welcome steps instead of the red error wall.
+  const showWelcome =
+    (errorKind === "auth_required" || errorKind === "forbidden") && !progress && !activity;
 
   useEffect(() => {
     void load(repo);
@@ -83,7 +93,9 @@ export default function App() {
     let alive = true;
     fetchMe()
       .then((me) => {
-        if (!alive || !me || me.repos.length === 0) return;
+        if (!alive) return;
+        setLinked(!!me);
+        if (!me || me.repos.length === 0) return;
         const first = me.repos[0] as string;
         setRepo((cur) => (cur === DEFAULT_REPO ? first : cur));
         setInput((cur) => (cur === DEFAULT_REPO ? first : cur));
@@ -161,7 +173,7 @@ export default function App() {
       </div>
 
       {loading && <p className="muted">Loading…</p>}
-      {error && <p className="error">Error: {error}</p>}
+      {showWelcome ? <Welcome linked={linked} /> : error && <p className="error">Error: {error}</p>}
       {setupNotice && <p className="notice">{setupNotice}</p>}
 
       <Tabs value={view} onValueChange={(v) => setView(v as View)}>
@@ -172,6 +184,8 @@ export default function App() {
         </TabsList>
 
         <TabsContent value="dashboard" forceMount className="tab-panel">
+        {!showWelcome && (
+          <>
         <Card aria-label="Milestones">
           <CardHeader>
             <CardTitle>Milestones</CardTitle>
@@ -269,14 +283,16 @@ export default function App() {
         </div>
         <DigestTimeline digests={digests} />
       </section>
-      <section aria-label="Telegram">
+          </>
+        )}
+      <section aria-label="Telegram" id="section-telegram">
         <div className="section-head">
           <h2>Telegram</h2>
         </div>
         <Connect repo={repo} />
         <NotifyPrefs repo={repo} />
       </section>
-      <section aria-label="GitHub">
+      <section aria-label="GitHub" id="section-github">
         <div className="section-head">
           <h2>GitHub</h2>
         </div>

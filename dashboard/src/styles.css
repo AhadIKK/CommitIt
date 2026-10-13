@@ -246,6 +246,11 @@ ul.timeline p { margin: 4px 0 0; font-size: var(--type-sm); }
 .help dt { font-weight: 650; margin-top: var(--space-3); }
 .help dd { margin: var(--space-1) 0 0; color: var(--text); }
 
+.welcome-steps { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-3) 0 0; padding-left: var(--space-6); }
+.welcome-steps li { display: flex; flex-direction: column; gap: var(--space-1); }
+.welcome-steps li > div { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+#section-telegram, #section-github { scroll-margin-top: var(--space-6); }
+
 @media (max-width: 640px) {
   .brand-tag { display: none; }
   .topbar input { width: 140px; }
