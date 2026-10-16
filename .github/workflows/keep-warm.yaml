@@ -1,0 +1,21 @@
+# Keep-warm: Render free sleeps after ~15 min idle, which pauses the worker
+# (Telegram inbound, backfill, digests) until traffic wakes it. This pings
+# /health every 10 minutes so the instance stays warm through tester rounds.
+# Revisit when traffic justifies paid hosting or Telegram webhook mode.
+name: keep-warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping Render health
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://commitit-brqq.onrender.com/health)
+          echo "health=$code"
+          test "$code" = "200"

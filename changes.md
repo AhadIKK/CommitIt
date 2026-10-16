@@ -1,5 +1,8 @@
 # Changes
 
+## 2026-10-16 — Keep-warm cron for the sleeping worker
+- Render free sleeps after ~15 min idle, freezing Telegram inbound, backfill, and digests until traffic wakes it (this week's every mystery). `.github/workflows/keep-warm.yaml` pings `/health` every 10 min. Revisit with paid hosting or Telegram webhook mode once testers become users.
+
 ## PARKED 2026-10-16 — install 171066945 grants zero repos via API
 - Backfill runs fine (8× `backfill_done`) but GitHub reports 0 repos on the live install; old install 170384988 404s. UI grant page shows AhadIKK/CommitIt selected. Next step when resumed: Sync now → read fresh `backfill_done` totals → repos:1 means healed, zeros means trace that exact install ID.
 - Do NOT touch: PR count 0 is GitHub's truth (0 open/closed ever); live GitHub main count + auto-refresh shipped.
