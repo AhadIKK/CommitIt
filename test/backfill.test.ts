@@ -18,6 +18,7 @@ vi.mock("../src/db.js", () => ({
         return { id: "r1", syncEtag: null as string | null };
       },
       findUnique: async () => ({ id: "r1" }),
+      findMany: async () => [],
       update: async () => {
         upserts.push({ op: "repo.update" });
         return {};
@@ -177,6 +178,33 @@ describe("repairCommitAuthors", () => {
       repaired: 0,
     });
   });
+
+  it("falls back to unauthenticated reads for public repos", async () => {
+    const { prisma } = await import("../src/db.js");
+    const origFindMany = prisma.commit.findMany;
+    (prisma.commit as unknown as { findMany: unknown }).findMany = async () => [
+      { id: "c1", sha: "abc123" },
+    ];
+    const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
+      const target = url.toString();
+      if (!target.includes("/commits/abc123")) throw new Error(`unexpected ${target}`);
+      const headers = new Headers(init?.headers);
+      if (headers.get("Authorization")) {
+        return new Response("denied", { status: 404 }); // stale/empty grant
+      }
+      return json({ sha: "abc123", author: { login: "octocat" } });
+    }) as typeof fetch;
+    try {
+      upserts.length = 0;
+      const out = await repairCommitAuthors("o/r", "tok", { fetchFn });
+      expect(out).toEqual({ repaired: 1 });
+      const ops = upserts.map((u) => u.op);
+      expect(ops).toContain("author.upsert");
+      expect(ops).toContain("commit.update");
+    } finally {
+      (prisma.commit as unknown as { findMany: unknown }).findMany = origFindMany;
+    }
+  });
 });
 
 describe("backfillInstallation", () => {
@@ -206,5 +234,38 @@ describe("backfillInstallation", () => {
     };
     const out = await backfillInstallation(99, keys, { fetchFn });
     expect(out.repos).toBe(1);
+  });
+
+  it("heals DB-known repos even when the API lists none", async () => {
+    const { prisma } = await import("../src/db.js");
+    const origFindMany = prisma.repo.findMany;
+    (prisma.repo as unknown as { findMany: unknown }).findMany = async () => [
+      { fullName: "o/db" },
+    ];
+    const fetchFn = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      if (target.endsWith("/access_tokens")) {
+        return json(
+          { token: "inst-tok", expires_at: new Date(Date.now() + 3600_000).toISOString() },
+        );
+      }
+      if (target.includes("/installation/repositories") || target.includes("/repositories?")) {
+        return json({ repositories: [] }); // empty grant, like prod
+      }
+      if (target.includes("/issues?") || target.includes("/pulls?")) return json([]);
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    const keys = {
+      appId: "42",
+      privateKeyPem: crypto
+        .generateKeyPairSync("rsa", { modulusLength: 2048 })
+        .privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    };
+    try {
+      const out = await backfillInstallation(99, keys, { fetchFn });
+      expect(out.repos).toBe(1);
+    } finally {
+      (prisma.repo as unknown as { findMany: unknown }).findMany = origFindMany;
+    }
   });
 });

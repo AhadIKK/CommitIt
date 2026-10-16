@@ -1,5 +1,9 @@
 # Changes
 
+## 2026-10-17 — Repair no longer needs a healthy install grant
+- Frozen 28 unknowns: repair only ran for API-listed repos (zero under the empty grant), so legacy rows never healed. Backfill now unions API repos + DB-known repos for the install, and per-SHA repair retries public repos without auth when the token is refused.
+- Tests: empty-grant union + public-fallback suites; 40 files / 206 green.
+
 ## 2026-10-16 — Keep-warm cron for the sleeping worker
 - Render free sleeps after ~15 min idle, freezing Telegram inbound, backfill, and digests until traffic wakes it (this week's every mystery). `.github/workflows/keep-warm.yaml` pings `/health` every 10 min. Revisit with paid hosting or Telegram webhook mode once testers become users.
 

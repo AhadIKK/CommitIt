@@ -284,12 +284,22 @@ export async function repairCommitAuthors(
   let repaired = 0;
   for (const row of rows) {
     try {
-      const res = await authedGet(
-        `https://api.github.com/repos/${fullName}/commits/${row.sha}`,
-        token,
-        {},
-        fetchFn,
-      );
+      const shaUrl = `https://api.github.com/repos/${fullName}/commits/${row.sha}`;
+      let res = await authedGet(shaUrl, token, {}, fetchFn);
+      if (!res.ok) {
+        // Token lacks this repo (stale/empty grant, private-only token):
+        // public repos stay readable without auth — retry bare.
+        try {
+          res = await fetchFn(shaUrl, {
+            headers: {
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+            },
+          });
+        } catch {
+          continue;
+        }
+      }
       if (rateLimitWaitMs(res) !== null) break; // quota first, healing later
       if (!res.ok) continue;
       const parsed = CommitShaResponse.safeParse(await res.json());
@@ -320,6 +330,10 @@ export async function backfillInstallation(
   const token = await getInstallationToken(installationId, keys, { fetchFn });
   const totals = { repos: 0, issues: 0, milestones: 0, prs: 0, authorsRepaired: 0 };
   const perPage = 100;
+  // API-listed repos first; then DB-known repos for this install. The API
+  // list can be empty while our rows still reference the install (stale or
+  // empty grant) — healing must not depend on the grant being healthy.
+  const apiNames: string[] = [];
   for (let page = 1; ; page++) {
     const res = await authedGet(
       `https://api.github.com/app/installations/${installationId.toString()}/repositories?per_page=${perPage}&page=${page}`,
@@ -332,24 +346,45 @@ export async function backfillInstallation(
     if (!res.ok) break;
     const parsed = ReposResponse.safeParse(await res.json());
     if (!parsed.success || parsed.data.repositories.length === 0) break;
-    for (const r of parsed.data.repositories) {
-      const out = await backfillRepoIssues(r.full_name, token, deps);
-      totals.repos += 1;
-      if (out && !out.skipped) {
-        totals.issues += out.issues;
-        totals.milestones += out.milestones;
-      }
-      // PR history + author healing ride the same install sync (Sync now
-      // re-runs this). PR rate-limits propagate for worker backoff like
-      // issues; repair is fully best-effort and never throws.
-      const prOut = await backfillRepoPRs(r.full_name, token, deps);
-      if (prOut) totals.prs += prOut.merged;
-      const fixed = await repairCommitAuthors(r.full_name, token, deps).catch(() => ({
-        repaired: 0,
-      }));
-      totals.authorsRepaired += fixed.repaired;
-    }
+    for (const r of parsed.data.repositories) apiNames.push(r.full_name);
     if (parsed.data.repositories.length < perPage) break;
+  }
+  let dbNames: string[] = [];
+  try {
+    const installKey =
+      typeof installationId === "string" ? BigInt(installationId) : installationId;
+    const rows = await prisma.repo.findMany({
+      where: { installationId: installKey },
+      select: { fullName: true },
+    });
+    dbNames = rows.map((r) => r.fullName);
+  } catch {
+    dbNames = [];
+  }
+  const seen = new Set<string>();
+  const allNames: string[] = [];
+  for (const n of [...apiNames, ...dbNames]) {
+    if (!seen.has(n)) {
+      seen.add(n);
+      allNames.push(n);
+    }
+  }
+  for (const fullName of allNames) {
+    const out = await backfillRepoIssues(fullName, token, deps);
+    totals.repos += 1;
+    if (out && !out.skipped) {
+      totals.issues += out.issues;
+      totals.milestones += out.milestones;
+    }
+    // PR history + author healing ride the same install sync (Sync now
+    // re-runs this). PR rate-limits propagate for worker backoff like
+    // issues; repair is fully best-effort and never throws.
+    const prOut = await backfillRepoPRs(fullName, token, deps);
+    if (prOut) totals.prs += prOut.merged;
+    const fixed = await repairCommitAuthors(fullName, token, deps).catch(() => ({
+      repaired: 0,
+    }));
+    totals.authorsRepaired += fixed.repaired;
   }
   return totals;
 }
