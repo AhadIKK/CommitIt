@@ -424,6 +424,13 @@ export function startBotPolling(
     log.info({}, "TELEGRAM_BOT_TOKEN not set — bot inbound disabled");
     return null;
   }
+  if ((process.env.TELEGRAM_USE_WEBHOOK ?? "").trim() === "1") {
+    // Webhook mode: Telegram delivers to /api/telegram exclusively, so
+    // getUpdates would return nothing. Polling stays as the automatic
+    // fallback — unset the flag (Render redeploy) to resume it.
+    log.info({}, "TELEGRAM_USE_WEBHOOK=1 — inbound via webhook, poller idle");
+    return null;
+  }
   let offset = 0;
   let busy = false;
   const timer = setInterval(async () => {

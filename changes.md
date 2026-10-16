@@ -1,5 +1,10 @@
 # Changes
 
+## 2026-10-16 — Telegram webhook primary, polling stays as fallback
+- New `POST /api/telegram` on Vercel (never sleeps): secret-token gate (503 when unconfigured, 401 on mismatch, always 200s), reuses `handleMessage`. Telegram delivers to webhook XOR polling, so no double replies.
+- Render poller idles when `TELEGRAM_USE_WEBHOOK=1` and resumes if the flag is ever removed — the fallback is automatic, no code push needed to switch back.
+- Tests: webhook gates + dispatch + poller gate; 41 files / 210 green.
+
 ## 2026-10-16 — Keep-warm cron for the sleeping worker
 - Render free sleeps after ~15 min idle, freezing Telegram inbound, backfill, and digests until traffic wakes it (this week's every mystery). `.github/workflows/keep-warm.yaml` pings `/health` every 10 min. Revisit with paid hosting or Telegram webhook mode once testers become users.
 
