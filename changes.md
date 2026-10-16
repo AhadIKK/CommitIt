@@ -1,5 +1,9 @@
 # Changes
 
+## PARKED 2026-10-16 — install 171066945 grants zero repos via API
+- Backfill runs fine (8× `backfill_done`) but GitHub reports 0 repos on the live install; old install 170384988 404s. UI grant page shows AhadIKK/CommitIt selected. Next step when resumed: Sync now → read fresh `backfill_done` totals → repos:1 means healed, zeros means trace that exact install ID.
+- Do NOT touch: PR count 0 is GitHub's truth (0 open/closed ever); live GitHub main count + auto-refresh shipped.
+
 ## 2026-10-14 — Backfill outcome logging ends the blind debugging
 - `backfill_done` (with totals: repos/issues/milestones/prs/authorsRepaired) and `backfill_failed` now log on the worker; sync logs `install_sync_wake` (woke true/false) on Vercel. Next Sync click leaves a complete trail across both hosts.
 - Test: worker backfill job asserts the done log + totals; 40 files / 204 green.
