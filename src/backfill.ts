@@ -293,12 +293,23 @@ export async function backfillRepoCommits(
   let stored = 0;
   for (let page = 1; page <= maxPages; page++) {
     const shaParam = branch ? `&sha=${encodeURIComponent(branch)}` : "";
-    const res = await authedGet(
-      `https://api.github.com/repos/${fullName}/commits?per_page=${perPage}${shaParam}&page=${page}`,
-      token,
-      {},
-      fetchFn,
-    );
+    const url = `https://api.github.com/repos/${fullName}/commits?per_page=${perPage}${shaParam}&page=${page}`;
+    let res = await authedGet(url, token, {}, fetchFn);
+    // Stale/empty install grant (the documented prod failure) or a private
+    // token that lacks this repo: public history stays readable without auth,
+    // so retry bare — never on a rate limit, which applies to the IP anyway.
+    if (!res.ok && rateLimitWaitMs(res) === null) {
+      try {
+        res = await fetchFn(url, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        });
+      } catch {
+        return stored > 0 ? { commits: stored } : null;
+      }
+    }
     const waitMs = rateLimitWaitMs(res);
     if (waitMs !== null) throw new RateLimitedError(waitMs);
     if (!res.ok) return stored > 0 ? { commits: stored } : null;

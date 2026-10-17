@@ -183,6 +183,19 @@ describe("backfillRepoCommits", () => {
     await expect(backfillRepoCommits("o/r", "tok", { fetchFn })).resolves.toBeNull();
   });
 
+  it("falls back to unauthenticated reads for public repos", async () => {
+    upserts.length = 0;
+    const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
+      const target = url.toString();
+      if (!target.includes("/commits?")) throw new Error(`unexpected ${target}`);
+      const headers = new Headers(init?.headers);
+      if (headers.get("Authorization")) return new Response("denied", { status: 404 });
+      return json([COMMIT]);
+    }) as typeof fetch;
+    const out = await backfillRepoCommits("o/r", "tok", { fetchFn });
+    expect(out).toEqual({ commits: 1 });
+  });
+
   it("429 throws RateLimitedError for worker backoff", async () => {
     const fetchFn = (async () =>
       new Response("limited", { status: 429, headers: { "retry-after": "3" } })) as typeof fetch;
