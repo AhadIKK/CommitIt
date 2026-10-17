@@ -18,7 +18,8 @@ import {
 } from "./formatter.js";
 import { linkCommit } from "./linker.js";
 import { syncRepoIssues } from "./github-sync.js";
-import { claimNextJob, completeJob, failJob, JOB_MAX_ATTEMPTS, reclaimStuckJobs } from "./queue.js";
+import { claimNextJob, completeJob, failJob, JOB_MAX_ATTEMPTS, reclaimStuckJobs, abandonJob } from "./queue.js";
+import { jobFailureAction, PermanentJobError } from "./jobErrors.js";
 import { findStaleBranches } from "./stale.js";
 import { deliver, dispatchDueNotifications } from "./delivery.js";
 import type { JobRow } from "./queue.js";
@@ -541,12 +542,28 @@ export function startWorker(
         try {
           await processJob(job);
         } catch (err) {
-          const abandoned = job.attempts >= JOB_MAX_ATTEMPTS;
+          // PermanentJobError (e.g. a deleted installation) can never succeed:
+          // abandon on the first failure. Everything else retries with backoff,
+          // up to JOB_MAX_ATTEMPTS, so a poison payload still stops eventually.
+          const action = jobFailureAction(err, job.attempts, JOB_MAX_ATTEMPTS);
+          const permanent = err instanceof PermanentJobError;
           log.error(
-            { err, jobId: job.id, type: job.type, attempts: job.attempts, abandoned },
-            abandoned ? "job_abandoned" : "job_failed",
+            {
+              err,
+              jobId: job.id,
+              type: job.type,
+              attempts: job.attempts,
+              action,
+              permanent,
+            },
+            permanent
+              ? "job_abandoned_permanent"
+              : action === "abandon"
+                ? "job_abandoned"
+                : "job_failed",
           );
-          await failJob(job.id, job.attempts);
+          if (action === "abandon") await abandonJob(job.id);
+          else await failJob(job.id, job.attempts);
         }
       }
       await dispatchDueNotifications();

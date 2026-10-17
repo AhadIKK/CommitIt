@@ -1,4 +1,5 @@
 import { buildAppJwt } from "./githubApp.js";
+import { PermanentJobError } from "./jobErrors.js";
 
 // githubAuth.ts — GitHub App authentication client (Phase A).
 // - App JWTs via the shared RS256 builder in githubApp.ts (single impl).
@@ -94,6 +95,12 @@ export async function getInstallationToken(
       },
     },
   );
+  if (res.status === 404 || res.status === 410) {
+    // The installation no longer exists (uninstalled / deleted). Minting a
+    // token can never succeed, so retrying only burns the job's attempts —
+    // tell the worker to abandon it instead.
+    throw new PermanentJobError(`installation_token_${res.status}`);
+  }
   if (!res.ok) throw new Error(`installation_token_${res.status}`);
   const body = (await res.json()) as { token?: unknown; expires_at?: unknown };
   if (typeof body.token !== "string" || body.token.length === 0) {
