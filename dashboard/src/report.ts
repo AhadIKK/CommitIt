@@ -7,6 +7,7 @@ import type {
   IssueRow,
   RepoProgress,
 } from "@src/dashboard.js";
+import { parseTelegramHtml, plainText, spansToHtml, trimSpans } from "./telegramHtml.js";
 
 export function escapeHtml(s: string): string {
   return s
@@ -86,7 +87,7 @@ export function buildWeeklySummary(
         " recorded: " +
         failed
           .slice(0, 2)
-          .map((d) => d.body.slice(0, 80))
+          .map((d) => plainText(d.body, 80))
           .join(" | ") +
         ".";
 
@@ -129,7 +130,9 @@ export function digestToDoc(opts: {
         "</td><td>" +
         escapeHtml(d.status) +
         "</td><td>" +
-        escapeHtml(d.body.slice(0, 280)) +
+        // The body is Telegram markup, not Word markup: flatten it to the
+        // same safe subset the card shows, re-escaping the decoded text.
+        spansToHtml(trimSpans(parseTelegramHtml(d.body), 280)) +
         "</td></tr>",
     )
     .join("");

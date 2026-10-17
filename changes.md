@@ -1,5 +1,13 @@
 # Changes
 
+## 2026-10-17 — Dashboard: digest bodies render as content, not markup
+- The Digests timeline printed `notification.body` as a plain text child, but that body is Telegram parse-mode HTML (`src/formatter.ts` emits `<b>`/`<code>`/`<a>`), so the card read `📊 <b>mohd-Affan16/Cloud-ai</b> — api-working`. Reported from a phone screenshot.
+- New `dashboard/src/telegramHtml.ts` flattens that subset into styled spans: `b`/`strong` → bold, `i`/`em` → italic, `code`/`pre` → code, `a` → link. Unknown tags are dropped with their text kept; entities are decoded (`&amp;` last, so `&amp;lt;` stays a literal `&lt;`).
+- Rendered as React nodes — never `dangerouslySetInnerHTML`, never `innerHTML` — so stored markup cannot inject. The `.doc` export re-escapes the decoded text and refuses non-`http(s)` hrefs. Capping applies to *rendered* length, so truncation can't split a tag or an entity.
+- The same body was mishandled in its two other readers: the `Problems:` line of the weekly 3P summary sliced it raw, and **Export .doc** ran it through `escapeHtml`, so Word displayed the tags as text too. All three now share the shaper.
+- `.digest-body` keeps the message's line breaks (`pre-wrap`) and sets `<code>` as a chip — most of what made the card unreadable.
+- 17 new tests (`test/telegramHtml.test.ts`): the observed body, nesting, malformed markup/truncation, and the escaping guarantees.
+
 ## 2026-10-17 — Dashboard typecheck: "Sync now" status was mis-typed, not broken
 - `dashboard/src/authApi.ts` declared `syncMyInstalls(): Promise<{ synced; status }>` but parsed `parse<{ synced: number }>` — a lie the compiler caught at `authApi.ts(28,3)`, which is why `tsc -p dashboard/tsconfig.json` never passed. `vite build` runs esbuild and typechecks nothing, so it shipped anyway.
 - Runtime was already correct: `parse()` is a cast, and `src/installations.ts` really returns `InstallSyncResult` (`{ synced, status }`) — pinned server-side by `test/meSync.test.ts`, which asserts `status: "app_not_configured"` on the wire. Only the static type was wrong.

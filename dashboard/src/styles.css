@@ -256,6 +256,17 @@ table.issues th, table.issues td { text-align: left; padding: 6px 8px; border-bo
 ul.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 ul.timeline p { margin: 4px 0 0; font-size: var(--type-sm); }
 
+/* Digest bodies are multi-line Telegram messages: keep their line structure
+   and set <code> as a chip so shas/categories don't run into the sentence. */
+.digest-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.digest-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--type-xs);
+  background: var(--track);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
 .summary-3p {
   border-left: 3px solid var(--accent);
   padding-left: var(--space-3);
@@ -333,6 +344,7 @@ ul.timeline p { margin: 4px 0 0; font-size: var(--type-sm); }
   .commit-sha { color: #000; }
   .commit-ai { color: #333; border-left-color: #999; }
   ul.commits li { border-bottom: 1px solid #999; break-inside: avoid; }
+  .digest-body code { background: none; padding: 0; }
   .slide { display: block; }
   .slide-nav { display: none; }
   [role="tablist"] { display: none; }

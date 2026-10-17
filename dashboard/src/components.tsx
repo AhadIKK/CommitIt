@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Chart as ChartJS, ArcElement, Tooltip, type ChartOptions } from "chart.js";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import { Doughnut } from "react-chartjs-2";
@@ -11,6 +11,7 @@ import type {
 } from "@src/dashboard.js";
 import { avatarCells } from "./avatars.js";
 import { StatusIcon } from "./icons.js";
+import { parseTelegramHtml, trimSpans } from "./telegramHtml.js";
 
 ChartJS.register(ArcElement, Tooltip);
 
@@ -201,6 +202,33 @@ export function IssuesTable({ issues }: { issues: IssueRow[] }) {
   );
 }
 
+/**
+ * Digest bodies are Telegram parse-mode HTML (see telegramHtml.ts). Rendering
+ * one as a text child printed literal "<b>repo</b>"; rendering it as HTML
+ * would need dangerouslySetInnerHTML on stored content. Map the safe subset to
+ * React nodes instead — no injected markup, nothing to sanitise later.
+ */
+function TgBody({ body, max }: { body: string; max: number }) {
+  return (
+    <>
+      {trimSpans(parseTelegramHtml(body), max).map((s, i) => {
+        let node: ReactNode = s.text;
+        if (s.code) node = <code>{node}</code>;
+        if (s.italic) node = <em>{node}</em>;
+        if (s.bold) node = <strong>{node}</strong>;
+        if (s.href && /^https?:\/\//i.test(s.href)) {
+          node = (
+            <a href={s.href} target="_blank" rel="noreferrer">
+              {node}
+            </a>
+          );
+        }
+        return <span key={i}>{node}</span>;
+      })}
+    </>
+  );
+}
+
 export function DigestTimeline({ digests }: { digests: DigestEntry[] }) {
   if (digests.length === 0) return <p className="muted">No digests yet.</p>;
   return (
@@ -213,7 +241,9 @@ export function DigestTimeline({ digests }: { digests: DigestEntry[] }) {
             {d.status}
           </span>
           <span className="mono muted">[{d.type}]</span>
-          <p>{d.body.slice(0, 280)}</p>
+          <p className="digest-body">
+            <TgBody body={d.body} max={280} />
+          </p>
         </li>
       ))}
     </ul>
