@@ -3,7 +3,7 @@
 Branch: `front-end-redesign`. Every entry below is dated. Checkpoints A, B (per screen) and C
 are appended as the work progresses, per section 0.2 of the brief.
 
-Last updated: 2026-10-17
+Last updated: 2026-10-18
 
 ---
 
@@ -250,6 +250,20 @@ platform scopes) do not apply and are noted as not-applicable rather than silent
 | C3 | Skill pattern match "Hero + Testimonials + CTA" includes a testimonials carousel. | Rejected: the brief forbids testimonials and invented statistics; pattern match was unverified anyway. | Section 7.4 and the anti-default list. |
 | C4 | `frontend-design` asks for deliberately chosen (non-default) typefaces. | Partially overruled by FIXED brand faces; compensated with scale/weight/figure treatment. | Section 3 fixes the faces. |
 | C5 | `frontend-design` warns against hairline-rules/zero-radius as a "broadsheet" tell. | Kept deliberately, but only where the rule carries information, and with a *single* rule weight and a *single* radius scale — not a whole-surface treatment. | The hairline **is** the subject's motif (the line joining two nodes) and the brief explicitly asks for "tonal steps and a single hairline, not drop shadows" (§4). Rationale logged rather than silently ignored. |
+| C6 | The brief's anti-default list forbids middle-dot meta strings (`12 · 3 points · 6 days`). The digest message header is `repo · mode · time`. | Kept **for the digest body only**, and swept out of all interface copy. | That header is the first line of the real Telegram message produced by `src/formatter.ts`. The preview has to be the message, not a rendering of it, or the preview is a lie. Rule R5 removed `·` from the UI itself. |
+| C7 | The `ui-ux-pro-max` pre-delivery checklist ships native-only items (haptics, Dynamic Type, platform scopes) that cannot be satisfied on web. | Marked **not applicable** in the checkpoint C run instead of silently skipped. The web-relevant items (safe-area inset, touch target size, contrast parity, `aria-hidden` on decorative icons, colour-not-only, reduced motion) were run verbatim. | The skill's own scope notice directs web interaction patterns to `quick-reference.md`; an item that is genuinely not applicable is recorded as such, not ticked. |
+
+### Proposal changes logged (skill rules may overrule the brief's starting proposal, if logged)
+
+| # | Starting proposal | Change | Reason |
+|---|---|---|---|
+| P1 | `Issue` carried no reopen marker. | Added `Issue.reopenedAt`. | The Goal Track must draw a reopened task open again so the filled line moves back. Without it, a reopened task still looks finished and the track overstates progress. |
+| P2 | Today would fetch its focus goal separately. | Added `TodaySnapshot.focusIssues`. | Keeps the first screen at one request. Rejected alternative: a second call from Today to `goal()`. |
+| P3 | Accepting a suggested link was implied but had no method. | Added `linkCommit(repoId, sha, issueNumber)`. | It is a real write, so it got a real method; being on the interface makes it mockable and testable (Today drives it from a `useMutation` with an inline `role="status"` error line). |
+| P4 | `DigestSettings.subscription` was implicitly always present. | Now `Subscription \| null`. | A repository with no chat connected must render the Digests empty state. A 404 or a zero-filled object would turn an invitation into an error. |
+| P5 | Each component that wanted live updates subscribed on its own. | `useLive` shares **one** subscription per repo, reference-counted. | Three components on one screen produced three SSE streams to the same repo. The refcount is what makes the shared stream safe to hand out. |
+| P6 | States were to be checked by eye. | Added the `?state=` switch to the mock and a `SHOTS=1` capture spec. | The brief's state matrix is now reachable on purpose, screenshot-able, and covered by e2e. |
+| P7 | Commit counts were to appear in a few places "for context". | Removed from the person row entirely. | Progress is finished tasks; a commit total next to a name is exactly the thing the brief says never to foreground. |
 
 ---
 
@@ -269,10 +283,104 @@ Concretely applied at this checkpoint:
   for this product (documented in §1). The plan therefore uses the verified **style** matches
   (Minimalism & Swiss / Dark-Mode) as its only design-system input, plus the FIXED brand, and says so.
 
-### Checkpoint B — per screen (entries added as each screen is built)
+### Checkpoint B — per screen (2026-10-17, one entry as each screen was built)
 
-_(populated during the build, section 11 step 4)_
+Each entry records what the screen is for, the skill rules that decided its behaviour, and the check
+that was run before moving to the next screen. Rules are numbered as in §2.
 
-### Checkpoint C — before the final critique pass
+**1. Today — `34b2ad6`.** The only screen with the display sentence. Rules applied: 1–6 (one `h1`, focus
+never obscured, colour never alone), 22 (one primary action: "Open the Auth goal"), 23, 33 (the gap
+encodes finished vs open), 49 (the track has a text equivalent: the sentence). Checked: the `h1` matches
+`/points/` and never `/commits?/`; the activity region contains no `%`; the leaked-secret banner is
+`role="alert"` and names `src/config/keys.ts` and no credential-shaped string. Live channel through
+`useLive`, one subscription shared with the shell (P5).
 
-_(populated at section 11 step 5)_
+**2. Goals — `f61dc88`.** Rules 42 (empty state is an invitation, with the GitHub milestone link as its
+action), 32 (a goal with no due date omits the clause rather than showing an empty dash), 18 (tabular
+figures on every percentage and point count). Checked: an empty goal says "no issues yet" and never
+"0%" (AGENTS.md rule 5); `no due date` is stated in words. Rule 12 kept: a row with no due date still
+reads correctly with the meta line removed.
+
+**3. Goal — `f61dc88`.** The track at full size, both orientations. Rules 5, 49, 15 (the route is lazy),
+40 (inline errors and a retry), 43. Checked: reopening moves the line back; S/M/L are three different
+sizes; every node's accessible name states the task, its size and its state; the empty goal offers
+"Add issues on GitHub" instead of a percentage.
+
+**4. People — `b0d1403`.** Rules 18, 24 (rows stack at 360), 33, 44. Checked: nobody is sorted by
+commit count, and the commit total was removed from the row (P7). A person with no finished tasks says
+"has no tasks closed yet this week" rather than showing a 0 % — the honest empty for a person, not an
+empty chart.
+
+**5. Digests — `d9d8b95`.** Rules 39–45: visible labels, blur validation, `aria-describedby`,
+`role="status"` on save, confirmation on the send. Rule 13: the save and send buttons disable and show
+progress with the action named. Checked: the preview is the real renderer output with its own character
+count against Telegram's 3800; the >10-commit push collapses to one line; the leaked-secret commit never
+appears in the preview as more than metadata.
+
+**6. Alerts — `3b0549d`.** Rules 4 (severity = icon + word + colour), 13, 41 (cause and fix, no
+apology), 42. Checked: every alert names what happened and what to do; an alert without a run link omits
+the link rather than showing a dead one; the secret alert shows the path only. A Playwright test asserts
+the rendered page contains no `sk_live_`, `-----begin`, `api_key=`, `secret=` or `password` anywhere.
+
+**7. Repo settings — `e70ed4e`.** Rules 22 (one primary action per section), 39, 43 (the disconnect
+confirmation repeats the action and says what is *not* touched), 44 (the AI toggle is disabled with a
+reason when no provider is configured). Checked: webhook health renders in `--danger` with the exact
+fix; the AI copy states that a flagged file is skipped before any call and named by path only.
+
+**8. Onboarding — `7e95e83`.** Rules 45: a step indicator, back is always allowed, each step's progress
+is saved. Rule 5 is why the only numbered markers in the product are here — they are a real sequence.
+Rule 12: the "waiting for Telegram" state has a paste-code fallback, not a spinner. Checked: the flow
+never blocks a later step with no reason, and the URL carries the step (`/connect/:step`) so the browser
+back button works (rule 47).
+
+**9. Landing — `fe3bbea`.** Rule 4/§12: no testimonials, no invented statistics, no gradient wash. The
+hero *is* the interaction — the same digest renderer the app uses, so the demonstration cannot drift from
+the product. Rule 38: the one stagger in the product is here, on the collapse. Checked: the demo runs
+the real fixtures, and the landing page ships as its own lazy chunk so it does not carry the app frame.
+
+### Checkpoint C — before the final critique (2026-10-18)
+
+Re-read both skill bodies and `references/pro-rules.md`, then went through **all 26 screenshots**
+(`docs/screenshots/`) one at a time against the brief, the two skills' anti-default lists, and the state
+matrix. Written up as `docs/design-notes.md`; this entry is the log.
+
+**Re-ran the canonical pre-delivery checklist (`references/pro-rules.md`) against the build.** Contrast
+per theme (1) — automated over the whole token table in `dashboard/src/styles/tokens.test.ts`, both
+themes, body and non-text pairs; this is how the day-theme `--warn` was caught at 4.07:1 and moved to
+`#A34A08`. Focus visible and unclipped (2, 3) — 2 px `--focus` ring, `outline-offset`, `scroll-padding`
+under the strip and above the tab bar. `aria-hidden` on decorative icons (4) — the avatar, the category
+glyphs and the teal dot are decorative; every one of them has a text sibling. Colour never alone (4) —
+severity has an icon and a word, "new" has a dot and the word, task weight has size *and* the letter.
+Reduced motion (8) — the track fill jumps to its end state. Touch targets (9, 10) — 44 px hit areas on
+every node, tab and button, 8 px minimum gaps. Native-only items (haptics, Dynamic Type, platform scopes)
+recorded as not applicable (C7), not ticked.
+
+**Re-ran the brief's anti-default list.** No cream/serif/terracotta, no near-black with an acid accent,
+no identical rounded cards (regions are a tonal step plus one hairline; the only radius in the product is
+the digest bubble, which is literally a bubble), no big-number hero (the display element is a sentence),
+no ALL-CAPS eyebrows, no middle-dot meta strings in interface copy (C6 for the digest body), no monospace
+for small labels (JetBrains Mono is for SHAs, branches and paths only), no decorative numbered markers,
+and **no commit-count progress visual anywhere**.
+
+**Defects the pass found, and what happened to each** (all fixed on this branch unless marked recorded):
+the digest renderer glued 5+ character categories onto the subject (`choreupdate`) — fixed with a
+regression test over all seven categories; an "UN" avatar chip on unassigned tasks — fixed; the secret
+alert said the same thing in three sentences — fixed; the Goals list printed the percentage and the due
+date twice — fixed; `Build`, `Notification`, `Freshness`, `OnboardingState` and two fixture collections
+rendered by nothing — deleted; three 360 px layout bugs (Goal Track label, task title, wordmark vs repo
+switcher) — fixed, found by `e2e/responsive.spec.ts` rather than by eye. Recorded rather than changed,
+with reasons: the People sentence/stat overlap, two time formats on Digests, Onboarding running inside
+the app shell, the one stylesheet, CLS 0.077 on Digests, and Lighthouse's weight-0
+`label-content-name-mismatch` on the track's links.
+
+**Decorative element removed (§13): the `○` glyph before "Unlinked"** in `CommitRow`. The word already
+says it; the ring carried no information and repeated on every unlinked row — the "decorative marker"
+tell. The middle-dot meta line under each chat bubble (`.bubble__meta`) went with it, for the same
+reason.
+
+**Final verification, all green at the time of writing:** 47 unit tests
+(`npx vitest run dashboard/src`), 95 Playwright tests passing with 73 skipped as project-scoped
+duplicates (`npx playwright test`), `tsc --noEmit` clean, and **Lighthouse accessibility 100 /
+performance 93–96** on `/`, `/today` and `/digests` against targets of 95 and 90 — measured on a
+production build; the first run scored 79–81 and was traced to a throwaway static server with no
+compression or cache headers, which is recorded in `docs/lighthouse.md` rather than quietly re-run.
