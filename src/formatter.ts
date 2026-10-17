@@ -173,3 +173,94 @@ export function formatStaleAlert(opts: {
   );
   return cap(`<b>${escapeHtml(opts.repo)}</b> — inactive branches\n${lines.join("\n")}`);
 }
+
+// --- /recent: the chat-scoped commit list ---
+
+export type RecentCommit = {
+  repo: string;
+  sha: string;
+  message: string;
+  author: string;
+  category?: string | null;
+  isMerge?: boolean;
+  secretFlag?: boolean;
+  issueNumber?: number | null;
+  /** committedAt, falling back to the row's createdAt for legacy nulls. */
+  at?: Date | null;
+};
+
+const SUBJECT_MAX = 60;
+
+/**
+ * Coarse "how long ago" for a chat list — minutes are the smallest unit, so a
+ * clock-skewed future date reads "just now" rather than "in 3h". Pure, with an
+ * injectable clock so tests never depend on wall time.
+ */
+export function timeAgo(at: Date, now: Date = new Date()): string {
+  const minutes = Math.floor((now.getTime() - at.getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+/** First line only, capped — a chat list must not wrap five lines per commit. */
+function subject(message: string): string {
+  const first = (message.split("\n")[0] ?? "").trim();
+  return first.length > SUBJECT_MAX ? `${first.slice(0, SUBJECT_MAX - 1)}…` : first;
+}
+
+/**
+ * The /recent body: newest first, one line per commit. The repo is named in the
+ * header when the list covers one repo and prefixed per line when it covers
+ * several — so a multi-repo chat never loses track of which is which.
+ *
+ * Flagged commits keep formatPush's behaviour: the subject is withheld rather
+ * than shown beside a "possible secret" marker. The list shows the commit
+ * subject (metadata we already store), never an AI summary, so nothing here
+ * depends on the LLM having run.
+ */
+export function formatRecent(opts: {
+  commits: RecentCommit[];
+  more?: number;
+  commitsUrl?: string;
+  now?: Date;
+}): string {
+  const { commits, more = 0, commitsUrl, now = new Date() } = opts;
+  if (commits.length === 0) return "🕒 No commits recorded yet for this chat's repos.";
+
+  const repos = [...new Set(commits.map((c) => c.repo))];
+  const multi = repos.length > 1;
+  const head = multi
+    ? `🕒 <b>Recent commits</b> — ${repos.length} repos`
+    : `🕒 <b>Recent commits</b> — <code>${escapeHtml(repos[0] ?? "")}</code>`;
+
+  const lines = commits.map((c) => {
+    const where = multi ? `<code>${escapeHtml(c.repo)}</code> ` : "";
+    const sha = `<code>${escapeHtml(c.sha.slice(0, 7))}</code>`;
+    const cat = c.category ? ` <b>${escapeHtml(c.category)}</b>` : "";
+    if (c.secretFlag) return `${where}${sha}${cat} 🔑 possible secret — subject withheld`;
+    const merge = c.isMerge ? " (merge)" : "";
+    const issue = c.issueNumber ? ` → #${c.issueNumber}` : "";
+    const when = c.at ? `, ${timeAgo(c.at, now)}` : "";
+    return (
+      `${where}${sha}${cat} ${escapeHtml(subject(c.message))}${merge}${issue}` +
+      ` — ${escapeHtml(c.author)}${when}`
+    );
+  });
+
+  const tail =
+    more > 0
+      ? `\n${commitsUrl ? `<a href="${commitsUrl}">+${more} more</a>` : `+${more} more`}`
+      : commitsUrl
+        ? `\n<a href="${commitsUrl}">All commits</a>`
+        : "";
+  let body = `${head}\n${lines.join("\n")}`;
+  if (body.length + tail.length > MAX_CHARS) body = truncateHtml(body, MAX_CHARS - tail.length);
+  return body + tail;
+}
