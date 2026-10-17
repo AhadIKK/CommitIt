@@ -1,0 +1,198 @@
+/* ============================================================================
+   CommitIt tokens — three layers: primitive → semantic → component.
+   No component may use a primitive or a raw hex value (skill rule 19).
+
+   Themes: <html data-theme="night|day">. The value is set before first paint by
+   an inline script in index.html that follows prefers-color-scheme and defers to
+   a saved manual choice. The media query below is the no-JS fallback so the
+   system preference is honoured even without script.
+   ========================================================================== */
+
+:root {
+  /* --- primitive: night --------------------------------------------------- */
+  --n-ground: #151d2e;
+  --n-surface: #1e293b;
+  --n-raised: #28364d;
+  --n-ink: #e2e8f0;
+  --n-muted: #94a3b8;
+  --n-hairline: #445572; /* 2.24:1 on ground — a line you can see, quieter than a border */
+  --n-edge: #7285a0; /* 3.89:1 on surface, 3.23:1 on raised — control boundaries */
+  --n-signal: #14b8a6; /* brand teal: "new since you last looked", nothing else */
+  --n-warn: #f59e0b;
+  --n-danger: #fb7185;
+  --n-focus: #7dd3fc;
+
+  /* --- primitive: day ---------------------------------------------------- */
+  --d-ground: #e2e8f0;
+  --d-surface: #edf1f6;
+  --d-raised: #f8fafc;
+  --d-ink: #1e293b;
+  --d-muted: #475569;
+  --d-hairline: #a6b2c2;
+  --d-edge: #64748b;
+  --d-signal: #0e6f68; /* 4.88:1 on ground — darkened per section 4 until it passes */
+  --d-warn: #a34a08; /* 4.81:1 on ground — section 4's #B45309 measures 4.07:1 and fails */
+  --d-danger: #be123c;
+  --d-focus: #0f5c8c;
+
+  /* --- brand (fixed by section 3, never restyled) ------------------------- */
+  --brand-ink-navy: #1e293b;
+  --brand-slate-mist: #e2e8f0;
+  --brand-signal-teal: #14b8a6;
+
+  /* --- type scale --------------------------------------------------------- */
+  --font-display: "Poppins", "Segoe UI", system-ui, sans-serif;
+  --font-ui: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  --type-display: 2.75rem; /* 44 */
+  --type-title: 2rem; /* 32 */
+  --type-heading: 1.5rem; /* 24 */
+  --type-subhead: 1.25rem; /* 20 */
+  --type-body: 1rem; /* 16 */
+  --type-small: 0.875rem; /* 14 */
+  --type-micro: 0.75rem; /* 12 */
+  --type-code: 0.8125rem; /* 13 */
+
+  --lh-display: 1.12;
+  --lh-title: 1.2;
+  --lh-heading: 1.3;
+  --lh-body: 1.6;
+  --lh-tight: 1.45;
+
+  --measure: 68ch;
+  --measure-narrow: 46ch;
+
+  /* --- space (4/8 rhythm) ------------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* --- shape -------------------------------------------------------------- */
+  --radius-node: 50%;
+  --radius-1: 3px; /* glyph squares, chips */
+  --radius-control: 6px; /* inputs, buttons */
+  --radius-bubble: 14px; /* the digest bubble only — it is literally a bubble */
+
+  /* --- depth: none. regions separate by tonal step + one hairline. --------- */
+  --hairline: 1px;
+  --edge-width: 1px;
+
+  /* --- motion ------------------------------------------------------------- */
+  --dur-press: 110ms;
+  --dur-state: 200ms;
+  --dur-track: 720ms;
+  --ease-out: cubic-bezier(0.16, 0.84, 0.44, 1);
+  --ease-in: cubic-bezier(0.3, 0, 0.7, 0.2);
+
+  /* --- layering (declared once, skill rule 30) ---------------------------- */
+  --z-base: 0;
+  --z-track-line: 1;
+  --z-track-node: 2;
+  --z-rail: 20;
+  --z-strip: 30;
+  --z-tabbar: 30;
+  --z-menu: 40;
+  --z-overlay: 100;
+
+  /* --- layout ------------------------------------------------------------- */
+  --rail-w: 240px;
+  --strip-h: 56px;
+  --tabbar-h: 60px;
+  --content-max: 960px;
+}
+
+/* --- semantic: night (default) ------------------------------------------- */
+:root,
+:root[data-theme="night"] {
+  color-scheme: dark;
+  --ground: var(--n-ground);
+  --surface: var(--n-surface);
+  --raised: var(--n-raised);
+  --ink: var(--n-ink);
+  --muted: var(--n-muted);
+  --line: var(--n-hairline);
+  --edge: var(--n-edge);
+  --signal: var(--n-signal);
+  --warn: var(--n-warn);
+  --danger: var(--n-danger);
+  --focus: var(--n-focus);
+  --on-ink: var(--n-ground);
+
+  /* component */
+  --btn-bg: var(--ink);
+  --btn-ink: var(--on-ink);
+  --btn-quiet-bg: transparent;
+  --btn-quiet-ink: var(--ink);
+  --field-bg: var(--surface);
+  --field-line: var(--edge);
+  --node-open: var(--ink);
+  --node-filled: var(--ink);
+  --node-unknown: var(--muted);
+  --node-base: var(--surface);
+  --bubble-bg: var(--raised);
+  --bubble-line: var(--n-edge);
+  --brand-backdrop: var(--n-ink);
+}
+
+/* --- semantic: day ------------------------------------------------------- */
+:root[data-theme="day"] {
+  color-scheme: light;
+  --ground: var(--d-ground);
+  --surface: var(--d-surface);
+  --raised: var(--d-raised);
+  --ink: var(--d-ink);
+  --muted: var(--d-muted);
+  --line: var(--d-hairline);
+  --edge: var(--d-edge);
+  --signal: var(--d-signal);
+  --warn: var(--d-warn);
+  --danger: var(--d-danger);
+  --focus: var(--d-focus);
+  --on-ink: var(--d-ground);
+
+  --btn-bg: var(--ink);
+  --btn-ink: var(--on-ink);
+  --btn-quiet-bg: transparent;
+  --btn-quiet-ink: var(--ink);
+  --field-bg: var(--surface);
+  --field-line: var(--edge);
+  --node-open: var(--ink);
+  --node-filled: var(--ink);
+  --node-unknown: var(--muted);
+  --node-base: var(--surface);
+  --bubble-bg: var(--raised);
+  --bubble-line: var(--d-edge);
+  --brand-backdrop: var(--d-ink);
+}
+
+/* --- no-JS fallback: honour the system preference ------------------------ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --ground: var(--d-ground);
+    --surface: var(--d-surface);
+    --raised: var(--d-raised);
+    --ink: var(--d-ink);
+    --muted: var(--d-muted);
+    --line: var(--d-hairline);
+    --edge: var(--d-edge);
+    --signal: var(--d-signal);
+    --warn: var(--d-warn);
+    --danger: var(--d-danger);
+    --focus: var(--d-focus);
+    --on-ink: var(--d-ground);
+    --btn-bg: var(--ink);
+    --btn-ink: var(--on-ink);
+    --field-bg: var(--surface);
+    --field-line: var(--edge);
+    --node-base: var(--surface);
+    --bubble-bg: var(--raised);
+    --bubble-line: var(--d-edge);
+  }
+}
