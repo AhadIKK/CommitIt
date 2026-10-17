@@ -241,23 +241,31 @@
 .segmented {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-2) var(--space-6);
   border: 0;
   padding: 0;
   margin: 0;
 }
 .segmented__option {
-  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
   min-height: 2.75rem;
-  padding: 0 0 var(--space-2);
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--muted);
   font-size: var(--type-body);
   font-weight: 500;
+  text-align: left;
   cursor: pointer;
 }
-.segmented__option::after {
+/* the selection rule sits under the option's own name, not under its hint */
+.segmented__label {
+  position: relative;
+  padding-bottom: var(--space-2);
+}
+.segmented__label::after {
   content: "";
   position: absolute;
   left: 0;
@@ -271,8 +279,14 @@
   color: var(--ink);
   font-weight: 600;
 }
-.segmented__option[aria-checked="true"]::after {
+.segmented__option[aria-checked="true"] .segmented__label::after {
   background: var(--ink);
+}
+/* the hint never inherits the selected option's ink or weight */
+.segmented__option .segmented__hint {
+  font-size: var(--type-small);
+  font-weight: 500;
+  color: var(--muted);
 }
 
 /* --- banner (severity carries icon + word + colour) --------------------- */
@@ -540,11 +554,24 @@
   padding: 0;
 }
 .track[data-orientation="vertical"] .track__item {
+  display: block;
+  min-height: 2.75rem;
+}
+/* The node spans the whole row rather than sitting in a 44px cell, so the task
+   title gets the remaining width instead of being squeezed into the hit area. */
+.track[data-orientation="vertical"] .track__node {
   display: grid;
   grid-template-columns: 2.75rem minmax(0, 1fr);
   align-items: center;
+  justify-items: center;
   gap: var(--space-3);
+  width: auto;
+  height: auto;
   min-height: 2.75rem;
+  text-align: left;
+}
+.track[data-orientation="vertical"] .track__label {
+  justify-self: stretch;
 }
 .track[data-orientation="vertical"] .track__rail {
   left: 1.375rem;
@@ -640,17 +667,6 @@
   border-bottom: var(--hairline) solid var(--bubble-line);
   transform: rotate(45deg);
   border-bottom-right-radius: 2px;
-}
-.bubble__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: baseline;
-  font-size: var(--type-small);
-  font-weight: 600;
-  padding-bottom: var(--space-3);
-  border-bottom: var(--hairline) solid var(--line);
-  margin-bottom: var(--space-3);
 }
 .bubble__body {
   font-size: var(--type-small);

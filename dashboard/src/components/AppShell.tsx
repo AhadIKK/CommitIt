@@ -46,10 +46,9 @@ function RepoSwitcher({
       </label>
       <select
         id={id}
-        className="field__select"
+        className={compact ? "field__select field__select--strip" : "field__select"}
         value={repoRef}
         onChange={(e) => onChange(e.target.value)}
-        style={compact ? { maxWidth: "11rem", minHeight: "2.25rem" } : undefined}
       >
         {repos.length === 0 ? <option value={repoRef}>{repoRef}</option> : null}
         {repos.map((r) => (

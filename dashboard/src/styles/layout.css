@@ -38,7 +38,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-width: 0;
+  flex: none;
 }
 .strip__word {
   font-family: var(--font-display);
@@ -48,6 +48,19 @@
 }
 .strip__spacer {
   flex: 1;
+}
+/* The switcher is the flexible item: it shrinks before the brand does, so the
+   wordmark is never overlapped by the select at 360px. */
+.strip__switcher {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.field__select--strip {
+  width: 100%;
+  max-width: 11rem;
+  min-height: 2.25rem;
+  font-size: var(--type-small);
 }
 
 /* --- the rail (desktop) ------------------------------------------------- */

@@ -4,12 +4,6 @@
    ========================================================================== */
 
 /* --- Landing (public) --------------------------------------------------- */
-.landing {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-  padding-bottom: var(--tabbar-h);
-}
 .landing__top {
   display: flex;
   align-items: center;
@@ -248,6 +242,17 @@
 }
 .task[data-state="closed"] .task__title {
   color: var(--muted);
+}
+/* 360px first: the meta column is max-content, so on a phone it would otherwise
+   claim the title's whole column and leave the title 0px wide. Stack instead. */
+@media (max-width: 40rem) {
+  .task {
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+  }
+  .task__meta {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
 }
 
 /* --- People ------------------------------------------------------------ */

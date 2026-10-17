@@ -229,8 +229,8 @@ export function SegmentedControl<T extends string>({
             }
           }}
         >
-          {option.label}
-          {option.hint ? <span className="small muted" style={{ display: "block" }}>{option.hint}</span> : null}
+          <span className="segmented__label">{option.label}</span>
+          {option.hint ? <span className="segmented__hint">{option.hint}</span> : null}
         </button>
       ))}
     </div>
