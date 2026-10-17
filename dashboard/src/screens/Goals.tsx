@@ -9,7 +9,7 @@ import { Banner, LiveBar, Skeleton, StatePanel } from "../components/surfaces.js
 import { Button } from "../components/controls.js";
 import { screenState, useGoals, useRepoRef } from "../lib/queries.js";
 import { useLive } from "../lib/useLive.js";
-import { dueState, progressClause, progressPercent, progressSentence } from "../lib/weight.js";
+import { dueState, progressPercent, progressSentence } from "../lib/weight.js";
 
 function GoalRow({ goal, repoQuery }: { goal: Milestone; repoQuery: string }) {
   const now = new Date();
@@ -23,16 +23,15 @@ function GoalRow({ goal, repoQuery }: { goal: Milestone; repoQuery: string }) {
         <h2 className="goal-row__title">
           <Link to={`/goals/${goal.id}${repoQuery}`}>{goal.title}</Link>
         </h2>
+        {/* The sentence below already states the due date. The head only repeats
+            it when a goal is overdue, where the warning earns the repetition,
+            and when there is no date for the sentence to carry. */}
         {due?.phrase ? (
-          <span className={`goal-row__due${overdue ? " mark mark--danger" : " muted"}`}>
-            {overdue ? (
-              <>
-                <span aria-hidden="true">●</span> {due.phrase}
-              </>
-            ) : (
-              due.phrase
-            )}
-          </span>
+          overdue ? (
+            <span className="goal-row__due mark mark--danger">
+              <span aria-hidden="true">●</span> {due.phrase}
+            </span>
+          ) : null
         ) : (
           <span className="small muted">no due date</span>
         )}
@@ -40,11 +39,11 @@ function GoalRow({ goal, repoQuery }: { goal: Milestone; repoQuery: string }) {
 
       <p className="goal-row__sentence">{progressSentence(goal, now)}</p>
 
-      <p className="small muted num">
-        {pct === null
-          ? "no issues yet"
-          : `${goal.closedCount} of ${goal.issueCount} tasks finished, ${progressClause(goal)}`}
-      </p>
+      {pct === null ? null : (
+        <p className="small muted num">
+          {goal.closedCount} of {goal.issueCount} tasks finished
+        </p>
+      )}
 
       <p className="goal-row__tasks">
         <Link className="btn btn--inline" to={`/goals/${goal.id}${repoQuery}`}>

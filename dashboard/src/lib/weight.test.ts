@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Issue } from "../api/types.js";
 import {
   dueState,
-  progressClause,
   progressPercent,
   progressSentence,
   SIZE_WEIGHTS,
@@ -86,19 +85,10 @@ describe("progressSentence", () => {
   });
 
   it("counts an overdue goal honestly", () => {
-    expect(progressClause({ title: "Polish", weightedClosed: 3, weightedTotal: 9, dueDate: null })).toBe(
-      "33% done: 3 of 9 points",
-    );
     expect(dueState(new Date(now.getTime() - 3 * 86_400_000).toISOString(), now)?.phrase).toBe(
       "3 days overdue",
     );
     expect(dueState(null, now)).toBeNull();
-  });
-
-  it("the progress clause for an empty goal is the same two words", () => {
-    expect(progressClause({ title: "Profile", weightedClosed: 0, weightedTotal: 0, dueDate: null })).toBe(
-      "no issues yet",
-    );
   });
 });
 

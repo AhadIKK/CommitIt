@@ -82,13 +82,6 @@ export function progressSentence(input: ProgressSentenceInput, now: Date): strin
   return `${input.title} is ${pct}% done: ${points} points${tail}.`;
 }
 
-/** Just the numeric clause, for dense rows where the title is already shown. */
-export function progressClause(input: ProgressSentenceInput): string {
-  const pct = progressPercent(input.weightedClosed, input.weightedTotal);
-  if (pct === null) return "no issues yet";
-  return `${pct}% done: ${input.weightedClosed} of ${input.weightedTotal} points`;
-}
-
 export type TrackNodeModel = {
   issue: Issue;
   /** 1 | 3 | 5 — drives the node's size on the track. */
