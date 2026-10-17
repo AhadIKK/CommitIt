@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Data model mirrored by the backend (brief section 10). Nothing here is
  * derived on the client: `weightedClosed` / `weightedTotal` arrive from the API
  * and the client never recomputes progress from commits.
@@ -82,7 +82,7 @@ export type Issue = {
   closedAt?: string | null;
   /**
    * Set when a task was closed and then reopened. The track draws it as open
-   * again, which moves the filled line back — the honest behaviour.
+   * again, which moves the filled line back â€” the honest behaviour.
    */
   reopenedAt?: string | null;
 };
@@ -109,28 +109,6 @@ export type PullRequest = {
   issueNumber?: number | null;
 };
 
-export type Build = {
-  id: string;
-  status: "success" | "failure" | "running";
-  branch: string;
-  commitSha: string;
-  finishedAt: string | null;
-  url?: string;
-};
-
-export type NotificationKind = "commit" | "issue" | "digest" | "alert";
-
-export type Notification = {
-  id: string;
-  kind: NotificationKind;
-  title: string;
-  detail: string;
-  at: string;
-  href?: string;
-  /** Cleared once the person has looked at the digest. */
-  unread: boolean;
-};
-
 export type DigestMode = "instant" | "hourly" | "daily" | "weekly";
 
 export type QuietHours = {
@@ -147,7 +125,7 @@ export type DigestFilters = {
   events: Array<"commits" | "pull_requests" | "issues">;
 };
 
-/** Scoped to one chat × repo pair, never to the person (AGENTS.md rule 10). */
+/** Scoped to one chat Ã— repo pair, never to the person (AGENTS.md rule 10). */
 export type Subscription = {
   chatId: string;
   chatTitle: string;
@@ -214,7 +192,7 @@ export type TodaySnapshot = {
   repo: Repo;
   /** The goal the sentence is about. */
   focus: Milestone | null;
-  /** The tasks of the focus goal, in closing order — what the track draws. */
+  /** The tasks of the focus goal, in closing order â€” what the track draws. */
   focusIssues: Issue[];
   goals: Milestone[];
   digestWindowStart: string;
@@ -223,13 +201,6 @@ export type TodaySnapshot = {
   alerts: Alert[];
   /** Points still open across all goals of this repo, from the API. */
   openPoints: number;
-};
-
-/** Freshness metadata every response carries, so staleness is honest. */
-export type Freshness = {
-  fetchedAt: string;
-  /** True when part of the screen could not be loaded. */
-  partial: boolean;
 };
 
 export type Me = {
@@ -283,13 +254,4 @@ export type TelegramLink = {
   code: string;
   deepLink: string;
   pollToken: string;
-};
-
-export type OnboardingState = {
-  step: ConnectStep;
-  githubConnected: boolean;
-  chosenRepoId: RepoId | null;
-  telegramLinked: boolean;
-  mode: DigestMode;
-  testDelivered: boolean;
 };

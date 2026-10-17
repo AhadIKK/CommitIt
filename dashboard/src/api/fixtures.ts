@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Fixtures. These are the hard cases from brief section 10 on purpose: "fix",
  * "update" and "final final" as commit subjects, work linked to nothing with a
  * suggestion, a reopened task, an unestimated task, an empty goal, a failed
@@ -10,12 +10,10 @@
 import type {
   Alert,
   Author,
-  Build,
   Commit,
   Issue,
   Me,
   Milestone,
-  Notification,
   PullRequest,
   Repo,
   RepoId,
@@ -172,7 +170,7 @@ export const milestones: Record<RepoId, Milestone[]> = {
 
 export const issues: Record<RepoId, Issue[]> = {
   r_syncura: [
-    // Auth: 8 of 13 points — 4 closed (3+3+1+1), 3 open (1+1+3)
+    // Auth: 8 of 13 points â€” 4 closed (3+3+1+1), 3 open (1+1+3)
     {
       number: 12,
       title: "Login form",
@@ -358,7 +356,7 @@ export const LONG_SUBJECT =
 
 type Group = { author: Author; commits: Commit[] };
 
-/** Commits since the last digest for SynCura — the Today screen's main list. */
+/** Commits since the last digest for SynCura â€” the Today screen's main list. */
 export const syncuraGroups: Group[] = [
   {
     author: authors.fizan,
@@ -478,27 +476,6 @@ export const pullRequests: PullRequest[] = [
   { number: 43, title: "Docs for the auth flow", state: "open", mergedAt: null, authorId: "u_mira", issueNumber: null },
 ];
 
-/* ---------------------------------------------------------------- builds */
-
-export const builds: Build[] = [
-  {
-    id: "b_9182",
-    status: "failure",
-    branch: "main",
-    commitSha: "91aa30cd5e84",
-    finishedAt: ago(2 * HOUR + 5 * MIN),
-    url: "https://github.com/syncurateam/syncura/actions/runs/9182",
-  },
-  {
-    id: "b_9181",
-    status: "success",
-    branch: "main",
-    commitSha: "e2f6d4f0a9b1",
-    finishedAt: ago(85 * MIN),
-    url: "https://github.com/syncurateam/syncura/actions/runs/9181",
-  },
-];
-
 /* --------------------------------------------------------------- alerts */
 
 export const alerts: Record<RepoId, Alert[]> = {
@@ -508,8 +485,8 @@ export const alerts: Record<RepoId, Alert[]> = {
       kind: "secret",
       severity: "danger",
       title: "A possible key was pushed to main",
-      detail: "Commit 4b7a22 touched one file. The file was skipped in every AI call.",
-      // file path only — a secret value must never reach the client
+      detail: "Commit 4b7a22e touched one file.",
+      // file path only â€” a secret value must never reach the client
       file: "src/config/keys.ts",
       commitSha: "4b7a22e1f8c3",
       at: ago(20 * MIN),
@@ -582,43 +559,6 @@ export const alerts: Record<RepoId, Alert[]> = {
   ],
   r_commitit: [],
 };
-
-/* --------------------------------------------------------- notifications */
-
-export const notifications: Notification[] = [
-  {
-    id: "n_1",
-    kind: "commit",
-    title: "9 commits landed on syncurateam/syncura",
-    detail: "Grouped into your next digest.",
-    at: ago(12 * MIN),
-    unread: true,
-  },
-  {
-    id: "n_2",
-    kind: "issue",
-    title: "Rate limit on the login route was closed",
-    detail: "Auth moved to 62% done.",
-    at: ago(4 * HOUR),
-    unread: true,
-  },
-  {
-    id: "n_3",
-    kind: "alert",
-    title: "A possible key was pushed to main",
-    detail: "src/config/keys.ts",
-    at: ago(20 * MIN),
-    unread: true,
-  },
-  {
-    id: "n_4",
-    kind: "digest",
-    title: "Daily digest delivered",
-    detail: "Yesterday, 9:00.",
-    at: ago(1 * DAY),
-    unread: false,
-  },
-];
 
 /* --------------------------------------------------------- subscriptions */
 
