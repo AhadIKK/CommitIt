@@ -1,5 +1,7 @@
 // authApi.ts — GitHub account linking + App install state. Reads /api/me,
 // /api/meta, /api/repo. Login itself is a redirect to /api/auth/github.
+import type { InstallSyncResult } from "@src/installations.js";
+
 export type Me = { login: string; avatarUrl: string | null; repos: string[] };
 export type Meta = {
   appSlug: string | null;
@@ -23,10 +25,11 @@ export async function fetchMe(): Promise<Me | null> {
 }
 
 /** Re-run install attribution for this account ("Sync now" repair). */
-export type SyncStatus = "synced" | "no_installs" | "app_not_configured" | "github_error";
-export function syncMyInstalls(): Promise<{ synced: number; status: SyncStatus }> {
+// Typed from the server's own return type: `status` drives the four-way
+// message in Auth.tsx, so a hand-copied union here could silently go stale.
+export function syncMyInstalls(): Promise<InstallSyncResult> {
   return fetch("/api/me?op=sync", { method: "POST" }).then((r) =>
-    parse<{ synced: number }>(r),
+    parse<InstallSyncResult>(r),
   );
 }
 

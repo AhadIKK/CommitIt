@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-10-17 — Dashboard typecheck: "Sync now" status was mis-typed, not broken
+- `dashboard/src/authApi.ts` declared `syncMyInstalls(): Promise<{ synced; status }>` but parsed `parse<{ synced: number }>` — a lie the compiler caught at `authApi.ts(28,3)`, which is why `tsc -p dashboard/tsconfig.json` never passed. `vite build` runs esbuild and typechecks nothing, so it shipped anyway.
+- Runtime was already correct: `parse()` is a cast, and `src/installations.ts` really returns `InstallSyncResult` (`{ synced, status }`) — pinned server-side by `test/meSync.test.ts`, which asserts `status: "app_not_configured"` on the wire. Only the static type was wrong.
+- Fixed by importing the server's own `InstallSyncResult` as a type instead of re-declaring a local four-value union, so the client's `status` branch in `Auth.tsx` cannot drift from `InstallSyncStatus`. The import is type-only, so the built bundle is byte-identical — no server code reaches the browser.
+- `tsc -p dashboard/tsconfig.json` is now clean (that error was the last one); 51 files / 301 tests green.
+
 ## 2026-10-17 — Dashboard: "What each commit is about" section
 - **New section** on the Dashboard tab (under Activity) listing the commits in the same 7-day window as Activity, newest first (default 20, max 50). Each row carries a short sha linked to the GitHub commit, author + avatar, date, branch, and category / merge / issue badges.
 - **Subject vs. summary:** `commitSubject()` takes the first line, trimmed and capped at 200 chars. `meaningfulSummary()` suppresses the summary when it only restates the commit — the default `AI_PROVIDER=echo` stub stores `"AI summary: <first line>"` and the degraded path stores the whole message, so without this every row printed its subject twice. The formatter already hides those rows, but it still holds the in-memory `degraded` flag while the DB keeps only the text, so the dashboard compares instead. A real provider's summaries render as before.
