@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Author, Commit, Milestone } from "../api/types.js";
+import type { Author, Commit, CommitCategory, Milestone } from "../api/types.js";
 import { DIGEST_CHAR_LIMIT, DIGEST_COMMIT_CAP, DIGEST_PUSH_COLLAPSE_AT, DIGEST_MODE_LABEL, renderDigest } from "./digest.js";
 import { clockTime } from "./format.js";
 
@@ -133,6 +133,29 @@ describe("the digest message", () => {
     } else {
       expect(out.text).toMatch(/\n/);
     }
+  });
+
+  it("always separates the category from the subject, whatever the category length", () => {
+    // "chore", "other" and "refactor" are as wide as (or wider than) the padded
+    // column, so they used to run into the subject: "choreupdate", "otherMerge".
+    const categories: CommitCategory[] = [
+      "feat",
+      "fix",
+      "docs",
+      "refactor",
+      "test",
+      "chore",
+      "other",
+    ];
+    const out = render([
+      {
+        author: fizan,
+        commits: categories.map((category, i) => commit(i, { category, message: `subject ${i}` })),
+      },
+    ]);
+    categories.forEach((category, i) => {
+      expect(out.text).toMatch(new RegExp(`^  ${category} +subject ${i}  `, "m"));
+    });
   });
 
   it("an empty window still renders an honest header", () => {

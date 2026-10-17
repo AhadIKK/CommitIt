@@ -48,10 +48,17 @@ function clean(message: string): string {
   return message.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * "feat" is padded so the subjects line up in a column, but the separator is
+ * always its own space: a category that is already 5+ characters wide
+ * ("chore", "other", "refactor") would otherwise run straight into the subject
+ * and read as "choreupdate" in the message someone actually receives.
+ */
 function commitLine(commit: Commit): string {
-  return `  ${commit.category.padEnd(5, " ")}${
-    clean(commit.message)
-  }  ${shortSha(commit.sha)}  ${commit.issueNumber ? `Task ${commit.issueNumber}` : "Unlinked"}`;
+  const tag = commit.category.padEnd(5, " ");
+  return `  ${tag} ${clean(commit.message)}  ${shortSha(commit.sha)}  ${
+    commit.issueNumber ? `Task ${commit.issueNumber}` : "Unlinked"
+  }`;
 }
 
 function plural(n: number, one: string): string {
