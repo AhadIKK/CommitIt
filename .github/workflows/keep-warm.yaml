@@ -6,29 +6,39 @@
 # Why a loop instead of a plain every-10-minutes cron: GitHub fires `schedule`
 # events best-effort and drops/delays high-frequency crons hard. Measured with
 # `*/10`: 5 runs in 13h (gaps of 2-4.5h) instead of ~80. A cron at minute 0 —
-# "*/10", or the "0 */6" this replaced — fires exactly when GitHub's own docs
-# say load is highest and queued jobs get dropped. This workflow's 12:00Z tick
-# was dropped entirely.
+# "*/10", or the "0 */6" tried first — fires exactly when GitHub's docs say
+# load is highest and queued jobs get dropped; that 12:00Z tick never ran.
 #
-# So: schedule off the hour, and make each job ping in a loop. A running job is
-# never throttled, so only the job START can be delayed, and the 30 min of
-# overlap absorbs that. Every 2h, ping every 10 min for 2h30m.
+# So: schedule off the hour, ping in a loop, and let CONCURRENCY guarantee
+# continuity. The job runs 2h30m but the schedule fires every 2h, so a trigger
+# always lands while a job is running and the next run is queued the moment the
+# current one ends. Gaps require GitHub to drop triggers for 2h30m straight.
+# `push` is a second, independent trigger source, so the loop also re-arms on
+# every deploy.
 #
 # Correctness does not depend on this: digests deliver on `dueAt <= now` and
-# the stale/auto-sync jobs are bucket-idempotent, so a gap delays work rather
-# than losing it. This only keeps things punctual.
+# the stale/auto-sync jobs are bucket/delivery-id idempotent, so a gap delays
+# work rather than losing it. This only keeps things punctual.
 #
-# Cost is real but free: ~30 runner-hours/day (one always-on machine is the
-# unavoidable price of keeping another machine awake). Unlimited for public
-# repos. A free uptime pinger does the same job for ~zero compute — swap to
-# that if the runner usage is ever unwelcome.
+# Cost: one job at a time, so ~24 runner-hours/day — the unavoidable price of
+# keeping another machine awake. Unlimited for public repos. A free uptime
+# pinger does the same for ~zero compute; swap to that if this becomes
+# unwelcome.
 name: keep-warm
 
 on:
   schedule:
     # minute 7, not 0: avoid the top-of-hour drop window.
     - cron: "7 */2 * * *"
+  push:
+    branches: [main]
   workflow_dispatch: {}
+
+# One at a time. A trigger arriving mid-run waits, then starts immediately when
+# the current job ends — that handoff is what makes coverage continuous.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
 
 jobs:
   ping:
