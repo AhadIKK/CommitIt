@@ -96,3 +96,35 @@ export async function failJob(id: string, attempts: number): Promise<void> {
     }
   }
 }
+
+// A job left in `processing` when the instance dies (Render free sleep,
+// deploy, crash) is never re-claimed — claimNextJob() only selects `queued`
+// rows, so it would sit there forever and its event is silently lost.
+// Lease-timeout reclaim: any `processing` row untouched for JOB_STALE_MS is
+// handed back to the queue (attempts already counted at claim time, so
+// repeated failures still back off).
+export const JOB_STALE_MS = Number(process.env.JOB_STALE_MS ?? 10 * 60 * 1000);
+
+export async function reclaimStuckJobs(
+  staleMs: number = JOB_STALE_MS,
+  now: Date = new Date(),
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - staleMs);
+  try {
+    const res = await prisma.job.updateMany({
+      where: { status: "processing", updatedAt: { lt: cutoff } },
+      data: { status: "queued", nextRetryAt: null },
+    });
+    return res.count;
+  } catch {
+    let n = 0;
+    for (const job of memoryFallback) {
+      if (job.status === "processing") {
+        job.status = "queued";
+        job.nextRetryAt = null;
+        n += 1;
+      }
+    }
+    return n;
+  }
+}

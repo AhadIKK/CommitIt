@@ -18,7 +18,7 @@ import {
 } from "./formatter.js";
 import { linkCommit } from "./linker.js";
 import { syncRepoIssues } from "./github-sync.js";
-import { claimNextJob, completeJob, failJob } from "./queue.js";
+import { claimNextJob, completeJob, failJob, reclaimStuckJobs } from "./queue.js";
 import { findStaleBranches } from "./stale.js";
 import { deliver, dispatchDueNotifications } from "./delivery.js";
 import type { JobRow } from "./queue.js";
@@ -509,11 +509,26 @@ export function startWorker(
   log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void },
   intervalMs = 5000,
 ): NodeJS.Timeout {
+  // Self-heal on boot: this process is fresh, so anything still `processing`
+  // was orphaned by the previous instance dying (Render free sleep/deploy).
+  void reclaimStuckJobs()
+    .then((n) => {
+      if (n > 0) log.info({ count: n }, "jobs_reclaimed_stale");
+    })
+    .catch(() => {
+      // reclaim is best-effort; the queue still makes progress without it
+    });
+  let ticks = 0;
+  const reclaimEveryTicks = Math.max(1, Math.round(120_000 / intervalMs));
   const timer = setInterval(async () => {
     try {
       const job = await claimNextJob();
       if (job) await processJob(job);
       await dispatchDueNotifications();
+      if (++ticks % reclaimEveryTicks === 0) {
+        const n = await reclaimStuckJobs();
+        if (n > 0) log.info({ count: n }, "jobs_reclaimed_stale");
+      }
     } catch (err) {
       log.error({ err }, "worker poll failed");
       // never silently drop: job stays queued, failJob() sets backoff

@@ -1,5 +1,10 @@
 # Changes
 
+## 2026-10-17 — Orphaned `processing` jobs are reclaimed, not lost
+- Root cause: `claimNextJob()` only selects `status = 'queued'`, so a job held when the instance died (Render free sleep/deploy/crash) stayed `processing` forever and its event was silently lost. Live DB had 5 such zombies (1 backfill ~5.6 days, 4 push up to ~24.7h), all `attempts=1`.
+- `reclaimStuckJobs()` (`queue.ts`) lease-times-out `processing` rows older than `JOB_STALE_MS` (default 10 min) back to `queued`, clearing `nextRetryAt`. Worker runs it on boot (fresh process ⇒ anything still processing is orphaned) and every ~2 min, logging `jobs_reclaimed_stale`.
+- Tests: lease cut-off, exact status filter, DB-down returns 0, default lease; suite 41 files / 210 green.
+
 ## 2026-10-17 — Repair no longer needs a healthy install grant
 - Frozen 28 unknowns: repair only ran for API-listed repos (zero under the empty grant), so legacy rows never healed. Backfill now unions API repos + DB-known repos for the install, and per-SHA repair retries public repos without auth when the token is refused.
 - Tests: empty-grant union + public-fallback suites; 40 files / 206 green.
