@@ -14,6 +14,7 @@ const issues = [
 const activity = {
   repo: "r",
   authors: [{ login: "a", commits: 3, mergedPRs: 1 }],
+  commits: [],
   totalCommits: 3,
   totalMergedPRs: 1,
   totalCommitsAllTime: 10,

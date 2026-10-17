@@ -3,7 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Capture the commit where-clause so we can assert the activity window uses
 // real commit dates, not row insert time.
 let lastWhere: unknown = null;
-const commits: { author: { githubLogin: string } | null }[] = [];
+const commits: {
+  sha: string;
+  message: string;
+  aiSummary: string | null;
+  category: string | null;
+  branch: string | null;
+  committedAt: Date | null;
+  isMerge: boolean;
+  secretFlag: boolean;
+  author: { githubLogin: string } | null;
+  issue: { number: number } | null;
+}[] = [];
 
 vi.mock("../src/db.js", () => ({
   prisma: {
@@ -32,7 +43,18 @@ describe("getActivity window", () => {
   });
 
   it("filters commits by committedAt, falling back to createdAt for null", async () => {
-    commits.push({ author: { githubLogin: "octocat" } });
+    commits.push({
+      sha: "9aa30ca1234567890",
+      message: "fix(queue): reclaim orphans\n\nbody",
+      aiSummary: "Hands orphaned jobs back to the queue.",
+      category: "fix",
+      branch: "main",
+      committedAt: new Date(),
+      isMerge: false,
+      secretFlag: false,
+      author: { githubLogin: "octocat" },
+      issue: null,
+    });
     const out = await getActivity("o/r", 7);
     expect(out.totalCommits).toBe(1);
     expect(lastWhere).toMatchObject({
@@ -41,6 +63,14 @@ describe("getActivity window", () => {
         { committedAt: { gte: expect.any(Date) } },
         { committedAt: null, createdAt: { gte: expect.any(Date) } },
       ],
+    });
+    // The same window feeds the per-commit list the dashboard renders.
+    expect(out.commits).toHaveLength(1);
+    expect(out.commits[0]).toMatchObject({
+      shortSha: "9aa30ca",
+      subject: "fix(queue): reclaim orphans",
+      aiSummary: "Hands orphaned jobs back to the queue.",
+      author: "octocat",
     });
   });
 });

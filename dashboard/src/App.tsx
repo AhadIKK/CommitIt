@@ -7,7 +7,7 @@ import type {
 } from "@src/dashboard.js";
 import { fetchActivity, fetchDigests, fetchIssues, fetchProgress } from "./api.js";
 import { claimInstallSetup, fetchMe } from "./authApi.js";
-import { AuthorBars, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
+import { AuthorBars, CommitList, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
 import { Button } from "./components/ui/button.js";
 import { GitHubMark, TelegramMark } from "./brandIcons.js";
 import NotifyPrefs from "./NotifyPrefs.js";
@@ -260,6 +260,18 @@ export default function App() {
           </div>
         </div>
         {activity && <AuthorBars authors={activity.authors} />}
+      </section>
+
+      <section aria-label="Commits">
+        <div className="section-head">
+          <h2>
+            What each commit is about
+            {activity && activity.commits.length > 0 && (
+              <span className="muted"> · last {activity.commits.length} in range</span>
+            )}
+          </h2>
+        </div>
+        <CommitList commits={activity?.commits ?? []} repo={repo} />
       </section>
 
       <section aria-label="Issues">

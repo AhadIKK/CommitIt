@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { Chart as ChartJS, ArcElement, Tooltip, type ChartOptions } from "chart.js";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import { Doughnut } from "react-chartjs-2";
-import type { AuthorStat, DigestEntry, IssueRow, MilestoneSnapshot } from "@src/dashboard.js";
+import type {
+  AuthorStat,
+  CommitRow,
+  DigestEntry,
+  IssueRow,
+  MilestoneSnapshot,
+} from "@src/dashboard.js";
 import { avatarCells } from "./avatars.js";
 import { StatusIcon } from "./icons.js";
 
@@ -113,6 +119,45 @@ export function AuthorBars({ authors }: { authors: AuthorStat[] }) {
       </div>
       {authors.length === 0 && <p className="muted">No activity in range.</p>}
     </div>
+  );
+}
+
+// CommitList — "what each commit is about". One row per commit: sha, author,
+// date, the subject line, and (when the worker produced one) the short AI
+// summary. Metadata only — diffs and file contents are never stored or shown.
+export function CommitList({ commits, repo }: { commits: CommitRow[]; repo: string }) {
+  if (commits.length === 0) return <p className="muted">No commits in range.</p>;
+  return (
+    <ul className="commits">
+      {commits.map((c) => (
+        <li key={c.sha}>
+          <div className="commit-head">
+            <a
+              className="mono commit-sha"
+              href={`https://github.com/${repo}/commit/${c.sha}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {c.shortSha}
+            </a>
+            <Avatar login={c.author} size={20} />
+            <span className="commit-author">{c.author}</span>
+            {c.committedAt && (
+              <time className="mono muted" dateTime={c.committedAt}>
+                {new Date(c.committedAt).toLocaleDateString()}
+              </time>
+            )}
+            {c.branch && <span className="mono muted commit-branch">{c.branch}</span>}
+            {c.category && <span className="badge">{c.category}</span>}
+            {c.isMerge && <span className="badge">merge</span>}
+            {c.issueNumber != null && <span className="badge">#{c.issueNumber}</span>}
+            {c.secretFlag && <span className="pill warn">secret flagged</span>}
+          </div>
+          <p className="commit-subject">{c.subject}</p>
+          {c.aiSummary && <p className="commit-ai">{c.aiSummary}</p>}
+        </li>
+      ))}
+    </ul>
   );
 }
 

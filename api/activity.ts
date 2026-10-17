@@ -25,6 +25,7 @@ export default async function handler(
     return;
   }
   const days = Number(url.searchParams.get("days")) || 7;
+  const limit = Number(url.searchParams.get("limit")) || 20;
   const checked = isAuthEnforced()
     ? await checkRepoAccess(
         parseCookies(req.headers.cookie)[SESSION_COOKIE],
@@ -40,11 +41,12 @@ export default async function handler(
   }
   let data: ActivitySnapshot;
   try {
-    data = await getActivity(repo, days);
+    data = await getActivity(repo, days, limit);
   } catch {
     data = {
       repo,
       authors: [],
+      commits: [],
       totalCommits: 0,
       totalMergedPRs: 0,
       totalCommitsAllTime: 0,

@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-10-17 — Dashboard: "What each commit is about" section
+- **New section** on the Dashboard tab (under Activity) listing the commits in the same 7-day window as Activity, newest first (default 20, max 50). Each row carries a short sha linked to the GitHub commit, author + avatar, date, branch, and category / merge / issue badges.
+- **Subject vs. summary:** `commitSubject()` takes the first line, trimmed and capped at 200 chars. `meaningfulSummary()` suppresses the summary when it only restates the commit — the default `AI_PROVIDER=echo` stub stores `"AI summary: <first line>"` and the degraded path stores the whole message, so without this every row printed its subject twice. The formatter already hides those rows, but it still holds the in-memory `degraded` flag while the DB keeps only the text, so the dashboard compares instead. A real provider's summaries render as before.
+- **No new Vercel function** (Hobby 12/12 is full): the rows ride the existing `/api/activity` payload as a new `commits` field via `getActivity(repo, days, limit)`, not a 13th `api/*.ts`. Both mirrors — `api/activity.ts` and the Fastify route — take the optional `limit`.
+- Metadata only: sha, message, author, and the short stored summary. No diffs, no file contents (AGENTS.md rule 6). `secretFlag` commits get a `secret flagged` badge.
+- 51 files / 301 tests green.
+
 ## 2026-10-17 — Bot UI: "/" autofill menu + inline buttons
 - **Autofill:** `BOT_COMMANDS` (`src/telegramUi.ts`) is registered with `setMyCommands`, so Telegram clients now autofill and describe all 7 commands as you type, and show the "/" menu button. Applied with `npm run bot:setup` (`src/setBotCommands.ts`) — idempotent, re-runnable after any menu edit. Verified live with `getMyCommands`.
 - **Buttons:** `/start`, `/link`, `/help` and the no-repos reply carry an "🌐 Open CommitIt" URL button (`APP_URL`, falling back to the deployed site). `/repos` gets one toggle per repo (`＋ o/r` subscribe / `✓ o/r` unsubscribe) and `/digest` gets Instant/Hourly/Daily/Weekly buttons.

@@ -219,6 +219,7 @@ describe("dashboard api handlers (Phase C gates)", () => {
           data: {
             repo: "AhadIKK/CommitIt",
             authors: [],
+            commits: [],
             totalCommits: 0,
             totalMergedPRs: 0,
             totalCommitsAllTime: 0,

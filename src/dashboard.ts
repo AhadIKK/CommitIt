@@ -29,9 +29,31 @@ export type RepoProgress = {
 
 export type AuthorStat = { login: string; commits: number; mergedPRs: number };
 
+/**
+ * One commit as the dashboard needs it for "what each commit is about".
+ * Metadata + short summaries only — never file contents or diffs (AGENTS.md).
+ */
+export type CommitRow = {
+  sha: string;
+  shortSha: string;
+  /** First line of the commit message. */
+  subject: string;
+  /** LLM summary, or null when there is none / it only echoes the subject. */
+  aiSummary: string | null;
+  author: string;
+  category: string | null;
+  branch: string | null;
+  committedAt: string | null;
+  isMerge: boolean;
+  secretFlag: boolean;
+  issueNumber: number | null;
+};
+
 export type ActivitySnapshot = {
   repo: string;
   authors: AuthorStat[];
+  /** Most recent commits in the window, newest first. */
+  commits: CommitRow[];
   totalCommits: number;
   totalMergedPRs: number;
   totalCommitsAllTime: number;
@@ -111,6 +133,66 @@ export function shapeActivity(
   );
 }
 
+/** Longest subject we will render; commit subjects are conventionally short. */
+export const COMMIT_SUBJECT_MAX = 200;
+
+/** First line of a commit message, trimmed and capped. Never multi-line. */
+export function commitSubject(message: string): string {
+  const first = message.split("\n", 1)[0]?.trim() ?? "";
+  return first.length > COMMIT_SUBJECT_MAX ? `${first.slice(0, COMMIT_SUBJECT_MAX)}…` : first;
+}
+
+/**
+ * The stored summary, or null when it tells us nothing more than the subject.
+ *
+ * Both the echo stub (`"AI summary: <first line>"`) and the degraded path
+ * (summary === the whole commit message) echo the message back. The Telegram
+ * formatter hides those because it still holds the in-memory `degraded` flag;
+ * the DB keeps only the text, so compare instead of trusting it. Without this
+ * the section prints the subject twice for every commit.
+ */
+export function meaningfulSummary(message: string, aiSummary: string | null): string | null {
+  const summary = aiSummary?.trim();
+  if (!summary) return null;
+  // Compare heads so the echo's 120-char slice still matches a longer subject.
+  const head = (s: string) => s.trim().toLowerCase().slice(0, 120);
+  const stripped = summary.replace(/^ai summary:\s*/i, "");
+  if (head(summary) === head(message)) return null;
+  if (head(stripped) === head(commitSubject(message))) return null;
+  return summary;
+}
+
+export function shapeCommits(
+  rows: {
+    sha: string;
+    message: string;
+    aiSummary: string | null;
+    category: string | null;
+    branch: string | null;
+    committedAt: Date | null;
+    isMerge: boolean;
+    secretFlag: boolean;
+    author: { githubLogin: string } | null;
+    issue: { number: number } | null;
+  }[],
+): CommitRow[] {
+  return rows.map((c) => ({
+    sha: c.sha,
+    shortSha: c.sha.slice(0, 7),
+    subject: commitSubject(c.message),
+    aiSummary: meaningfulSummary(c.message, c.aiSummary),
+    // Unattributed rows must read honestly: a blank author would look like a
+    // rendering bug rather than a data gap (AGENTS.md rule 12).
+    author: c.author?.githubLogin ?? "unknown",
+    category: c.category,
+    branch: c.branch,
+    committedAt: c.committedAt ? c.committedAt.toISOString() : null,
+    isMerge: c.isMerge,
+    secretFlag: c.secretFlag,
+    issueNumber: c.issue?.number ?? null,
+  }));
+}
+
 // --- Data access (Prisma, graceful empty fallback) ---
 
 async function findRepo(fullName: string) {
@@ -160,10 +242,15 @@ export async function getProgress(repo: string): Promise<RepoProgress> {
   }
 }
 
-export async function getActivity(repo: string, days = 7): Promise<ActivitySnapshot> {
+export async function getActivity(
+  repo: string,
+  days = 7,
+  commitLimit = 20,
+): Promise<ActivitySnapshot> {
   const empty: ActivitySnapshot = {
     repo,
     authors: [],
+    commits: [],
     totalCommits: 0,
     totalMergedPRs: 0,
     totalCommitsAllTime: 0,
@@ -174,19 +261,19 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
   if (!repoRow) return empty;
   try {
     const since = new Date(Date.now() - days * 86_400_000);
-    const [commits, prs, allCommits, allPrs, live] = await Promise.all([
+    // Activity is the commit's real author date, not when our row was
+    // written (backfills/repairs would otherwise land all history in the
+    // window). Legacy rows with no committedAt fall back to insert time so
+    // they still surface.
+    const window = {
+      OR: [
+        { committedAt: { gte: since } },
+        { committedAt: null, createdAt: { gte: since } },
+      ],
+    };
+    const [commits, prs, allCommits, allPrs, live, recent] = await Promise.all([
       prisma.commit.findMany({
-        where: {
-          repoId: repoRow.id,
-          // Activity is the commit's real author date, not when our row was
-          // written (backfills/repairs would otherwise land all history in
-          // the window). Legacy rows with no committedAt fall back to insert
-          // time so they still surface.
-          OR: [
-            { committedAt: { gte: since } },
-            { committedAt: null, createdAt: { gte: since } },
-          ],
-        },
+        where: { repoId: repoRow.id, ...window },
         include: { author: { select: { githubLogin: true } } },
       }),
       prisma.pullRequest.findMany({
@@ -199,6 +286,17 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
         installationId: repoRow.installationId,
         defaultBranch: repoRow.defaultBranch,
       }).catch(() => ({ count: null as number | null, defaultBranch: null as string | null })),
+      // Per-commit detail for the "what each commit is about" list. Newest
+      // first by the commit's own date; legacy nulls sort last, never first.
+      prisma.commit.findMany({
+        where: { repoId: repoRow.id, ...window },
+        include: {
+          author: { select: { githubLogin: true } },
+          issue: { select: { number: true } },
+        },
+        orderBy: [{ committedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+        take: Math.min(Math.max(commitLimit, 1), 50),
+      }),
     ]);
     const authors = shapeActivity(
       commits.map((c) => ({ authorLogin: c.author?.githubLogin ?? "unknown" })),
@@ -207,6 +305,7 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
     return {
       repo,
       authors,
+      commits: shapeCommits(recent),
       totalCommits: commits.length,
       totalMergedPRs: prs.length,
       totalCommitsAllTime: allCommits,
@@ -288,12 +387,13 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     return reply.send({ ok: true, data: await getProgress(repo) });
   });
   app.get("/api/activity", async (req, reply) => {
-    const q = req.query as { repo?: string; days?: string };
+    const q = req.query as { repo?: string; days?: string; limit?: string };
     if (!q.repo) return reply.code(400).send({ ok: false, error: "missing_repo" });
     const denied = await accessDenial(req);
     if (denied) return reply.code(denied.status).send({ ok: false, error: denied.error });
     const days = q.days ? Number(q.days) || 7 : 7;
-    return reply.send({ ok: true, data: await getActivity(q.repo, days) });
+    const limit = q.limit ? Number(q.limit) || 20 : 20;
+    return reply.send({ ok: true, data: await getActivity(q.repo, days, limit) });
   });
   app.get("/api/issues", async (req, reply) => {
     const repo = (req.query as { repo?: string }).repo;

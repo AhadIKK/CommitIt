@@ -156,6 +156,27 @@ section h2 { margin: 0; font-size: var(--type-md); font-weight: 650; }
 
 .avatar { border-radius: var(--radius-sm); flex-shrink: 0; }
 
+/* Commits — "what each commit is about". Subject is the first line; the AI
+   summary (when present) is set quieter and indented so the two never blur. */
+ul.commits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+ul.commits li { border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); }
+ul.commits li:last-child { border-bottom: 0; padding-bottom: 0; }
+.commit-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.commit-sha { color: var(--accent-strong); text-decoration: none; }
+.commit-sha:hover { text-decoration: underline; }
+.commit-author { font-size: var(--type-sm); font-weight: 650; }
+.commit-head time, .commit-branch { font-size: var(--type-xs); }
+.commit-subject { margin: 6px 0 0; font-size: var(--type-sm); overflow-wrap: anywhere; }
+.commit-ai {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--line);
+  font-size: var(--type-sm);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.pill.warn { background: var(--warn); color: var(--button-text); }
+
 .bars-legend {
   display: flex;
   align-items: center;
@@ -309,6 +330,9 @@ ul.timeline p { margin: 4px 0 0; font-size: var(--type-sm); }
   .pill.failed { background: #cf222e; }
   .pill.skipped_quiet_hours { background: #9a6700; }
   .pill { color: #fff; }
+  .commit-sha { color: #000; }
+  .commit-ai { color: #333; border-left-color: #999; }
+  ul.commits li { border-bottom: 1px solid #999; break-inside: avoid; }
   .slide { display: block; }
   .slide-nav { display: none; }
   [role="tablist"] { display: none; }
