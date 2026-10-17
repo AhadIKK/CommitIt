@@ -6,6 +6,12 @@
 // command handler, and silently discarded every reply. An outbound outage
 // looked exactly like the bot ignoring you. Failures now return ok:false and
 // emit a warning, so the next occurrence is one log line away.
+//
+// Every call funnels through callTelegram(), so the missing-token trap cannot
+// come back through a side door: one place checks the token, one place logs
+// Telegram's refusal reason. The token itself is never logged.
+
+import { CALLBACK_TOAST_MAX, type InlineKeyboard } from "./telegramUi.js";
 
 export type TelegramResult = { ok: boolean; placeholder: boolean };
 
@@ -14,44 +20,42 @@ type Logger = {
   error?: (o: object, m: string) => void;
 };
 
+export type SendOptions = { log?: Logger; replyMarkup?: InlineKeyboard };
+
+type CallOutcome = { ok: boolean; missingToken: boolean; detail: string };
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export async function sendMessage(
-  chatId: string,
-  html: string,
+async function callTelegram(
+  method: string,
+  payload: Record<string, unknown>,
   log?: Logger,
-): Promise<TelegramResult> {
+): Promise<CallOutcome> {
   const token = (process.env.TELEGRAM_BOT_TOKEN ?? "").trim();
   if (!token) {
     const msg = "TELEGRAM_BOT_TOKEN unset — outbound Telegram disabled, reply dropped";
-    log?.error?.({ chatId, len: html.length }, msg);
-    console.warn(JSON.stringify({ msg, chatId }));
-    return { ok: false, placeholder: true };
+    log?.error?.({ method }, msg);
+    console.warn(JSON.stringify({ msg, method }));
+    return { ok: false, missingToken: true, detail: "" };
   }
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: html,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     const msg = "telegram send failed (network)";
-    log?.error?.({ chatId, err: String(err) }, msg);
-    console.warn(JSON.stringify({ msg, chatId, err: String(err) }));
-    return { ok: false, placeholder: false };
+    log?.error?.({ method, err: String(err) }, msg);
+    console.warn(JSON.stringify({ msg, method, err: String(err) }));
+    return { ok: false, missingToken: false, detail: "" };
   }
   if (!res.ok) {
-    // Telegram's description is the actionable part ("chat not found",
-    // "bot was blocked by the user", "Too Many Requests"). Never the token.
+    // Telegram's description is the actionable part ("chat not found", "bot was
+    // blocked by the user", "Too Many Requests"). Never the token.
     let detail = "";
     try {
       detail = JSON.stringify(await res.json()).slice(0, 300);
@@ -59,11 +63,65 @@ export async function sendMessage(
       detail = "";
     }
     const msg = "telegram send rejected";
-    log?.error?.({ chatId, status: res.status, detail }, msg);
-    console.warn(JSON.stringify({ msg, chatId, status: res.status, detail }));
-    return { ok: false, placeholder: false };
+    log?.error?.({ method, status: res.status, detail }, msg);
+    console.warn(JSON.stringify({ msg, method, status: res.status, detail }));
+    return { ok: false, missingToken: false, detail };
   }
-  return { ok: true, placeholder: false };
+  return { ok: true, missingToken: false, detail: "" };
+}
+
+export async function sendMessage(
+  chatId: string,
+  html: string,
+  opts: SendOptions = {},
+): Promise<TelegramResult> {
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    text: html,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  };
+  if (opts.replyMarkup) payload.reply_markup = opts.replyMarkup;
+  const out = await callTelegram("sendMessage", payload, opts.log);
+  return { ok: out.ok, placeholder: out.missingToken };
+}
+
+/** Rewrites a message in place — how a tapped button refreshes itself. */
+export async function editMessageText(
+  chatId: string,
+  messageId: number,
+  html: string,
+  replyMarkup?: InlineKeyboard,
+  opts: SendOptions = {},
+): Promise<TelegramResult> {
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text: html,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  };
+  if (replyMarkup) payload.reply_markup = replyMarkup;
+  const out = await callTelegram("editMessageText", payload, opts.log);
+  // "message is not modified" means the view was already current: success.
+  const alreadyCurrent = out.detail.includes("not modified");
+  return { ok: out.ok || alreadyCurrent, placeholder: out.missingToken };
+}
+
+/**
+ * Stops the client's button spinner and shows a short toast. Must be called for
+ * every tap — otherwise Telegram leaves the button spinning for the user.
+ */
+export async function answerCallbackQuery(
+  callbackQueryId: string,
+  text?: string,
+  opts: SendOptions = {},
+): Promise<boolean> {
+  const payload: Record<string, unknown> = { callback_query_id: callbackQueryId };
+  if (text) payload.text = text.slice(0, CALLBACK_TOAST_MAX);
+  const out = await callTelegram("answerCallbackQuery", payload, opts.log);
+  // A tap that aged out is not worth failing on.
+  return out.ok || out.detail.includes("too old");
 }
 
 export { escapeHtml };

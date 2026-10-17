@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { handleMessage } from "./telegramBot.js";
+import { dispatchUpdate, type InboundUpdate } from "./telegramBot.js";
 
 // Telegram inbound via webhook — the PRIMARY path, served by Vercel which
 // never sleeps, so replies are instant 24/7 even while Render's free instance
@@ -21,14 +21,7 @@ import { handleMessage } from "./telegramBot.js";
 /** Vercel's Node runtime hands functions a pre-parsed body on the request. */
 export type VercelRequest = IncomingMessage & { body?: unknown };
 
-type TgUpdate = {
-  update_id?: number;
-  message?: {
-    chat?: { id?: number; type?: string };
-    from?: { id?: number };
-    text?: string;
-  };
-};
+type TgUpdate = InboundUpdate;
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
@@ -100,16 +93,14 @@ export async function handleTelegramWebhook(
   }
 
   const update = await readUpdate(req);
-  const chat = update.message?.chat?.id;
-  if (chat !== undefined) {
-    const fromId = update.message?.from?.id;
+  const isMessage = update.message?.chat?.id !== undefined;
+  const isTap = update.callback_query?.id !== undefined;
+  if (isMessage || isTap) {
     try {
-      await handleMessage(String(chat), update.message?.text, {
-        telegramUserId: fromId === undefined ? undefined : String(fromId),
-        chatType: update.message?.chat?.type,
-      });
+      // One dispatcher for commands and button taps, shared with the poller.
+      await dispatchUpdate(update);
     } catch (err) {
-      // One bad message never turns into a retry storm.
+      // One bad update never turns into a retry storm.
       console.warn(JSON.stringify({ msg: "telegram webhook handling failed", err: String(err) }));
     }
   }

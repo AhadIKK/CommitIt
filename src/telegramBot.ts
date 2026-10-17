@@ -4,21 +4,38 @@ import { accessibleRepos, checkBindAllowed, getChatMemberStatus, type Sender } f
 import { isRateLimited } from "./rateLimit.js";
 import { claimLinkToken } from "./linkTokens.js";
 import { isDigestMode } from "./notifyPrefs.js";
-import { sendMessage } from "./telegram.js";
+import { answerCallbackQuery, editMessageText, sendMessage } from "./telegram.js";
+import {
+  digestKeyboard,
+  digestView,
+  reposKeyboard,
+  reposView,
+  startKeyboard,
+  type InlineKeyboard,
+} from "./telegramUi.js";
 
 // Telegram inbound: primary path is the Vercel webhook
 // (src/telegramWebhook.ts, /api/telegram). The getUpdates long-poll loop below
 // is the FALLBACK (Render service only; Vercel serverless never polls). It
 // detects that a webhook is registered (HTTP 409) and idles on a slow tick, so
 // it costs nothing while the webhook lives and resumes automatically if the
-// webhook is ever deleted. Commands:
+// webhook is ever deleted.
+//
+// Both entry points feed dispatchUpdate(), so a message and a button tap take
+// exactly the same path whether Telegram delivered them to Vercel or Render.
+//
+// Commands:
 // - /start <token> — claims a website-issued deep-link token (hash-only)
 // - /link — issues a short code bound to this chat (backup flow, legacy)
-// - /repos — repos your linked GitHub account can access (+ bound marks)
+// - /repos — repos your linked GitHub account can access (+ bound marks,
+//            with subscribe/unsubscribe buttons per repo)
 // - /bind owner/repo — subscribe this chat (group: admin only)
 // - /unlink [owner/repo] — unsubscribe (group: admin only)
-// - /digest [mode] [owner/repo] — show/set notification frequency
-// - anything else — short help.
+// - /digest [mode] [owner/repo] — show/set notification frequency (+ buttons)
+// - /help (or anything else) — short help.
+//
+// Button taps arrive as callback_query and reuse those same handlers, so every
+// permission rule (linked account, group admin) applies to a tap too.
 
 export const LINK_TTL_MS = 10 * 60 * 1000;
 const CODE_LEN = 6;
@@ -49,6 +66,13 @@ export function parseCommand(text?: string): ParsedCommand {
   const [raw, ...rest] = t.slice(1).split(/\s+/);
   if (!raw) return null;
   return { cmd: raw.split("@")[0]!.toLowerCase(), arg: rest.join(" ") || undefined };
+}
+
+/** Outcome of one command, used for the button-toast text. */
+type Reply = { ok: boolean; note: string };
+
+function reply(chatId: string, html: string, keyboard?: InlineKeyboard) {
+  return sendMessage(chatId, html, keyboard ? { replyMarkup: keyboard } : undefined);
 }
 
 async function claimToken(
@@ -139,17 +163,307 @@ async function boundRepos(chatDbId: string): Promise<Set<string>> {
   }
 }
 
-const HELP =
+export const HELP =
   "Commands:\n" +
   "/start — after tapping your Join link\n" +
   "/link — short code instead\n" +
   "/repos — your accessible repos\n" +
   "/bind owner/repo — subscribe this chat\n" +
   "/unlink [owner/repo] — unsubscribe\n" +
-  "/digest [instant|hourly|daily|weekly] [owner/repo] — notification frequency";
+  "/digest [instant|hourly|daily|weekly] [owner/repo] — notification frequency\n" +
+  "/help — this list";
 
 function limited(cmd: string, chatId: string): boolean {
   return isRateLimited(`tg:${cmd}:${chatId}`, { max: 20 });
+}
+
+const TOO_MANY: Reply = { ok: false, note: "Too many taps — wait a minute." };
+
+async function cmdStart(chatId: string, sender?: Sender, arg?: string): Promise<Reply> {
+  if (!arg) {
+    await reply(
+      chatId,
+      "CommitIt bot. To link this chat, tap your personal Join link on the website, " +
+        "or send /link for a short code to enter there instead.",
+      startKeyboard(),
+    );
+    return { ok: true, note: "Opening CommitIt" };
+  }
+  const res = await claimToken(arg.trim(), chatId, sender?.telegramUserId);
+  if (res.status !== "linked") {
+    await reply(
+      chatId,
+      res.status === "invalid"
+        ? "That link expired or is invalid. Generate a new Join link on the website."
+        : "Linking is temporarily unavailable, try again soon.",
+    );
+    return { ok: false, note: res.status === "invalid" ? "Link expired" : "Linking unavailable" };
+  }
+  if (res.repoFullName) {
+    const chatDbId = await ensureChat(chatId, sender?.chatType);
+    const ok = chatDbId ? await subscribeRepo(chatDbId, res.repoFullName) : false;
+    await reply(
+      chatId,
+      ok
+        ? `This chat is now subscribed to ${res.repoFullName}.`
+        : "Link claimed, but subscribing failed — try /bind manually.",
+      ok ? reposKeyboard([{ repo: res.repoFullName, bound: true }]) : undefined,
+    );
+    return { ok, note: ok ? `Subscribed to ${res.repoFullName}` : "Subscribing failed" };
+  }
+  await reply(
+    chatId,
+    "This chat is now linked. Return to the website to finish subscribing.",
+    startKeyboard(),
+  );
+  return { ok: true, note: "This chat is linked" };
+}
+
+async function cmdLink(chatId: string): Promise<Reply> {
+  const issued = await issueCode(chatId);
+  await reply(
+    chatId,
+    issued
+      ? `Your code is <code>${issued.code}</code>. Enter it on the website within 10 minutes.`
+      : "Linking is temporarily unavailable, try again soon.",
+    issued ? startKeyboard() : undefined,
+  );
+  return { ok: issued !== null, note: issued ? "Code sent" : "Linking unavailable" };
+}
+
+/**
+ * Renders this chat's repo list. With a messageId it rewrites that message
+ * instead — that is how a tapped subscribe/unsubscribe button refreshes its own
+ * ✓ marks and button labels.
+ */
+async function cmdRepos(chatId: string, sender?: Sender, messageId?: number): Promise<Reply> {
+  const telegramUserId = sender?.telegramUserId ?? "";
+  if (!telegramUserId) {
+    await reply(chatId, "I can't tell who you are — message me in a DM first.");
+    return { ok: false, note: "Message me in a DM first" };
+  }
+  const chatDbId = await ensureChat(chatId, sender?.chatType);
+  const [repos, bound] = await Promise.all([
+    accessibleRepos(telegramUserId),
+    chatDbId ? boundRepos(chatDbId) : Promise.resolve(new Set<string>()),
+  ]);
+  if (repos.length === 0) {
+    await reply(
+      chatId,
+      "No accessible repos. Link your GitHub account on the website, install the App, " +
+        "then tap a fresh Join link (older links predate account binding).",
+      startKeyboard(),
+    );
+    return { ok: false, note: "No accessible repos" };
+  }
+  const view = reposView(repos, bound);
+  if (messageId !== undefined) {
+    await editMessageText(chatId, messageId, view.text, view.keyboard);
+  } else {
+    await reply(chatId, view.text, view.keyboard);
+  }
+  return { ok: true, note: `${repos.length} repo(s)` };
+}
+
+async function cmdBind(chatId: string, sender: Sender | undefined, repoArg?: string): Promise<Reply> {
+  const repo = (repoArg ?? "").trim();
+  if (!REPO_RE.test(repo)) {
+    await reply(chatId, "Usage: /bind owner/repo.");
+    return { ok: false, note: "Usage: /bind owner/repo" };
+  }
+  const check = await checkBindAllowed(chatId, sender ?? {}, repo);
+  if (!check.ok) {
+    await reply(
+      chatId,
+      check.reason === "needs_link"
+        ? "Link your GitHub account on the website first."
+        : check.reason === "group_needs_admin"
+          ? "Only group admins with a linked GitHub account may bind repos."
+          : "Your account can't access that repo (App not installed or access removed).",
+    );
+    return {
+      ok: false,
+      note: check.reason === "group_needs_admin" ? "Admins only" : "Not allowed",
+    };
+  }
+  const chatDbId = await ensureChat(chatId, sender?.chatType);
+  const ok = chatDbId ? await subscribeRepo(chatDbId, repo) : false;
+  await reply(
+    chatId,
+    ok ? `This chat is now subscribed to ${repo}.` : "Subscribing failed — try again soon.",
+    ok ? reposKeyboard([{ repo, bound: true }]) : undefined,
+  );
+  return { ok, note: ok ? `Subscribed to ${repo}` : "Subscribing failed" };
+}
+
+async function cmdUnlink(
+  chatId: string,
+  sender: Sender | undefined,
+  repoArg?: string,
+): Promise<Reply> {
+  const repo = (repoArg ?? "").trim();
+  if (repo && !REPO_RE.test(repo)) {
+    await reply(chatId, "Usage: /unlink [owner/repo].");
+    return { ok: false, note: "Usage: /unlink [owner/repo]" };
+  }
+  if (repo) {
+    const check = await checkBindAllowed(chatId, sender ?? {}, repo);
+    if (!check.ok) {
+      await reply(
+        chatId,
+        check.reason === "group_needs_admin"
+          ? "Only group admins may change this chat's subscriptions."
+          : "You can't change this chat's subscription to that repo.",
+      );
+      return {
+        ok: false,
+        note: check.reason === "group_needs_admin" ? "Admins only" : "Not allowed",
+      };
+    }
+  } else if (sender?.chatType === "group" || sender?.chatType === "supergroup") {
+    // Unbinding everything is destructive: require admin even without a repo arg.
+    const status = sender?.telegramUserId
+      ? await getChatMemberStatus(chatId, sender.telegramUserId)
+      : null;
+    if (status !== "creator" && status !== "administrator") {
+      await reply(chatId, "Only group admins may change this chat's subscriptions.");
+      return { ok: false, note: "Admins only" };
+    }
+  }
+  try {
+    const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
+    if (!chat) {
+      await reply(chatId, "This chat has no subscriptions.");
+      return { ok: false, note: "No subscriptions" };
+    }
+    if (repo) {
+      const repoRow = await prisma.repo.findUnique({ where: { fullName: repo } });
+      if (repoRow) {
+        await prisma.subscription.deleteMany({ where: { chatId: chat.id, repoId: repoRow.id } });
+      }
+      await reply(chatId, `Unsubscribed from ${repo}.`);
+      return { ok: true, note: `Unsubscribed from ${repo}` };
+    }
+    const res = await prisma.subscription.deleteMany({ where: { chatId: chat.id } });
+    await reply(chatId, `Removed ${res.count} subscription(s) from this chat.`);
+    return { ok: true, note: `Removed ${res.count} subscription(s)` };
+  } catch {
+    await reply(chatId, "Unlinking failed — try again soon.");
+    return { ok: false, note: "Unlinking failed" };
+  }
+}
+
+async function cmdDigest(
+  chatId: string,
+  sender: Sender | undefined,
+  arg?: string,
+  messageId?: number,
+): Promise<Reply> {
+  const parts = (arg ?? "").trim().split(/\s+/).filter(Boolean);
+  const [first, ...rest] = parts;
+
+  // Listing: same body as before buttons, with a mode row attached.
+  const list = async (): Promise<Reply> => {
+    try {
+      const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
+      const subs = chat
+        ? await prisma.subscription.findMany({
+            where: { chatId: chat.id },
+            include: { repo: { select: { fullName: true } } },
+            orderBy: { createdAt: "asc" },
+          })
+        : [];
+      const view = digestView(
+        subs.map((s) => ({
+          repo: s.repo.fullName,
+          digestMode: s.digestMode,
+          isMuted: s.isMuted,
+        })),
+      );
+      if (messageId !== undefined) {
+        await editMessageText(chatId, messageId, view.text, view.keyboard);
+      } else {
+        await reply(chatId, view.text, view.keyboard);
+      }
+      return { ok: subs.length > 0, note: `${subs.length} subscription(s)` };
+    } catch {
+      await reply(chatId, "Reading subscriptions failed — try again soon.");
+      return { ok: false, note: "Reading failed" };
+    }
+  };
+
+  if (!first) return list();
+
+  const mode = first.toLowerCase();
+  if (!isDigestMode(mode)) {
+    await reply(chatId, "Usage: /digest [instant|hourly|daily|weekly] [owner/repo].");
+    return { ok: false, note: "Usage: /digest <mode> [owner/repo]" };
+  }
+  const repo = rest.join(" ").trim();
+  if (repo && !REPO_RE.test(repo)) {
+    await reply(chatId, "Usage: /digest [instant|hourly|daily|weekly] [owner/repo].");
+    return { ok: false, note: "Usage: /digest <mode> [owner/repo]" };
+  }
+  if (!repo && (sender?.chatType === "group" || sender?.chatType === "supergroup")) {
+    // Changing everything is chat-wide: require admin, mirroring /unlink.
+    const status = sender?.telegramUserId
+      ? await getChatMemberStatus(chatId, sender.telegramUserId)
+      : null;
+    if (status !== "creator" && status !== "administrator") {
+      await reply(chatId, "Only group admins may change this chat's subscriptions.");
+      return { ok: false, note: "Admins only" };
+    }
+  }
+  if (repo) {
+    const check = await checkBindAllowed(chatId, sender ?? {}, repo);
+    if (!check.ok) {
+      await reply(
+        chatId,
+        check.reason === "group_needs_admin"
+          ? "Only group admins may change this chat's subscriptions."
+          : "You can't change this chat's subscription to that repo.",
+      );
+      return {
+        ok: false,
+        note: check.reason === "group_needs_admin" ? "Admins only" : "Not allowed",
+      };
+    }
+  }
+  try {
+    const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
+    const where = chat
+      ? repo
+        ? await prisma.repo
+            .findUnique({ where: { fullName: repo }, select: { id: true } })
+            .then((r) => (r ? { chatId: chat.id, repoId: r.id } : null))
+        : { chatId: chat.id }
+      : null;
+    if (!where) {
+      await reply(chatId, "This chat has no subscriptions.");
+      return { ok: false, note: "No subscriptions" };
+    }
+    const res = await prisma.subscription.updateMany({ where, data: { digestMode: mode } });
+    if (res.count === 0) {
+      await reply(chatId, "This chat has no subscriptions.");
+      return { ok: false, note: "No subscriptions" };
+    }
+    const done = repo ? `<code>${repo}</code> → ${mode}.` : `All ${res.count} subscription(s) → ${mode}.`;
+    if (messageId !== undefined) {
+      // The tap came from a mode button: redraw that same message.
+      await list();
+    } else {
+      await reply(chatId, done, digestKeyboard(mode, repo || undefined));
+    }
+    return { ok: true, note: repo ? `${repo} → ${mode}` : `All → ${mode}` };
+  } catch {
+    await reply(chatId, "Saving failed — try again soon.");
+    return { ok: false, note: "Saving failed" };
+  }
+}
+
+async function showHelp(chatId: string): Promise<Reply> {
+  await reply(chatId, HELP, startKeyboard());
+  return { ok: true, note: "Commands listed" };
 }
 
 export async function handleMessage(chatId: string, text?: string, sender?: Sender): Promise<void> {
@@ -159,242 +473,105 @@ export async function handleMessage(chatId: string, text?: string, sender?: Send
     await sendMessage(chatId, "Too many tries — wait a minute.");
     return;
   }
-  if (parsed.cmd === "start") {
-    if (!parsed.arg) {
-      await sendMessage(
-        chatId,
-        "CommitIt bot. To link this chat, tap your personal Join link on the website, " +
-          "or send /link for a short code to enter there instead.",
-      );
+  switch (parsed.cmd) {
+    case "start":
+      await cmdStart(chatId, sender, parsed.arg);
       return;
-    }
-    const res = await claimToken(parsed.arg.trim(), chatId, sender?.telegramUserId);
-    if (res.status !== "linked") {
-      await sendMessage(
-        chatId,
-        res.status === "invalid"
-          ? "That link expired or is invalid. Generate a new Join link on the website."
-          : "Linking is temporarily unavailable, try again soon.",
-      );
+    case "link":
+      await cmdLink(chatId);
       return;
-    }
-    if (res.repoFullName) {
-      const chatDbId = await ensureChat(chatId, sender?.chatType);
-      const ok = chatDbId ? await subscribeRepo(chatDbId, res.repoFullName) : false;
-      await sendMessage(
-        chatId,
-        ok
-          ? `This chat is now subscribed to ${res.repoFullName}.`
-          : "Link claimed, but subscribing failed — try /bind manually.",
-      );
+    case "repos":
+      await cmdRepos(chatId, sender);
       return;
-    }
-    await sendMessage(chatId, "This chat is now linked. Return to the website to finish subscribing.");
-    return;
+    case "bind":
+      await cmdBind(chatId, sender, parsed.arg);
+      return;
+    case "unlink":
+      await cmdUnlink(chatId, sender, parsed.arg);
+      return;
+    case "digest":
+      await cmdDigest(chatId, sender, parsed.arg);
+      return;
+    default:
+      await showHelp(chatId);
   }
-  if (parsed.cmd === "link") {
-    const issued = await issueCode(chatId);
-    await sendMessage(
-      chatId,
-      issued
-        ? `Your code is <code>${issued.code}</code>. Enter it on the website within 10 minutes.`
-        : "Linking is temporarily unavailable, try again soon.",
-    );
-    return;
-  }
-  if (parsed.cmd === "repos") {
-    const telegramUserId = sender?.telegramUserId ?? "";
-    if (!telegramUserId) {
-      await sendMessage(chatId, "I can't tell who you are — message me in a DM first.");
-      return;
-    }
-    const chatDbId = await ensureChat(chatId, sender?.chatType);
-    const [repos, bound] = await Promise.all([
-      accessibleRepos(telegramUserId),
-      chatDbId ? boundRepos(chatDbId) : Promise.resolve(new Set<string>()),
-    ]);
-    if (repos.length === 0) {
-      await sendMessage(
-        chatId,
-        "No accessible repos. Link your GitHub account on the website, install the App, " +
-          "then tap a fresh Join link (older links predate account binding).",
-      );
-      return;
-    }
-    const lines = repos
-      .slice(0, 15)
-      .map((r) => `${bound.has(r) ? "✓" : "·"} <code>${r}</code>`);
-    if (repos.length > 15) lines.push(`+${repos.length - 15} more`);
-    await sendMessage(chatId, `Your repos (✓ = this chat is subscribed):\n${lines.join("\n")}\n/bind owner/repo to add.`);
-    return;
-  }
-  if (parsed.cmd === "bind") {
-    const repo = (parsed.arg ?? "").trim();
-    if (!REPO_RE.test(repo)) {
-      await sendMessage(chatId, "Usage: /bind owner/repo.");
-      return;
-    }
-    const check = await checkBindAllowed(chatId, sender ?? {}, repo);
-    if (!check.ok) {
-      await sendMessage(
-        chatId,
-        check.reason === "needs_link"
-          ? "Link your GitHub account on the website first."
-          : check.reason === "group_needs_admin"
-            ? "Only group admins with a linked GitHub account may bind repos."
-            : "Your account can't access that repo (App not installed or access removed).",
-      );
-      return;
-    }
-    const chatDbId = await ensureChat(chatId, sender?.chatType);
-    const ok = chatDbId ? await subscribeRepo(chatDbId, repo) : false;
-    await sendMessage(chatId, ok ? `This chat is now subscribed to ${repo}.` : "Subscribing failed — try again soon.");
-    return;
-  }
-  if (parsed.cmd === "unlink") {
-    const repo = (parsed.arg ?? "").trim();
-    if (repo && !REPO_RE.test(repo)) {
-      await sendMessage(chatId, "Usage: /unlink [owner/repo].");
-      return;
-    }
-    if (repo) {
-      const check = await checkBindAllowed(chatId, sender ?? {}, repo);
-      if (!check.ok) {
-        await sendMessage(
-          chatId,
-          check.reason === "group_needs_admin"
-            ? "Only group admins may change this chat's subscriptions."
-            : "You can't change this chat's subscription to that repo.",
-        );
-        return;
-      }
-    } else if (sender?.chatType === "group" || sender?.chatType === "supergroup") {
-      // Unbinding everything is destructive: require admin even without a repo arg.
-      const status = sender?.telegramUserId
-        ? await getChatMemberStatus(chatId, sender.telegramUserId)
-        : null;
-      if (status !== "creator" && status !== "administrator") {
-        await sendMessage(chatId, "Only group admins may change this chat's subscriptions.");
-        return;
-      }
-    }
-    try {
-      const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
-      if (!chat) {
-        await sendMessage(chatId, "This chat has no subscriptions.");
-        return;
-      }
-      if (repo) {
-        const repoRow = await prisma.repo.findUnique({ where: { fullName: repo } });
-        if (repoRow) {
-          await prisma.subscription.deleteMany({ where: { chatId: chat.id, repoId: repoRow.id } });
-        }
-        await sendMessage(chatId, `Unsubscribed from ${repo}.`);
-      } else {
-        const res = await prisma.subscription.deleteMany({ where: { chatId: chat.id } });
-        await sendMessage(chatId, `Removed ${res.count} subscription(s) from this chat.`);
-      }
-    } catch {
-      await sendMessage(chatId, "Unlinking failed — try again soon.");
-    }
-    return;
-  }
-  if (parsed.cmd === "digest") {
-    const parts = (parsed.arg ?? "").trim().split(/\s+/).filter(Boolean);
-    const [first, ...rest] = parts;
-    if (!first) {
-      // List this chat's subscriptions with modes.
-      try {
-        const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
-        const subs = chat
-          ? await prisma.subscription.findMany({
-              where: { chatId: chat.id },
-              include: { repo: { select: { fullName: true } } },
-              orderBy: { createdAt: "asc" },
-            })
-          : [];
-        if (subs.length === 0) {
-          await sendMessage(chatId, "This chat has no subscriptions.");
-        } else {
-          const lines = subs.map(
-            (s) => `<code>${s.repo.fullName}</code> → ${s.digestMode}${s.isMuted ? " (muted)" : ""}`,
-          );
-          await sendMessage(
-            chatId,
-            `Notifications for this chat:\n${lines.join("\n")}\n/digest <instant|hourly|daily|weekly> [owner/repo] to change.`,
-          );
-        }
-      } catch {
-        await sendMessage(chatId, "Reading subscriptions failed — try again soon.");
-      }
-      return;
-    }
-    const mode = first.toLowerCase();
-    if (!isDigestMode(mode)) {
-      await sendMessage(chatId, "Usage: /digest [instant|hourly|daily|weekly] [owner/repo].");
-      return;
-    }
-    const repo = rest.join(" ").trim();
-    if (repo && !REPO_RE.test(repo)) {
-      await sendMessage(chatId, "Usage: /digest [instant|hourly|daily|weekly] [owner/repo].");
-      return;
-    }
-    if (!repo && (sender?.chatType === "group" || sender?.chatType === "supergroup")) {
-      // Changing everything is chat-wide: require admin, mirroring /unlink.
-      const status = sender?.telegramUserId
-        ? await getChatMemberStatus(chatId, sender.telegramUserId)
-        : null;
-      if (status !== "creator" && status !== "administrator") {
-        await sendMessage(chatId, "Only group admins may change this chat's subscriptions.");
-        return;
-      }
-    }
-    if (repo) {
-      const check = await checkBindAllowed(chatId, sender ?? {}, repo);
-      if (!check.ok) {
-        await sendMessage(
-          chatId,
-          check.reason === "group_needs_admin"
-            ? "Only group admins may change this chat's subscriptions."
-            : "You can't change this chat's subscription to that repo.",
-        );
-        return;
-      }
-    }
-    try {
-      const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
-      const where = chat
-        ? repo
-          ? await prisma.repo
-              .findUnique({ where: { fullName: repo }, select: { id: true } })
-              .then((r) => (r ? { chatId: chat.id, repoId: r.id } : null))
-          : { chatId: chat.id }
-        : null;
-      if (!where) {
-        await sendMessage(chatId, "This chat has no subscriptions.");
-        return;
-      }
-      const res = await prisma.subscription.updateMany({ where, data: { digestMode: mode } });
-      if (res.count === 0) {
-        await sendMessage(chatId, "This chat has no subscriptions.");
-        return;
-      }
-      await sendMessage(
-        chatId,
-        repo ? `<code>${repo}</code> → ${mode}.` : `All ${res.count} subscription(s) → ${mode}.`,
-      );
-    } catch {
-      await sendMessage(chatId, "Saving failed — try again soon.");
-    }
-    return;
-  }
-  await sendMessage(chatId, HELP);
 }
 
-type TgUpdate = {
-  update_id: number;
-  message?: { chat?: { id?: number; type?: string }; from?: { id?: number }; text?: string };
+export type CallbackQuery = {
+  id?: string;
+  data?: string;
+  from?: { id?: number };
+  message?: { message_id?: number; chat?: { id?: number; type?: string } };
 };
+
+/** A tap on an inline button: reuses the command handlers, so every permission
+ * rule (linked account, group admin) applies to a tap exactly as it does to text. */
+export async function handleCallback(query: CallbackQuery): Promise<void> {
+  const id = query.id;
+  const chatId = query.message?.chat?.id;
+  if (!id || chatId === undefined) return;
+  const chat = String(chatId);
+  const sender: Sender = {
+    telegramUserId: query.from?.id === undefined ? undefined : String(query.from.id),
+    chatType: query.message?.chat?.type,
+  };
+  const messageId = query.message?.message_id;
+  const [action, ...rest] = (query.data ?? "").split(":");
+  const value = rest.join(":");
+
+  let out: Reply = { ok: false, note: "That button is no longer supported" };
+  try {
+    if (action === "sub" && value) {
+      out = limited("bind", chat) ? TOO_MANY : await cmdBind(chat, sender, value);
+      // Redraw the list so ✓ marks and button labels stay truthful.
+      if (out.ok && messageId !== undefined) await cmdRepos(chat, sender, messageId);
+    } else if (action === "unsub" && value) {
+      out = limited("unlink", chat) ? TOO_MANY : await cmdUnlink(chat, sender, value);
+      if (out.ok && messageId !== undefined) await cmdRepos(chat, sender, messageId);
+    } else if (action === "digest" && value) {
+      const [mode, ...repoParts] = value.split(":");
+      const repo = repoParts.join(":");
+      // cmdDigest redraws the message itself when it is given the messageId.
+      out = limited("digest", chat)
+        ? TOO_MANY
+        : await cmdDigest(chat, sender, repo ? `${mode} ${repo}` : mode, messageId);
+    }
+  } catch (err) {
+    out = { ok: false, note: "Something went wrong — try again" };
+    console.warn(JSON.stringify({ msg: "telegram callback failed", err: String(err) }));
+  }
+  // Every tap must be answered, or the client spins that button forever.
+  await answerCallbackQuery(id, out.note);
+}
+
+export type InboundUpdate = {
+  update_id?: number;
+  message?: {
+    chat?: { id?: number; type?: string };
+    from?: { id?: number };
+    text?: string;
+  };
+  callback_query?: CallbackQuery;
+};
+
+/**
+ * The one place an update becomes work: both the Vercel webhook and the Render
+ * poller call this, so a tap and a command behave identically on either host.
+ */
+export async function dispatchUpdate(update: InboundUpdate): Promise<void> {
+  const query = update.callback_query;
+  if (query && query.id) {
+    await handleCallback(query);
+    return;
+  }
+  const chat = update.message?.chat?.id;
+  if (chat === undefined) return;
+  const fromId = update.message?.from?.id;
+  await handleMessage(String(chat), update.message?.text, {
+    telegramUserId: fromId === undefined ? undefined : String(fromId),
+    chatType: update.message?.chat?.type,
+  });
+}
 
 export type PollResult = { next: number; webhookActive: boolean };
 
@@ -408,22 +585,15 @@ export async function pollOnce(offset: number): Promise<PollResult> {
   // webhook, so this poller steps aside rather than hammering Telegram.
   if (res.status === 409) return { next: offset, webhookActive: true };
   if (!res.ok) return { next: offset, webhookActive: false };
-  const body = (await res.json()) as { ok: boolean; result?: TgUpdate[] };
+  const body = (await res.json()) as { ok: boolean; result?: InboundUpdate[] };
   if (!body.ok || !body.result) return { next: offset, webhookActive: false };
   let next = offset;
   for (const u of body.result) {
-    next = Math.max(next, u.update_id + 1);
-    const chat = u.message?.chat?.id;
-    if (chat !== undefined) {
-      try {
-        const fromId = u.message?.from?.id;
-        await handleMessage(String(chat), u.message?.text, {
-          telegramUserId: fromId === undefined ? undefined : String(fromId),
-          chatType: u.message?.chat?.type,
-        });
-      } catch {
-        // one bad message never kills the loop
-      }
+    next = Math.max(next, (u.update_id ?? 0) + 1);
+    try {
+      await dispatchUpdate(u);
+    } catch {
+      // one bad update never kills the loop
     }
   }
   return { next, webhookActive: false };

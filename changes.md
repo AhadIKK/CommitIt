@@ -1,5 +1,14 @@
 # Changes
 
+## 2026-10-17 — Bot UI: "/" autofill menu + inline buttons
+- **Autofill:** `BOT_COMMANDS` (`src/telegramUi.ts`) is registered with `setMyCommands`, so Telegram clients now autofill and describe all 7 commands as you type, and show the "/" menu button. Applied with `npm run bot:setup` (`src/setBotCommands.ts`) — idempotent, re-runnable after any menu edit. Verified live with `getMyCommands`.
+- **Buttons:** `/start`, `/link`, `/help` and the no-repos reply carry an "🌐 Open CommitIt" URL button (`APP_URL`, falling back to the deployed site). `/repos` gets one toggle per repo (`＋ o/r` subscribe / `✓ o/r` unsubscribe) and `/digest` gets Instant/Hourly/Daily/Weekly buttons.
+- **Taps reuse the text handlers.** `callback_query` → `handleCallback` → the same `cmdBind`/`cmdUnlink`/`cmdDigest`, so every rule (linked account required, group changes are admin-only, per-command rate limits) applies to a tap exactly as to typed text. A successful toggle rewrites its own message via `editMessageText`, so ✓ marks and labels stay truthful; every tap is answered with `answerCallbackQuery` or the client spins the button forever.
+- **One dispatcher:** `dispatchUpdate` now serves both the Vercel webhook and the Render poller, so commands and taps behave identically on either host (previously the message-dispatch logic was inlined in the webhook).
+- **Telegram limits enforced in one place:** ≤32 commands with valid names/descriptions, `callback_data` ≤64 bytes (a repo too long to fit keeps the typed `/bind` path instead of a button that Telegram would reject), toast text ≤190 chars.
+- `/help` is now listed in the help text (the autofill guard asserts the menu and help agree).
+- 50 files / 288 tests green; Vercel function count unchanged at 12/12.
+
 ## 2026-10-17 — Bot "not working": missing outbound token on Vercel
 - **Root cause:** `TELEGRAM_BOT_TOKEN` was never set on Vercel production. The webhook received updates correctly (Telegram: `pending_update_count: 0`, no delivery errors; Vercel logged the calls), the command handler ran, and `sendMessage()` hit its no-token branch — returning `{ok:true, placeholder:true}` and logging nothing. Every reply was silently discarded, and the fake `ok:true` hid it from every caller.
 - **Verified inbound end-to-end** without messaging a human: issued a link token via `/api/link?op=issue`, posted a `/start <token>` update from a fake chat id, and watched the token flip to claimed in the DB — only reachable if Vercel parsed the body, dispatched `handleMessage`, and wrote to Postgres.

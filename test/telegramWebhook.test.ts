@@ -3,10 +3,10 @@ import type { ServerResponse } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleTelegramWebhook, type VercelRequest } from "../src/telegramWebhook.js";
 
-// handleMessage is mocked out: this suite is about the HTTP gate, not command
-// handling (which telegramBot.test.ts covers).
-const mocks = vi.hoisted(() => ({ handleMessage: vi.fn(async () => {}) }));
-vi.mock("../src/telegramBot.js", () => ({ handleMessage: mocks.handleMessage }));
+// dispatchUpdate is mocked out: this suite is about the HTTP gate and body
+// parsing, not command handling (telegramButtons.test.ts covers dispatch).
+const mocks = vi.hoisted(() => ({ dispatchUpdate: vi.fn(async () => {}) }));
+vi.mock("../src/telegramBot.js", () => ({ dispatchUpdate: mocks.dispatchUpdate }));
 
 const SECRET = "s3cret-token";
 
@@ -52,7 +52,7 @@ const message = (text: string) =>
 const authed = { "x-telegram-bot-api-secret-token": SECRET };
 
 beforeEach(() => {
-  mocks.handleMessage.mockClear();
+  mocks.dispatchUpdate.mockClear();
 });
 
 afterEach(() => {
@@ -74,7 +74,7 @@ describe("telegram webhook gate", () => {
       status: 503,
       body: { ok: false, error: "webhook_not_configured" },
     });
-    expect(mocks.handleMessage).not.toHaveBeenCalled();
+    expect(mocks.dispatchUpdate).not.toHaveBeenCalled();
   });
 
   it("401s on a wrong secret", async () => {
@@ -85,7 +85,7 @@ describe("telegram webhook gate", () => {
       res,
     );
     expect(await done).toEqual({ status: 401, body: { ok: false, error: "bad_secret" } });
-    expect(mocks.handleMessage).not.toHaveBeenCalled();
+    expect(mocks.dispatchUpdate).not.toHaveBeenCalled();
   });
 
   it("401s when the header is absent entirely", async () => {
@@ -108,34 +108,59 @@ describe("telegram webhook dispatch", () => {
     const { res, done } = mockRes();
     await handleTelegramWebhook(parsedReq(JSON.parse(message("/start abc")), authed), res);
     expect(await done).toEqual({ status: 200, body: { ok: true } });
-    expect(mocks.handleMessage).toHaveBeenCalledWith("99", "/start abc", {
-      telegramUserId: "42",
-      chatType: "private",
-    });
+    expect(mocks.dispatchUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({ text: "/start abc" }),
+      }),
+    );
   });
 
   it("falls back to the raw stream when no parsed body exists", async () => {
     const { res, done } = mockRes();
     await handleTelegramWebhook(streamReq(message("/repos"), authed), res);
     expect(await done).toEqual({ status: 200, body: { ok: true } });
-    expect(mocks.handleMessage).toHaveBeenCalledWith("99", "/repos", {
-      telegramUserId: "42",
-      chatType: "private",
-    });
+    expect(mocks.dispatchUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.objectContaining({ text: "/repos" }) }),
+    );
   });
 
   it("accepts a stringified body", async () => {
     const { res, done } = mockRes();
     await handleTelegramWebhook(parsedReq(message("/link"), authed), res);
     expect(await done).toEqual({ status: 200, body: { ok: true } });
-    expect(mocks.handleMessage).toHaveBeenCalledWith("99", "/link", expect.anything());
+    expect(mocks.dispatchUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches a button tap (callback_query) too", async () => {
+    const { res, done } = mockRes();
+    await handleTelegramWebhook(
+      parsedReq(
+        {
+          update_id: 9,
+          callback_query: {
+            id: "cb-1",
+            data: "sub:o/r",
+            from: { id: 42 },
+            message: { message_id: 5, chat: { id: 99, type: "private" } },
+          },
+        },
+        authed,
+      ),
+      res,
+    );
+    expect(await done).toEqual({ status: 200, body: { ok: true } });
+    expect(mocks.dispatchUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callback_query: expect.objectContaining({ data: "sub:o/r" }),
+      }),
+    );
   });
 
   it("200s poison updates instead of retry-storming", async () => {
     const { res, done } = mockRes();
     await handleTelegramWebhook(streamReq("{{not json", authed), res);
     expect(await done).toEqual({ status: 200, body: { ok: true } });
-    expect(mocks.handleMessage).not.toHaveBeenCalled();
+    expect(mocks.dispatchUpdate).not.toHaveBeenCalled();
   });
 
   it("200s non-message updates without dispatching", async () => {
@@ -145,11 +170,11 @@ describe("telegram webhook dispatch", () => {
       res,
     );
     expect(await done).toEqual({ status: 200, body: { ok: true } });
-    expect(mocks.handleMessage).not.toHaveBeenCalled();
+    expect(mocks.dispatchUpdate).not.toHaveBeenCalled();
   });
 
   it("200s even when the command handler throws", async () => {
-    mocks.handleMessage.mockRejectedValueOnce(new Error("db down"));
+    mocks.dispatchUpdate.mockRejectedValueOnce(new Error("db down"));
     const { res, done } = mockRes();
     await handleTelegramWebhook(parsedReq(JSON.parse(message("/start")), authed), res);
     expect(await done).toEqual({ status: 200, body: { ok: true } });

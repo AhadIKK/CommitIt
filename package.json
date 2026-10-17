@@ -9,6 +9,7 @@
     "postinstall": "prisma generate",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "bot:setup": "tsx src/setBotCommands.ts",
     "dashboard:dev": "vite --config dashboard/vite.config.ts",
     "dashboard:build": "vite build --config dashboard/vite.config.ts"
   },
