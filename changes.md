@@ -1,5 +1,16 @@
 # Changes
 
+## 2026-10-17 — Why the site was slow: functions in US-East, database in Seoul
+- **Root cause of both "slow to load" and the 8-12s after linking:** functions ran in `iad1` (Washington, D.C. — Vercel's default) while Postgres lives in `ap-northeast-2` (Seoul). Every DB round trip crossed the planet (~190ms each way), and the OAuth callback `await`s `syncUserInstalls()`, which writes one row per repo.
+- **Measured, not guessed:** `/api/health` and `/api/meta` — which touch no database — sat at 410-660ms TTFB and never improved across six rapid hits. That is a floor, not warm-up. `X-Vercel-Id: bom1::iad1::…` showed the Mumbai edge handing off to a US-East function.
+- **Fix 1 — `"regions": ["icn1"]`** in `vercel.json`. `icn1` *is* `ap-northeast-2`: the same AWS region as the database, so DB round trips drop from ~380ms to single-digit ms. Hobby allows exactly one function region.
+- **Fix 2 — the worker wake no longer holds the request hostage.** `pingWorker()` was capped at 5s and awaited on the login path. Render wakes on the incoming *connection*, so waiting for the `/health` response only added boot time to whoever was waiting. Cap is now 1.5s.
+- **Fix 3 — one less GitHub call per login.** `syncUserInstalls()` fetched each installation individually just to get `accountType`, which GitHub already returns on the app-installation listing — and which nothing in the codebase reads. `AppInstallation` now carries it and the per-install fetch is gone.
+- **Fix 4 — the browser stopped revalidating static assets.** Content-hashed `/assets/*` were served `public, max-age=0, must-revalidate`; now `immutable` for a year. `favicon.svg`/`llms.txt` get a day, and the HTML gains `stale-while-revalidate=60`.
+- 54 files / 330 tests green; function count unchanged at 12/12.
+
+**Still open (next):** the dashboard fires five API calls in two waves — `fetchMe()` resolves first and only then do the four data calls start. Collapsing them behind one function (via `vercel.json` rewrites, so no client path changes) is the remaining structural win, and it drops 12 functions to 8.
+
 ## 2026-10-17 — Dashboard: digest bodies render as content, not markup
 - The Digests timeline printed `notification.body` as a plain text child, but that body is Telegram parse-mode HTML (`src/formatter.ts` emits `<b>`/`<code>`/`<a>`), so the card read `📊 <b>mohd-Affan16/Cloud-ai</b> — api-working`. Reported from a phone screenshot.
 - New `dashboard/src/telegramHtml.ts` flattens that subset into styled spans: `b`/`strong` → bold, `i`/`em` → italic, `code`/`pre` → code, `a` → link. Unknown tags are dropped with their text kept; entities are decoded (`&amp;` last, so `&amp;lt;` stays a literal `&lt;`).

@@ -5,7 +5,7 @@ import {
   attributeInstallToSender,
   buildAppJwt,
   fetchAppInstallations,
-  selectUserInstallations,
+  matchUserInstallations,
   type AppInstallation,
   type InstallationChange,
 } from "./githubApp.js";
@@ -449,8 +449,8 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
     if (code === "app_not_configured") return syncFail("app_not_configured", "app_list", err);
     return syncFail("github_error", "app_list", err);
   }
-  const ids = selectUserInstallations(installs, login);
-  if (ids.length === 0) return { synced: 0, status: "no_installs" };
+  const mine = matchUserInstallations(installs, login);
+  if (mine.length === 0) return { synced: 0, status: "no_installs" };
   let keys;
   try {
     keys = appKeys();
@@ -465,9 +465,9 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
   }
   let done = 0;
   let woken = false;
-  for (const id of ids) {
+  for (const inst of mine) {
+    const id = inst.id;
     try {
-      const inst = await fetchAppInstallation(id);
       let repos: string[];
       try {
         repos = await listInstallRepos(id, jwt);
@@ -501,8 +501,11 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
         installationId: id,
         repos,
         senderLogin: login,
-        accountLogin: inst?.accountLogin ?? login,
-        accountType: inst?.accountType ?? null,
+        // Both fields come from the installation listing already in hand, so
+        // this no longer needs its own GitHub call. That call sat in the OAuth
+        // callback path and cost ~250ms per install for a column nothing reads.
+        accountLogin: inst.accountLogin ?? login,
+        accountType: inst.accountType,
       });
       await prisma.userInstallation.upsert({
         where: { userId_installationId: { userId, installationId: id } },

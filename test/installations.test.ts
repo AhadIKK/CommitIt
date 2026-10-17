@@ -436,4 +436,47 @@ describe("install lifecycle", () => {
       globalThis.fetch = savedFetch;
     }
   });
+
+  it("sync needs no per-installation GitHub call", async () => {
+    reset();
+    const saved = { ...process.env };
+    const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    process.env.GITHUB_APP_ID = "42";
+    process.env.GITHUB_APP_PRIVATE_KEY_BASE64 = Buffer.from(
+      privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    ).toString("base64");
+    const savedFetch = globalThis.fetch;
+    const targets: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      targets.push(target);
+      if (target.endsWith("/app/installations?per_page=100")) {
+        return new Response(
+          JSON.stringify([{ id: 77, account: { login: "AhadIKK", type: "User" } }]),
+          { status: 200 },
+        );
+      }
+      if (target.includes("/app/installations/77/repositories")) {
+        return new Response(JSON.stringify({ repositories: [{ full_name: "o/r" }] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    try {
+      await expect(syncUserInstalls("AhadIKK")).resolves.toEqual({ synced: 1, status: "synced" });
+      // Exactly two GitHub calls: the app listing and the repo list. The third
+      // (per-install metadata) sat in the OAuth callback path; accountType now
+      // rides along on the listing instead.
+      expect(targets.filter((t) => t.includes("api.github.com"))).toHaveLength(2);
+      expect(targets.some((t) => t.endsWith("/app/installations/77"))).toBe(false);
+      const upsert = calls.find((c) => c.op === "installation.upsert");
+      expect((upsert?.args as { create: { accountType: string | null } }).create.accountType).toBe(
+        "User",
+      );
+    } finally {
+      process.env = saved;
+      globalThis.fetch = savedFetch;
+    }
+  });
 });

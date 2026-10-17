@@ -188,11 +188,17 @@ function appCredentials(): { appId: string; privateKeyPem: string } {
 const AppInstallationsResponse = z.array(
   z.object({
     id: z.number(),
-    account: z.object({ login: z.string() }).nullish(),
+    account: z.object({ login: z.string(), type: z.string().nullish() }).nullish(),
   }),
 );
 
-export type AppInstallation = { id: bigint; accountLogin: string | null };
+// accountType comes along for free: GitHub returns it on this same listing, so
+// the login-time sync never needs a second per-installation call for it.
+export type AppInstallation = {
+  id: bigint;
+  accountLogin: string | null;
+  accountType: string | null;
+};
 
 /** List all installations of this App (authenticates as the App via JWT). */
 export async function fetchAppInstallations(): Promise<AppInstallation[]> {
@@ -208,7 +214,20 @@ export async function fetchAppInstallations(): Promise<AppInstallation[]> {
   if (!res.ok) throw new Error(`app_installations_${res.status}`);
   const parsed = AppInstallationsResponse.safeParse(await res.json());
   if (!parsed.success) throw new Error("app_installations_invalid");
-  return parsed.data.map((i) => ({ id: BigInt(i.id), accountLogin: i.account?.login ?? null }));
+  return parsed.data.map((i) => ({
+    id: BigInt(i.id),
+    accountLogin: i.account?.login ?? null,
+    accountType: i.account?.type ?? null,
+  }));
+}
+
+/** Pure: the installations belonging to this GitHub login. */
+export function matchUserInstallations(
+  installations: AppInstallation[],
+  login: string,
+): AppInstallation[] {
+  const want = login.toLowerCase();
+  return installations.filter((i) => i.accountLogin?.toLowerCase() === want);
 }
 
 /** Pure: which installation ids belong to this GitHub login. */
@@ -216,10 +235,7 @@ export function selectUserInstallations(
   installations: AppInstallation[],
   login: string,
 ): bigint[] {
-  const want = login.toLowerCase();
-  return installations
-    .filter((i) => i.accountLogin?.toLowerCase() === want)
-    .map((i) => i.id);
+  return matchUserInstallations(installations, login).map((i) => i.id);
 }
 
 type AttributionDb = Pick<PrismaClient, "repo" | "user" | "userInstallation">;
