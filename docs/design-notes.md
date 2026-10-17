@@ -9,7 +9,8 @@ revisions are in `docs/design-plan.md`; the skills log, conflicts and checkpoint
 
 ## 1. What was built
 
-Twenty commits on the branch, one decision each, all Conventional:
+Thirty commits on the branch, one decision each, all Conventional (the branch also carries one unrelated
+`feat(bot):` commit that was already here before this pass):
 
 | Commit | What it is |
 |---|---|
@@ -26,6 +27,10 @@ Twenty commits on the branch, one decision each, all Conventional:
 | `538976e` | `feat(dashboard): mount the app frame and the routes` |
 | `33f7711` | `test(dashboard): cover weights, formatting, digests and colour contrast` |
 | `f545402` | `test(dashboard): smoke every screen on mobile and desktop in both themes` |
+| `28ecbfe` | `test(dashboard): guard narrow layouts and capture the state matrix` |
+| `3f0d042` … `cb8df1d` | The critique pass: the digest separator, the owner avatar, the goals redundancy, the secret alert's copy, the unrendered model shapes |
+| `95f30a6` | `refactor(dashboard): fix the 360px layouts and drop inline styles` |
+| `d32d136`, `25f103d` | The docs: design notes, api needs, Lighthouse, this checklist |
 
 Then the critique pass (§4 below) and the state-matrix captures. Files:
 
