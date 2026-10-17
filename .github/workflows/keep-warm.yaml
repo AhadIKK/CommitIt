@@ -1,21 +1,49 @@
-# Keep-warm: Render free sleeps after ~15 min idle, which pauses the worker
-# (Telegram inbound, backfill, digests) until traffic wakes it. This pings
-# /health every 10 minutes so the instance stays warm through tester rounds.
-# Revisit when traffic justifies paid hosting or Telegram webhook mode.
+# Keep-warm for Render's free instance.
+#
+# Why this loop instead of a plain every-10-minutes cron: GitHub fires
+# `schedule` events on a best-effort basis and drops/delays high-frequency
+# crons hard. With `*/10` this workflow produced 5 runs in 13 hours (gaps of
+# 2-4.5h), so Render hibernated ~15 min after each ping and the Telegram
+# poller, backfill and digests went dark in between.
+#
+# Instead: one job per 6h that pings every 10 min for ~5h50m. A running job is
+# never throttled, so only the job START can be delayed. Render's idle timeout
+# is 15 min, so a scheduling delay of up to ~20 min still leaves it warm.
+#
+# Cost is free: GitHub Actions minutes are unlimited for public repositories.
+# Revisit once traffic justifies paid hosting.
 name: keep-warm
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch: {}
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 358
     steps:
-      - name: Ping Render health
+      - name: Ping Render health every 10 minutes for ~5h50m
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://commitit-brqq.onrender.com/health)
-          echo "health=$code"
-          test "$code" = "200"
+          set -u
+          deadline=$((SECONDS + 21000))   # 5h50m < the 6h job ceiling
+          streak=0
+          longest=0
+          pings=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
+              https://commitit-brqq.onrender.com/health || true)
+            pings=$((pings + 1))
+            if [ "$code" = "200" ]; then
+              streak=0
+            else
+              streak=$((streak + 1))
+              [ "$streak" -gt "$longest" ] && longest=$streak
+            fi
+            echo "$(date -u +%FT%TZ) health=$code streak=$streak"
+            sleep 600
+          done
+          echo "pings=$pings longest_failure_streak=$longest"
+          # 3 misses = 30 min unreachable: a real outage, not a cold start.
+          test "$longest" -lt 3

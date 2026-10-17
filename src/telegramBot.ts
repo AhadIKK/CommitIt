@@ -6,8 +6,12 @@ import { claimLinkToken } from "./linkTokens.js";
 import { isDigestMode } from "./notifyPrefs.js";
 import { sendMessage } from "./telegram.js";
 
-// Telegram inbound: getUpdates long-poll loop (Render service only;
-// Vercel serverless never polls). Chat linking + repo binding:
+// Telegram inbound: primary path is the Vercel webhook
+// (src/telegramWebhook.ts, /api/telegram). The getUpdates long-poll loop below
+// is the FALLBACK (Render service only; Vercel serverless never polls). It
+// detects that a webhook is registered (HTTP 409) and idles on a slow tick, so
+// it costs nothing while the webhook lives and resumes automatically if the
+// webhook is ever deleted. Commands:
 // - /start <token> — claims a website-issued deep-link token (hash-only)
 // - /link — issues a short code bound to this chat (backup flow, legacy)
 // - /repos — repos your linked GitHub account can access (+ bound marks)
@@ -392,15 +396,20 @@ type TgUpdate = {
   message?: { chat?: { id?: number; type?: string }; from?: { id?: number }; text?: string };
 };
 
-export async function pollOnce(offset: number): Promise<number> {
+export type PollResult = { next: number; webhookActive: boolean };
+
+export async function pollOnce(offset: number): Promise<PollResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN ?? "";
-  if (!token) return offset;
+  if (!token) return { next: offset, webhookActive: false };
   const res = await fetch(
     `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=25`,
   );
-  if (!res.ok) return offset;
+  // 409 = "can't use getUpdates while webhook is active": inbound is on the
+  // webhook, so this poller steps aside rather than hammering Telegram.
+  if (res.status === 409) return { next: offset, webhookActive: true };
+  if (!res.ok) return { next: offset, webhookActive: false };
   const body = (await res.json()) as { ok: boolean; result?: TgUpdate[] };
-  if (!body.ok || !body.result) return offset;
+  if (!body.ok || !body.result) return { next: offset, webhookActive: false };
   let next = offset;
   for (const u of body.result) {
     next = Math.max(next, u.update_id + 1);
@@ -417,12 +426,13 @@ export async function pollOnce(offset: number): Promise<number> {
       }
     }
   }
-  return next;
+  return { next, webhookActive: false };
 }
 
 export function startBotPolling(
   log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void },
   intervalMs = 1000,
+  webhookRetryMs = 60_000,
 ): NodeJS.Timeout | null {
   if (!process.env.TELEGRAM_BOT_TOKEN) {
     log.info({}, "TELEGRAM_BOT_TOKEN not set — bot inbound disabled");
@@ -430,11 +440,26 @@ export function startBotPolling(
   }
   let offset = 0;
   let busy = false;
+  let nextTick = 0;
+  let webhookMode = false;
   const timer = setInterval(async () => {
-    if (busy) return;
+    if (busy || Date.now() < nextTick) return;
     busy = true;
     try {
-      offset = await pollOnce(offset);
+      const out = await pollOnce(offset);
+      offset = out.next;
+      if (out.webhookActive !== webhookMode) {
+        webhookMode = out.webhookActive;
+        log.info(
+          {},
+          webhookMode
+            ? "telegram webhook active — polling backed off (standby)"
+            : "telegram webhook gone — polling resumed",
+        );
+      }
+      // Standby: inbound belongs to the webhook. Re-checking on a slow tick
+      // means deleting the webhook restores polling by itself.
+      if (out.webhookActive) nextTick = Date.now() + webhookRetryMs;
     } catch (err) {
       log.error({ err }, "bot poll failed");
     } finally {

@@ -1,5 +1,15 @@
 # Changes
 
+## 2026-10-17 — Telegram webhook primary (12/12 intact) + keep-warm cron fixed
+- **Root cause of the intermittent bot:** the `*/10` keep-warm cron never ran every 10 min — GitHub produced 5 runs in 13h (2–4.5h gaps), so Render hibernated ~15 min after each ping and the bot was dead ~95% of the time. Every `Server listening` in the Render logs matched a cron tick on a brand-new pod (cold start), confirming the duty cycle.
+- **Inbound moved to Vercel (primary):** `src/telegramWebhook.ts` + a `telegram` action on the existing `api/auth/[action].ts` dynamic function, reachable at `/api/telegram` via a `vercel.json` rewrite. **Function count unchanged at 12/12** — no new file under `api/`. Vercel never sleeps, so replies are instant 24/7.
+- **Polling is the automatic fallback:** on HTTP 409 ("can't use getUpdates while webhook is active") the Render poller backs off to a 60s standby tick and logs the transition; deleting the webhook resumes it within 60s, no redeploy or env flag.
+- **Body-parsing bug fixed** (would have silently dropped every update): Vercel drains the request stream to parse JSON, so the handler prefers the pre-parsed `req.body` and only reads the stream when it is absent.
+- **Keep-warm rewritten as a long loop:** one job per 6h pinging every 10 min for ~5h50m. A running job is never throttled, so only the start can be delayed, and Render's 15-min idle timeout absorbs that. Free (public repo). Fails the run only after 3 consecutive misses (30 min = real outage).
+- Auth on the webhook: `TELEGRAM_WEBHOOK_SECRET` (rotated), timing-safe compare, 503 when unset, 401 on mismatch, always 200 past the gate so poison updates can't retry-storm.
+- Tests: webhook gate/dispatch (incl. the pre-parsed-body regression), poller standby/resume, and route reachability. 44 files / 229 green.
+
+
 ## 2026-10-17 — Orphaned `processing` jobs are reclaimed, not lost
 - Root cause: `claimNextJob()` only selects `status = 'queued'`, so a job held when the instance died (Render free sleep/deploy/crash) stayed `processing` forever and its event was silently lost. Live DB had 5 such zombies (1 backfill ~5.6 days, 4 push up to ~24.7h), all `attempts=1`.
 - `reclaimStuckJobs()` (`queue.ts`) lease-times-out `processing` rows older than `JOB_STALE_MS` (default 10 min) back to `queued`, clearing `nextRetryAt`. Worker runs it on boot (fresh process ⇒ anything still processing is orphaned) and every ~2 min, logging `jobs_reclaimed_stale`.

@@ -28,10 +28,13 @@ import {
   registerInstallFromSetup,
   syncUserInstalls,
 } from "../../src/installations.js";
+import { handleTelegramWebhook } from "../../src/telegramWebhook.js";
 
-// Dynamic auth route: /api/auth/login (+ legacy /api/auth/github),
+// Dynamic route: /api/auth/login (+ legacy /api/auth/github),
 // /api/auth/callback, /api/auth/logout share ONE serverless function
-// (Vercel Hobby caps at 12 per deployment).
+// (Vercel Hobby caps at 12 per deployment). Telegram's inbound webhook rides
+// the same function as action "telegram" (rewritten from /api/telegram) so it
+// costs no extra function slot.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
@@ -268,6 +271,10 @@ export default async function handler(
   }
   if (action === "logout") {
     await logout(req, res);
+    return;
+  }
+  if (action === "telegram") {
+    await handleTelegramWebhook(req, res);
     return;
   }
   sendJson(res, 404, { ok: false, error: "not_found" });
