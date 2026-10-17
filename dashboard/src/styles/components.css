@@ -1,0 +1,854 @@
+/* ============================================================================
+   Components — buttons, fields, switches, segmented controls, banners, chips,
+   the Goal Track node, avatars, the digest bubble, skeletons, state panels and
+   commit rows. Nothing here sets a raw colour; everything resolves through a
+   token. No drop shadows anywhere: depth is a tonal step plus one hairline.
+   ========================================================================== */
+
+/* --- the one rule --------------------------------------------------------- */
+.rule {
+  border: 0;
+  border-top: var(--hairline) solid var(--line);
+}
+/* a rule that begins at the node column, so the eye follows one line */
+.rule--column {
+  margin-left: var(--node-col);
+}
+:root {
+  --node-col: 2.25rem; /* 36px: the node column the track and rows align to */
+}
+
+/* --- buttons -------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  border: var(--edge-width) solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--type-small);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-press) var(--ease-out),
+    border-color var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out),
+    opacity var(--dur-press) var(--ease-out);
+}
+/* touch targets: 44px wherever a finger is doing the pointing */
+@media (pointer: coarse) {
+  .btn {
+    min-height: 2.75rem;
+  }
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+/* pressed feedback changes paint, never layout bounds (pro-rules) */
+.btn:not(:disabled):active {
+  opacity: 0.78;
+}
+
+.btn--primary {
+  background: var(--btn-bg);
+  color: var(--btn-ink);
+}
+.btn--primary:not(:disabled):not([aria-disabled="true"]):hover {
+  opacity: 0.9;
+}
+
+.btn--quiet {
+  border-color: var(--edge);
+  color: var(--ink);
+  background: var(--btn-quiet-bg);
+}
+.btn--quiet:not(:disabled):hover {
+  background: var(--surface);
+}
+
+.btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn--danger:not(:disabled):hover {
+  background: var(--surface);
+}
+
+/* text-only action: an action that belongs to a line of content */
+.btn--inline {
+  min-height: 1.5rem;
+  padding: 0;
+  border: 0;
+  font-size: var(--type-small);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+}
+.btn--inline:not(:disabled):hover {
+  opacity: 0.75;
+}
+.btn--inline:active {
+  opacity: 0.6;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* --- fields --------------------------------------------------------------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 32rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.field__label {
+  font-size: var(--type-small);
+  font-weight: 600;
+}
+.field__input,
+.field__select {
+  min-height: 2.75rem;
+  padding: 0 var(--space-3);
+  background: var(--field-bg);
+  border: var(--edge-width) solid var(--field-line);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+.field__select {
+  cursor: pointer;
+}
+.field__hint {
+  font-size: var(--type-small);
+  color: var(--muted);
+  max-width: 40ch;
+}
+.field__error {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--type-small);
+  font-weight: 500;
+  color: var(--danger);
+}
+.field--invalid .field__input {
+  border-color: var(--danger);
+}
+
+/* the focusable summary a multi-error submit moves focus to */
+.error-summary {
+  border: var(--edge-width) solid var(--danger);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  padding: var(--space-4);
+  max-width: 36rem;
+}
+.error-summary h3 {
+  font-size: var(--type-subhead);
+  margin-bottom: var(--space-2);
+}
+.error-summary li {
+  margin-top: var(--space-2);
+}
+.error-summary a {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+/* --- switch (role="switch") ---------------------------------------------- */
+.switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.switch__track {
+  flex: none;
+  width: 2.5rem;
+  height: 1.375rem;
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 2px;
+  transition:
+    background-color var(--dur-state) var(--ease-out),
+    border-color var(--dur-state) var(--ease-out);
+}
+.switch__thumb {
+  display: block;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform var(--dur-state) var(--ease-out),
+    background-color var(--dur-state) var(--ease-out);
+}
+.switch[aria-checked="true"] .switch__track {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.switch[aria-checked="true"] .switch__thumb {
+  background: var(--on-ink);
+  transform: translateX(1.125rem);
+}
+.switch__label {
+  font-size: var(--type-small);
+  font-weight: 500;
+}
+
+/* --- checkbox row --------------------------------------------------------- */
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  cursor: pointer;
+  font-size: var(--type-small);
+  font-weight: 500;
+}
+.check input[type="checkbox"] {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+/* --- segmented control (radiogroup) ------------------------------------- */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.segmented__option {
+  position: relative;
+  min-height: 2.75rem;
+  padding: 0 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--type-body);
+  font-weight: 500;
+  cursor: pointer;
+}
+.segmented__option::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: transparent;
+  transition: background-color var(--dur-state) var(--ease-out);
+}
+.segmented__option[aria-checked="true"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.segmented__option[aria-checked="true"]::after {
+  background: var(--ink);
+}
+
+/* --- banner (severity carries icon + word + colour) --------------------- */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-4);
+  background: var(--surface);
+  border-top: 3px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.banner--danger {
+  border-top-color: var(--danger);
+}
+.banner--warn {
+  border-top-color: var(--warn);
+}
+.banner--info {
+  border-top-color: var(--edge);
+}
+.banner__body {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+.banner__title {
+  font-family: var(--font-ui);
+  font-size: var(--type-body);
+  font-weight: 600;
+}
+.banner__detail {
+  margin-top: var(--space-1);
+  font-size: var(--type-small);
+  color: var(--muted);
+  max-width: var(--measure);
+}
+.banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+/* --- severity mark: glyph + word, never colour alone -------------------- */
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.mark--danger {
+  color: var(--danger);
+}
+.mark--warn {
+  color: var(--warn);
+}
+.mark--signal {
+  color: var(--signal);
+}
+.mark--muted {
+  color: var(--muted);
+}
+
+/* --- "new since you last looked" --------------------------------------- */
+.new-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--signal);
+  flex: none;
+}
+.is-new {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--signal);
+  font-size: var(--type-micro);
+  font-weight: 600;
+}
+
+/* --- avatar: initials in a squared chip, not a coloured circle ---------- */
+.avatar {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the Goal Track ----------------------------------------------------- */
+.goal-track {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.track-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.track-scroll::-webkit-scrollbar {
+  display: none;
+}
+.track {
+  --track-node-s: 0.625rem; /* 10 — weight 1 */
+  --track-node-m: 1rem; /* 16 — weight 3 */
+  --track-node-l: 1.5rem; /* 24 — weight 5 */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  width: max-content;
+  min-width: 100%;
+}
+.track__item {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+/* the rail carries the line, so the line and its fill are sized by the rail
+   rather than by the scroll container */
+.track__rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.track__line,
+.track__fill {
+  position: absolute;
+  border-radius: 1px;
+}
+.track__line {
+  inset: 0;
+  background: var(--line);
+}
+.track__fill {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--track-fill, 0%);
+  background: var(--ink);
+  transform-origin: left center;
+}
+.track[data-filled="true"] .track__fill {
+  animation: track-fill var(--dur-track) var(--ease-out) forwards;
+}
+@keyframes track-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+/* reduced motion: the end state is simply there, with no animation at all */
+@media (prefers-reduced-motion: reduce) {
+  .track__fill {
+    animation: none !important;
+  }
+}
+
+.track__node {
+  position: relative;
+  z-index: var(--z-track-node);
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.75rem; /* 44px hit area; the visible node stays small */
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.track__node:hover,
+.track__node:focus-visible {
+  text-decoration: none;
+}
+.track__dot {
+  display: block;
+  border-radius: 50%;
+  background: var(--node-base);
+  border: 2px solid var(--node-open);
+  transition:
+    background-color var(--dur-state) var(--ease-out),
+    border-color var(--dur-state) var(--ease-out);
+}
+.track__node[data-weight="1"] .track__dot {
+  width: var(--track-node-s);
+  height: var(--track-node-s);
+}
+.track__node[data-weight="3"] .track__dot {
+  width: var(--track-node-m);
+  height: var(--track-node-m);
+}
+.track__node[data-weight="5"] .track__dot {
+  width: var(--track-node-l);
+  height: var(--track-node-l);
+}
+.track__node[data-state="closed"] .track__dot {
+  background: var(--node-filled);
+  border-color: var(--node-filled);
+}
+.track__node[data-state="open"] .track__dot {
+  background: var(--node-base);
+}
+/* unestimated: a dashed ring, and it counts as 1 point */
+.track__node[data-estimated="false"] .track__dot {
+  border-style: dashed;
+  border-color: var(--node-unknown);
+}
+.track__node[data-new="true"] .track__dot {
+  position: relative;
+}
+.track__node[data-new="true"] .track__dot::after {
+  content: "";
+  position: absolute;
+  top: -0.1875rem;
+  right: -0.1875rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--signal);
+}
+.track__node:hover .track__dot,
+.track__node:focus-visible .track__dot {
+  border-color: var(--ink);
+}
+.track__node:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* vertical rail, like a git log --graph (mobile is the primary screen) */
+.track-scroll[data-orientation="vertical"] {
+  overflow: visible;
+}
+.track[data-orientation="vertical"] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  width: auto;
+  min-width: 0;
+  padding: 0;
+}
+.track[data-orientation="vertical"] .track__item {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+}
+.track[data-orientation="vertical"] .track__rail {
+  left: 1.375rem;
+  right: auto;
+  top: 1.375rem;
+  bottom: 1.375rem;
+  width: 2px;
+  height: auto;
+  transform: translateX(-1px);
+}
+.track[data-orientation="vertical"] .track__fill {
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: auto;
+  width: 100%;
+  height: var(--track-fill, 0%);
+  transform-origin: top center;
+}
+.track[data-orientation="vertical"][data-filled="true"] .track__fill {
+  animation: track-fill-y var(--dur-track) var(--ease-out) forwards;
+}
+@keyframes track-fill-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .track[data-orientation="vertical"] .track__fill {
+    animation: none !important;
+  }
+}
+.track__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--type-small);
+}
+.track__number {
+  font-family: var(--font-code);
+  font-size: var(--type-code);
+  color: var(--muted);
+}
+.track__title {
+  overflow-wrap: anywhere;
+}
+.track__weight {
+  font-size: var(--type-micro);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* the one sentence beside the track */
+.track-caption {
+  margin-top: var(--space-4);
+}
+
+/* what the hovered or focused node is: an in-flow line, never a floating
+   tooltip, so it cannot obscure focus and always has a keyboard path */
+.track__inspector {
+  min-height: 2.5rem;
+  padding-top: var(--space-2);
+  border-top: var(--hairline) solid var(--line);
+}
+.track__inspector-title {
+  font-size: var(--type-small);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* --- the digest bubble: the logo's bubble shape, at message scale ------- */
+.bubble {
+  position: relative;
+  background: var(--bubble-bg);
+  border: var(--edge-width) solid var(--bubble-line);
+  border-radius: var(--radius-bubble);
+  padding: var(--space-4);
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: var(--space-6);
+  bottom: -0.4375rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  background: var(--bubble-bg);
+  border-right: var(--hairline) solid var(--bubble-line);
+  border-bottom: var(--hairline) solid var(--bubble-line);
+  transform: rotate(45deg);
+  border-bottom-right-radius: 2px;
+}
+.bubble__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--type-small);
+  font-weight: 600;
+  padding-bottom: var(--space-3);
+  border-bottom: var(--hairline) solid var(--line);
+  margin-bottom: var(--space-3);
+}
+.bubble__body {
+  font-size: var(--type-small);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 46ch;
+}
+
+/* --- skeleton: shaped like the thing it replaces ----------------------- */
+.skeleton {
+  background: var(--surface);
+  border-radius: var(--radius-1);
+  animation: skeleton-pulse 1.4s var(--ease-out) infinite;
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+  }
+}
+.skeleton--line {
+  height: 0.875rem;
+}
+.skeleton--line-sm {
+  height: 0.75rem;
+  width: 40%;
+}
+.skeleton--node {
+  border-radius: 50%;
+}
+.skeleton--display {
+  height: 2.5rem;
+}
+
+/* --- state panel: empty / error / partial ------------------------------ */
+.state {
+  padding: var(--space-8) 0;
+  max-width: var(--measure-narrow);
+}
+.state__title {
+  font-size: var(--type-subhead);
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+.state__body {
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.state__action {
+  margin-top: var(--space-4);
+}
+
+/* --- commit row -------------------------------------------------------- */
+.row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) 0;
+  align-items: baseline;
+}
+@media (min-width: 48rem) {
+  .row {
+    grid-template-columns: 5.5rem minmax(0, 1fr) 5.5rem 6rem;
+  }
+}
+.row + .row {
+  border-top: var(--hairline) solid var(--line);
+  margin-left: var(--node-col);
+}
+.row__cat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  color: var(--muted);
+}
+.row__subject {
+  min-width: 0;
+}
+.row__ai {
+  display: block;
+  font-size: var(--type-body);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.row__original {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--type-small);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.row__feedback {
+  display: inline-flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.row__sha {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.row__task {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--type-small);
+  white-space: nowrap;
+}
+.row__task--unlinked {
+  color: var(--warn);
+  font-weight: 600;
+}
+.row__suggest {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+/* --- group head: the author, with their count beside them -------------- */
+.group {
+  padding-top: var(--space-6);
+}
+.group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+}
+.group__name {
+  font-size: var(--type-subhead);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.group__count {
+  margin-left: auto;
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* --- misc ------------------------------------------------------------- */
+.icon {
+  flex: none;
+}
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.icon-btn:hover {
+  background: var(--surface);
+}
+.card-less-section {
+  padding-top: var(--space-8);
+}
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-top: var(--hairline) solid var(--line);
+  padding-top: var(--space-3);
+}
+.section-head__title {
+  font-size: var(--type-subhead);
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+.section-head__meta {
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+.section-head__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}

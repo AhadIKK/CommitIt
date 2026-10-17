@@ -1,0 +1,267 @@
+/* ============================================================================
+   Layout — the app frame. Mobile first at 360px: a 56px strip, one column, a
+   4-item bottom tab bar. From 60rem: a 240px left rail whose right edge is the
+   same hairline that runs through the content, and no top bar at all (so there
+   is nothing sticky to obscure focus on desktop).
+   ========================================================================== */
+
+.app {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.main {
+  min-width: 0;
+  padding: var(--space-6) var(--space-4);
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--space-8));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* --- the strip (mobile / tablet) --------------------------------------- */
+.strip {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-strip);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--strip-h);
+  padding: 0 var(--space-3);
+  padding-top: env(safe-area-inset-top);
+  background: var(--ground);
+  border-bottom: var(--hairline) solid var(--line);
+}
+.strip__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.strip__word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+.strip__spacer {
+  flex: 1;
+}
+
+/* --- the rail (desktop) ------------------------------------------------- */
+.rail {
+  display: none;
+}
+@media (min-width: 60rem) {
+  .rail {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100dvh;
+    padding: var(--space-6) 0 var(--space-4);
+    border-right: var(--hairline) solid var(--line);
+  }
+  .app {
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  }
+  .strip {
+    display: none;
+  }
+  .main {
+    padding: var(--space-8) var(--space-8) var(--space-16);
+    max-width: calc(var(--content-max) + var(--space-16));
+  }
+}
+
+.rail__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-6) var(--space-6);
+}
+.rail__word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+}
+.rail__switcher {
+  padding: 0 var(--space-6) var(--space-6);
+}
+.rail__nav {
+  display: flex;
+  flex-direction: column;
+}
+.rail__foot {
+  margin-top: auto;
+  padding: var(--space-4) var(--space-6) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-top: var(--hairline) solid var(--line);
+}
+
+.nav__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  padding: 0 var(--space-6);
+  color: var(--muted);
+  font-size: var(--type-body);
+  font-weight: 500;
+}
+.nav__item:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+.nav__item[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.nav__item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 2px;
+  background: var(--ink);
+}
+.nav__count {
+  margin-left: auto;
+  font-size: var(--type-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- bottom tab bar (mobile) ------------------------------------------- */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-tabbar);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--ground);
+  border-top: var(--hairline) solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (min-width: 60rem) {
+  .tabbar {
+    display: none;
+  }
+}
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tabbar-h);
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 600;
+}
+.tab:hover {
+  text-decoration: none;
+}
+.tab[aria-current="page"] {
+  color: var(--ink);
+}
+.tab__mark {
+  width: 1.25rem;
+  height: 2px;
+  border-radius: 1px;
+  background: transparent;
+  order: -1;
+}
+.tab[aria-current="page"] .tab__mark {
+  background: var(--ink);
+}
+
+/* --- screen scaffolding ------------------------------------------------ */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.screen__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.screen__head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+.screen__lede {
+  color: var(--muted);
+  font-size: var(--type-small);
+  max-width: var(--measure-narrow);
+}
+
+/* the live/connection status line: one polite status region, never an alert */
+.live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  color: var(--muted);
+}
+.live--stale {
+  color: var(--warn);
+}
+
+/* two columns for settings-style screens from 64rem */
+.split {  display: grid;
+  gap: var(--space-8);
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 64rem) {
+  .split {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    gap: var(--space-12);
+  }
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.stack--tight {
+  gap: var(--space-4);
+}
+.stack--loose {
+  gap: var(--space-8);
+}
+
+/* --- public pages (Landing): no rail, no tab bar, centred column --------- */
+.public {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-16);
+}
+@media (min-width: 60rem) {
+  .public {
+    padding: var(--space-12) var(--space-8) var(--space-16);
+  }
+}
