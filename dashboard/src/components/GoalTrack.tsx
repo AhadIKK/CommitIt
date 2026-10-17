@@ -16,7 +16,7 @@
 import { useState, type ReactNode } from "react";
 import type { Author, Issue, Milestone } from "../api/types.js";
 import { trackFillPercent, trackNodes, weightName, type TrackNodeModel } from "../lib/weight.js";
-import { useOncePerSession } from "../lib/useOnce.js";
+import { useTrackReveal } from "../lib/useTrackReveal.js";
 import { StatePanel } from "./surfaces.js";
 
 export type GoalTrackProps = {
@@ -57,7 +57,9 @@ export function GoalTrack({
   emptyAction,
 }: GoalTrackProps) {
   const [active, setActive] = useState<TrackNodeModel | null>(null);
-  const animate = useOncePerSession(`track-filled:${milestone.id}`);
+  // The single orchestrated moment: the fill draws across in closing order and
+  // the nodes settle into place. See lib/useTrackReveal.ts.
+  const scope = useTrackReveal(true);
 
   if (issues.length === 0) {
     return (
@@ -99,13 +101,12 @@ export function GoalTrack({
   );
 
   return (
-    <div className="goal-track">
+    <div className="goal-track" ref={scope}>
       <div className="track-scroll" data-orientation={orientation}>
         <ul
           className="track"
           role="list"
           data-orientation={orientation}
-          data-filled={animate ? "true" : "false"}
           style={{ ["--track-fill" as string]: `${fill}%` }}
           aria-label={`${milestone.title} tasks, ${nodes.length} in closing order`}
         >

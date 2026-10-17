@@ -47,10 +47,16 @@ const THEMES = [
 ];
 
 describe("brand colours", () => {
-  it("are the three fixed values, restated and not restyled", () => {
+  it("keep the three fixed artwork values, restated and not restyled", () => {
     expect(css).toContain("--brand-ink-navy: #1e293b");
     expect(css).toContain("--brand-slate-mist: #e2e8f0");
     expect(css).toContain("--brand-signal-teal: #14b8a6");
+  });
+
+  it("keep teal on the mark and nowhere else in the interface", () => {
+    // The logo is teal and stays teal. Nothing the interface paints may be:
+    // the weight ramp is the only chroma the product spends on data.
+    expect(css).not.toMatch(/--(n|d)-signal:/);
   });
 });
 
@@ -60,12 +66,14 @@ describe.each(THEMES)("$label theme", ({ key }) => {
   const raised = primitive(key, "raised");
   const ink = primitive(key, "ink");
   const muted = primitive(key, "muted");
-  const signal = primitive(key, "signal");
-  const warn = primitive(key, "warn");
+  const attention = primitive(key, "attention");
   const danger = primitive(key, "danger");
   const focus = primitive(key, "focus");
   const edge = primitive(key, "edge");
   const hairline = primitive(key, "hairline");
+  const weightS = primitive(key, "weight-s");
+  const weightM = primitive(key, "weight-m");
+  const weightL = primitive(key, "weight-l");
 
   it("body text passes 4.5:1 on every surface", () => {
     for (const [name, bg] of [
@@ -87,23 +95,35 @@ describe.each(THEMES)("$label theme", ({ key }) => {
     }
   });
 
-  it("teal passes 4.5:1, because it carries meaning", () => {
+  it("attention and danger pass 4.5:1, because they carry meaning", () => {
     for (const [name, bg] of [
       ["ground", ground],
       ["surface", surface],
-      ["raised", raised],
     ] as const) {
-      expect(round(contrast(signal, bg)), `signal on ${name}`).toBeGreaterThanOrEqual(4.5);
+      expect(round(contrast(attention, bg)), `attention on ${name}`).toBeGreaterThanOrEqual(4.5);
+      expect(round(contrast(danger, bg)), `danger on ${name}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it("warning and danger pass 4.5:1, because they carry meaning", () => {
-    for (const [name, bg] of [
-      ["ground", ground],
-      ["surface", surface],
+  it("every weight step is legible as text on the ground it sits on", () => {
+    for (const [name, value] of [
+      ["weight-s", weightS],
+      ["weight-m", weightM],
+      ["weight-l", weightL],
     ] as const) {
-      expect(round(contrast(warn, bg)), `warn on ${name}`).toBeGreaterThanOrEqual(4.5);
-      expect(round(contrast(danger, bg)), `danger on ${name}`).toBeGreaterThanOrEqual(4.5);
+      expect(round(contrast(value, ground)), `${name} on ground`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("the three weight steps are distinguishable from each other", () => {
+    // The ramp is a magnitude scale, so consecutive steps must be far enough
+    // apart to read as different weights, not as one colour with noise.
+    const steps = [weightS, weightM, weightL];
+    for (let i = 0; i < steps.length - 1; i++) {
+      expect(
+        round(contrast(steps[i]!, steps[i + 1]!)),
+        `${steps[i]} vs ${steps[i + 1]}`,
+      ).toBeGreaterThanOrEqual(1.25);
     }
   });
 

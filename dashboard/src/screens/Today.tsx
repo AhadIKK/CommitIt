@@ -223,9 +223,8 @@ export function Today() {
             }
             caption={
               <p className="small muted">
-                One node per task. Node size is the task's weight:{" "}
-                <strong>S</strong> is 1 point, <strong>M</strong> is 3, <strong>L</strong> is 5. A dashed
-                ring is an unestimated task and counts as 1 point.{" "}
+                One node per task, sized by weight: S is 1 point, M is 3, L is 5. A dashed ring
+                counts as 1.{" "}
                 <Link className="btn btn--inline" to={`/goals/${data.focus.id}${repoQuery}`}>
                   Open the {data.focus.title} goal
                 </Link>

@@ -230,7 +230,11 @@ export function SegmentedControl<T extends string>({
           }}
         >
           <span className="segmented__label">{option.label}</span>
-          {option.hint ? <span className="segmented__hint">{option.hint}</span> : null}
+          {/* Only the chosen option explains itself. Rendering all three hints
+              ran them together on one line and made the control unreadable. */}
+          {option.hint && value === option.value ? (
+            <span className="segmented__hint">{option.hint}</span>
+          ) : null}
         </button>
       ))}
     </div>

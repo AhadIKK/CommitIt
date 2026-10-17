@@ -9,45 +9,81 @@
    ========================================================================== */
 
 :root {
-  /* --- primitive: night --------------------------------------------------- */
-  --n-ground: #151d2e;
-  --n-surface: #1e293b;
-  --n-raised: #28364d;
-  --n-ink: #e2e8f0;
-  --n-muted: #94a3b8;
-  --n-hairline: #445572; /* 2.24:1 on ground — a line you can see, quieter than a border */
-  --n-edge: #7285a0; /* 3.89:1 on surface, 3.23:1 on raised — control boundaries */
-  --n-signal: #14b8a6; /* brand teal: "new since you last looked", nothing else */
-  --n-warn: #f59e0b;
-  --n-danger: #fb7185;
+  /* --- primitive: night ---------------------------------------------------
+     A neutral graphite, not a navy. Navy on a dark ground is the developer-tool
+     tell — it is where every issue tracker and status page lives. Warm-neutral
+     charcoal reads as an instrument instead, and it lets the weight ramp be the
+     only thing on screen that is blue. */
+  --n-ground: #16161a;
+  --n-surface: #1e1e24;
+  --n-raised: #26262e;
+  --n-ink: #ececed;
+  --n-muted: #9a9aa4;
+  --n-hairline: #45454f; /* 1.91:1 on ground — #3a3a45 measured 1.41 and failed */
+  --n-edge: #7c7c88; /* 3.04:1 on surface — #6e6e7c measured 2.89 and failed */
+  /* The weight ramp. One hue, three steps: magnitude, and nothing else. It is
+     the only chroma the interface spends on data. Night runs dim→bright as the
+     task gets heavier, so a 5-point task is the brightest thing on the track. */
+  --n-weight-s: #6a94bb; /* 4.63:1 on ground — #5c86ad measured 4.39 and failed */
+  --n-weight-m: #8fb8dc;
+  --n-weight-l: #cbe4f8;
+  --n-attention: #f0a02e; /* the only "needs you" hue */
+  --n-danger: #fb7185; /* the only "it failed" hue */
   --n-focus: #7dd3fc;
 
+  /* --- primitive: atmosphere ----------------------------------------------
+     The product's motif is a circle whose area is a weight. The ground carries
+     that motif at architectural scale — a few very large concentric rings, the
+     way a track would be drawn on a plan — plus a fine grid to sit it on.
+     Both are alpha washes, not colours: they must never move a measured
+     contrast ratio, so nothing here exceeds 4% alpha. */
+  --n-atmo-ring: rgb(198 228 248 / 0.035);
+  --n-atmo-ring-fine: rgb(198 228 248 / 0.022);
+  --n-atmo-grid: rgb(226 232 240 / 0.02);
+  --n-atmo-glow: rgb(143 184 220 / 0.07);
+
   /* --- primitive: day ---------------------------------------------------- */
-  --d-ground: #e2e8f0;
-  --d-surface: #edf1f6;
-  --d-raised: #f8fafc;
-  --d-ink: #1e293b;
-  --d-muted: #475569;
-  --d-hairline: #a6b2c2;
-  --d-edge: #64748b;
-  --d-signal: #0e6f68; /* 4.88:1 on ground — darkened per section 4 until it passes */
-  --d-warn: #a34a08; /* 4.81:1 on ground — section 4's #B45309 measures 4.07:1 and fails */
+  --d-ground: #f4f4f2;
+  --d-surface: #ececea;
+  --d-raised: #ffffff;
+  --d-ink: #141417;
+  --d-muted: #55555f;
+  --d-hairline: #c4c4c7; /* 1.59:1 on ground — #cfcfd0 measured 1.41 and failed */
+  --d-edge: #75757f; /* 3.11:1 on surface — #8a8a94 measured 2.89 and failed */
+  /* Day inverts the ramp: on a light ground a heavy task must be the darkest,
+     not the brightest, or it disappears. */
+  --d-weight-s: #33648f;
+  --d-weight-m: #1c5480;
+  --d-weight-l: #0e3a5c;
+  --d-attention: #a34a08; /* 4.81:1 on ground — measured, not guessed */
   --d-danger: #be123c;
   --d-focus: #0f5c8c;
+
+  /* Day washes the same way: ink on paper, never colour on colour. */
+  --d-atmo-ring: rgb(14 58 92 / 0.05);
+  --d-atmo-ring-fine: rgb(14 58 92 / 0.032);
+  --d-atmo-grid: rgb(30 41 59 / 0.028);
+  --d-atmo-glow: rgb(28 84 128 / 0.06);
 
   /* --- brand (fixed by section 3, never restyled) ------------------------- */
   --brand-ink-navy: #1e293b;
   --brand-slate-mist: #e2e8f0;
   --brand-signal-teal: #14b8a6;
 
-  /* --- type scale --------------------------------------------------------- */
-  --font-display: "Poppins", "Segoe UI", system-ui, sans-serif;
-  --font-ui: "Public Sans", "Segoe UI", system-ui, sans-serif;
-  --font-code: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+  /* --- type scale ---------------------------------------------------------
+     Display is Instrument Serif: a high-contrast editorial serif, and the one
+     thing that puts this product outside the developer-tool look. The progress
+     sentence is a statement about a goal, so it is set like one — large, tight,
+     and unmistakably not UI text. Interface is Archivo, a grotesque that holds
+     up small; data is IBM Plex Mono, because points, shas and task numbers are
+     identifiers and are set in fixed columns. */
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-ui: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
 
-  --type-display: 2.75rem; /* 44 */
-  --type-title: 2rem; /* 32 */
-  --type-heading: 1.5rem; /* 24 */
+  --type-display: 6.5rem; /* 104 — the landing hero is set like a poster */
+  --type-title: 3.25rem; /* 52 */
+  --type-heading: 2rem; /* 32 */
   --type-subhead: 1.25rem; /* 20 */
   --type-body: 1rem; /* 16 */
   --type-small: 0.875rem; /* 14 */
@@ -105,6 +141,7 @@
   --strip-h: 56px;
   --tabbar-h: 60px;
   --content-max: 960px;
+  --landing-max: 1180px;
 }
 
 /* --- semantic: night (default) ------------------------------------------- */
@@ -118,9 +155,15 @@
   --muted: var(--n-muted);
   --line: var(--n-hairline);
   --edge: var(--n-edge);
-  --signal: var(--n-signal);
-  --warn: var(--n-warn);
+  --weight-s: var(--n-weight-s);
+  --weight-m: var(--n-weight-m);
+  --weight-l: var(--n-weight-l);
+  --attention: var(--n-attention);
   --danger: var(--n-danger);
+  --atmo-ring: var(--n-atmo-ring);
+  --atmo-ring-fine: var(--n-atmo-ring-fine);
+  --atmo-grid: var(--n-atmo-grid);
+  --atmo-glow: var(--n-atmo-glow);
   --focus: var(--n-focus);
   --on-ink: var(--n-ground);
 
@@ -150,9 +193,15 @@
   --muted: var(--d-muted);
   --line: var(--d-hairline);
   --edge: var(--d-edge);
-  --signal: var(--d-signal);
-  --warn: var(--d-warn);
+  --weight-s: var(--d-weight-s);
+  --weight-m: var(--d-weight-m);
+  --weight-l: var(--d-weight-l);
+  --attention: var(--d-attention);
   --danger: var(--d-danger);
+  --atmo-ring: var(--d-atmo-ring);
+  --atmo-ring-fine: var(--d-atmo-ring-fine);
+  --atmo-grid: var(--d-atmo-grid);
+  --atmo-glow: var(--d-atmo-glow);
   --focus: var(--d-focus);
   --on-ink: var(--d-ground);
 
@@ -182,8 +231,10 @@
     --muted: var(--d-muted);
     --line: var(--d-hairline);
     --edge: var(--d-edge);
-    --signal: var(--d-signal);
-    --warn: var(--d-warn);
+    --weight-s: var(--d-weight-s);
+    --weight-m: var(--d-weight-m);
+    --weight-l: var(--d-weight-l);
+    --attention: var(--d-attention);
     --danger: var(--d-danger);
     --focus: var(--d-focus);
     --on-ink: var(--d-ground);

@@ -304,7 +304,7 @@
   border-top-color: var(--danger);
 }
 .banner--warn {
-  border-top-color: var(--warn);
+  border-top-color: var(--attention);
 }
 .banner--info {
   border-top-color: var(--edge);
@@ -345,10 +345,10 @@
   color: var(--danger);
 }
 .mark--warn {
-  color: var(--warn);
+  color: var(--attention);
 }
 .mark--signal {
-  color: var(--signal);
+  color: var(--ink);
 }
 .mark--muted {
   color: var(--muted);
@@ -360,16 +360,52 @@
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: var(--signal);
+  background: var(--ink);
   flex: none;
 }
 .is-new {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  color: var(--signal);
+  color: var(--ink);
   font-size: var(--type-micro);
   font-weight: 600;
+}
+
+/* --- segmented: the switcher that replaced four rail destinations ---------- */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  align-self: flex-start;
+}
+.segmented__item {
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--type-small);
+  font-weight: 500;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  min-height: 2.25rem;
+}
+.segmented__item:hover {
+  color: var(--ink);
+}
+.segmented__item[aria-selected="true"] {
+  background: var(--raised);
+  color: var(--ink);
+}
+.settings__panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 /* --- avatar: initials in a squared chip, not a coloured circle ---------- */
@@ -390,10 +426,26 @@
 
 /* --- the Goal Track ----------------------------------------------------- */
 .goal-track {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   min-width: 0;
+}
+/* The one focal element on the screen gets the one glow in the product. It is a
+   wide, very soft wash sitting behind the track — enough to lift the instrument
+   off the ground, not enough to read as a gradient card. */
+.goal-track::before {
+  content: "";
+  position: absolute;
+  inset: -1.5rem -1rem;
+  z-index: var(--z-base);
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 60% 120% at 50% 50%,
+    var(--atmo-glow),
+    transparent 70%
+  );
 }
 .track-scroll {
   min-width: 0;
@@ -405,28 +457,39 @@
   display: none;
 }
 .track {
-  --track-node-s: 0.625rem; /* 10 — weight 1 */
-  --track-node-m: 1rem; /* 16 — weight 3 */
-  --track-node-l: 1.5rem; /* 24 — weight 5 */
+  /* Node diameter is proportional to √weight, so a node's *area* is the number
+     of points it carries. A 5-point task really does occupy five times the ink
+     of a 1-point task — the sizes are not decoration. 16 / 28 / 38 px. */
+  --track-node-s: 1rem; /* 16 — weight 1 */
+  --track-node-m: 1.75rem; /* 28 — weight 3 */
+  --track-node-l: 2.375rem; /* 38 — weight 5 */
+  --track-hit: 3.25rem; /* 52px hit area, comfortably past 44px */
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) 0;
-  width: max-content;
-  min-width: 100%;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  /* Fill the measure and spread the tasks across it, so the track reads as a
+     ruler of work rather than a row of dots trailing off into empty line.
+     min-width:max-content keeps it scrollable once the tasks outgrow it. */
+  width: 100%;
+  min-width: max-content;
 }
 .track__item {
   display: flex;
   align-items: center;
   flex: none;
 }
-/* the rail carries the line, so the line and its fill are sized by the rail
-   rather than by the scroll container */
+/* The rail carries the line, so the line and its fill are sized by the rail
+   rather than by the scroll container. It is inset by half a hit area at each
+   end so the line begins and ends on the first and last task rather than
+   overhanging them — which keeps trackFillPercent() honest: a fully closed
+   track fills to 100%, and the fill always stops on a node. */
 .track__rail {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: calc(var(--track-hit) / 2);
+  right: calc(var(--track-hit) / 2);
   top: 50%;
   height: 2px;
   transform: translateY(-50%);
@@ -449,23 +512,9 @@
   background: var(--ink);
   transform-origin: left center;
 }
-.track[data-filled="true"] .track__fill {
-  animation: track-fill var(--dur-track) var(--ease-out) forwards;
-}
-@keyframes track-fill {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-/* reduced motion: the end state is simply there, with no animation at all */
-@media (prefers-reduced-motion: reduce) {
-  .track__fill {
-    animation: none !important;
-  }
-}
+/* The reveal itself lives in lib/useTrackReveal.ts (GSAP), which also owns the
+   reduced-motion check. With no JS, or before it runs, the track simply sits at
+   its correct end state — which is why there is no CSS keyframe fallback here. */
 
 .track__node {
   position: relative;
@@ -473,8 +522,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 2.75rem; /* 44px hit area; the visible node stays small */
-  height: 2.75rem;
+  width: var(--track-hit); /* 52px hit area, comfortably past 44px even under the largest node */
+  height: var(--track-hit);
   padding: 0;
   border: 0;
   background: transparent;
@@ -511,6 +560,22 @@
   background: var(--node-filled);
   border-color: var(--node-filled);
 }
+/* A finished task fills in its own weight hue, so magnitude is legible twice
+   over — by size and by tone. Open tasks stay hollow rings in ink, so the
+   track reads as "tone = done, ring = not yet" without a legend. Unestimated
+   tasks carry weight 1, which is exactly what they count as. */
+.track__node[data-state="closed"][data-weight="1"] .track__dot {
+  background: var(--weight-s);
+  border-color: var(--weight-s);
+}
+.track__node[data-state="closed"][data-weight="3"] .track__dot {
+  background: var(--weight-m);
+  border-color: var(--weight-m);
+}
+.track__node[data-state="closed"][data-weight="5"] .track__dot {
+  background: var(--weight-l);
+  border-color: var(--weight-l);
+}
 .track__node[data-state="open"] .track__dot {
   background: var(--node-base);
 }
@@ -530,7 +595,7 @@
   width: 0.4375rem;
   height: 0.4375rem;
   border-radius: 50%;
-  background: var(--signal);
+  background: var(--ink);
 }
 .track__node:hover .track__dot,
 .track__node:focus-visible .track__dot {
@@ -732,15 +797,36 @@
 /* --- commit row -------------------------------------------------------- */
 .row {
   display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
+  /* cat | subject | (sha). The sha column is auto so a 7-character mono never
+     gets clipped; the task and the toggle wrap onto the next line on a phone. */
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-2) 0;
   align-items: baseline;
 }
 @media (min-width: 48rem) {
   .row {
-    grid-template-columns: 5.5rem minmax(0, 1fr) 5.5rem 6rem;
+    /* One line at desktop width. The last column has to fit the word
+       "Details" at its rendered size, which is wider than 2.5rem. */
+    grid-template-columns: 5.5rem minmax(0, 1fr) 5.5rem 6rem 4rem;
+    align-items: center;
   }
+}
+/* Detail spans the whole row: it is a continuation of this commit, not a
+   sibling column, and it only exists while the toggle is open. */
+.row__detail {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-3);
+  border-left: 2px solid var(--line);
+  padding-left: var(--space-3);
+}
+.row__toggle {
+  justify-self: end;
+  font-size: var(--type-micro);
+  white-space: nowrap;
 }
 .row + .row {
   border-top: var(--hairline) solid var(--line);
@@ -756,6 +842,17 @@
 }
 .row__subject {
   min-width: 0;
+}
+/* The subject is the one line that matters, so it gets the weight and it stays
+   on one line. Everything else about the commit is behind the toggle. */
+.row__subject {
+  min-width: 0;
+  display: block;
+  font-size: var(--type-body);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .row__ai {
   display: block;
@@ -787,7 +884,7 @@
   white-space: nowrap;
 }
 .row__task--unlinked {
-  color: var(--warn);
+  color: var(--attention);
   font-weight: 600;
 }
 .row__suggest {

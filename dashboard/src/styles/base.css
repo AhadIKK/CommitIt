@@ -46,21 +46,35 @@ body {
   border-radius: var(--radius-1);
 }
 
-/* --- headings: one display face, sentence case, natural wrapping ---------- */
+/* --- headings: one serif display, sentence case, natural wrapping ----------
+   The progress sentence is the product's voice, so it is set like a statement:
+   a high-contrast serif at display size, tight leading, and optically hung so
+   the first line sits hard against the rule above it. Interface headings drop
+   to the grotesque — a serif on a 16px button label would be a costume. */
 h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-display);
+  font-family: var(--font-ui);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   margin: 0;
   color: var(--ink);
   text-wrap: balance;
 }
 h1 {
-  font-size: var(--type-title);
-  line-height: var(--lh-title);
+  font-family: var(--font-display);
+  font-size: var(--type-display);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.018em;
+  text-wrap: pretty;
+}
+h2 {
+  font-family: var(--font-ui);
+  font-size: var(--type-heading);
+  line-height: var(--lh-heading);
+  letter-spacing: -0.012em;
 }
 h2 {
   font-size: var(--type-heading);
@@ -124,13 +138,18 @@ hr {
 /* --- type helpers --------------------------------------------------------- */
 
 /* the one display line per screen: the progress sentence */
+/* The progress sentence. This is the one display setting in the product, and it
+   is set like an editorial statement: a high-contrast serif at display size,
+   tight, with a measure wide enough that the sentence breaks in two places
+   rather than six. */
 .display {
   font-family: var(--font-display);
-  font-weight: 600;
-  font-size: clamp(1.75rem, 1.35rem + 1.8vw, var(--type-display));
-  line-height: var(--lh-display);
+  font-weight: 400;
+  font-size: clamp(2.125rem, 1.5rem + 2.6vw, var(--type-display));
+  line-height: 1.02;
   letter-spacing: -0.02em;
-  max-width: 24ch;
+  max-width: 30ch;
+  text-wrap: pretty;
 }
 
 .title {

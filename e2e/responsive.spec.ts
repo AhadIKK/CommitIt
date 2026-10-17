@@ -43,9 +43,26 @@ for (const viewport of VIEWPORTS) {
           const root = document.documentElement;
           // Text wider than the box that holds it: it will overlap whatever sits
           // next to it. Visually-hidden text and native form controls are exempt.
+          // So is anything marked data-truncate — an element that deliberately
+          // clamps its own text with text-overflow: ellipsis, where the full
+          // value is reachable elsewhere (here: in the row's expanded detail).
+          // The marker lives in the markup so the exemption is auditable rather
+          // than a hidden exception inside the stylesheet.
+          // And so is anything inside a deliberate scroll region: a code specimen
+          // that scrolls sideways is not an overflow bug, and the page-level
+          // check below is what actually catches real horizontal scroll.
+          const scrolls = (el: Element): boolean => {
+            for (let p = el.parentElement; p; p = p.parentElement) {
+              const ox = getComputedStyle(p).overflowX;
+              if (ox === "auto" || ox === "scroll") return true;
+            }
+            return false;
+          };
           const overflowing: string[] = [];
           for (const el of Array.from(document.querySelectorAll("body *"))) {
             if (el.closest(".visually-hidden")) continue;
+            if (el.closest("[data-truncate]")) continue;
+            if (scrolls(el)) continue;
             if (["SELECT", "INPUT", "OPTION", "TEXTAREA", "SVG"].includes(el.tagName)) continue;
             const cs = getComputedStyle(el);
             if (cs.display === "none" || cs.position === "absolute") continue;

@@ -5,10 +5,37 @@
    is nothing sticky to obscure focus on desktop).
    ========================================================================== */
 
+/* The ground is not a flat fill. It carries the product's own motif at
+   architectural scale: large concentric rings — a circle whose area is a
+   weight, the thing the whole product is about — and a fine grid to sit them
+   on. Both are alpha washes at or under 7%, and they sit behind the content
+   area only, so they add depth without ever touching the rail or a control. */
 .app {
   min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+}
+
+.main {
+  background-image:
+    repeating-radial-gradient(
+      circle at 82% -6%,
+      transparent 0 124px,
+      var(--atmo-ring) 124px 125px
+    ),
+    repeating-radial-gradient(
+      circle at 82% -6%,
+      transparent 0 58px,
+      var(--atmo-ring-fine) 58px 59px
+    ),
+    linear-gradient(var(--atmo-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--atmo-grid) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    72px 72px,
+    72px 72px;
+  background-attachment: local;
 }
 
 .main {
@@ -206,6 +233,36 @@
   gap: var(--space-6);
   min-width: 0;
 }
+
+/* Today is the one screen with two things to say — how far along the work is,
+   and what moved — so at desktop it stops being a single centred column and
+   becomes an asymmetric pair: the instrument (sentence, track, attention) takes
+   the wide left column, the commit ledger takes a narrower right one. The
+   asymmetry is the point; equal halves would look like a template. */
+.split {
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 68rem) {
+  .split {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: var(--space-12);
+  }
+}
+.split__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+@media (min-width: 68rem) {
+  .split__aside {
+    position: sticky;
+    top: var(--space-6);
+  }
+}
 .screen__head {
   display: flex;
   flex-direction: column;
@@ -234,7 +291,7 @@
   color: var(--muted);
 }
 .live--stale {
-  color: var(--warn);
+  color: var(--attention);
 }
 
 /* two columns for settings-style screens from 64rem */
@@ -262,19 +319,26 @@
   gap: var(--space-8);
 }
 
-/* --- public pages (Landing): no rail, no tab bar, centred column --------- */
+/* --- public pages (Landing): no rail, no tab bar ---------------------------
+   One container for the whole page. The header, the hero, every section and
+   the footer sit inside the same measure, so there is exactly one left edge.
+   An earlier version broke the hero out with negative margins, which produced
+   three different left edges down the page and read as a mistake. */
 .public {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: var(--space-12);
+  gap: var(--space-16);
   width: 100%;
-  max-width: var(--content-max);
-  margin: 0 auto;
   padding: var(--space-6) var(--space-4) var(--space-16);
 }
-@media (min-width: 60rem) {
+@media (min-width: 48rem) {
   .public {
-    padding: var(--space-12) var(--space-8) var(--space-16);
+    padding: var(--space-8) var(--space-8) var(--space-16);
   }
+}
+.page {
+  width: 100%;
+  max-width: var(--landing-max);
+  margin-inline: auto;
 }

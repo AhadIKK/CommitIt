@@ -6,7 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
  * and no horizontal scroll at 360px.
  */
 const ROUTES: Array<{ path: string; name: string; heading: RegExp }> = [
-  { path: "/", name: "Landing", heading: /a day of commits, as one message/i },
+  { path: "/", name: "Landing", heading: /commits are not\s+progress/i },
   { path: "/today", name: "Today", heading: /auth is 62% done|no issues yet|nothing here yet/i },
   { path: "/goals", name: "Goals", heading: /^goals$|no goals yet/i },
   { path: "/goals/m_auth", name: "Goal", heading: /auth is 62% done/i },

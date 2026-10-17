@@ -12,10 +12,147 @@
 .landing__top-cta {
   margin-left: auto;
 }
-.hero {
+/* The demonstration is a transformation shown side by side: a day of separate
+   chat notifications on the left, the single message they become on the right.
+   Stacked, it was a ribbon in the middle of a wide screen with dead space either
+   side; side by side, the collapse is the thing you actually look at. */
+.demo__stage {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 60rem) {
+  .demo__stage {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: var(--space-8);
+  }
+}
+.demo__col {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.demo__colhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--type-micro);
+  color: var(--muted);
+}
+.demo__colhead strong {
+  font-size: var(--type-small);
+  color: var(--ink);
+  font-weight: 600;
+}
+.demo__notifications {
+  display: flex;
+  flex-direction: column;
+}
+.demo__arrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+/* The landing hero. The sentence is set like a poster, the track runs the full
+   width of the container beneath it, and the supporting line and the call to
+   action share a two-column band so the right half of the hero is not dead
+   space. */
+.hero--instrument {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.hero--instrument .display {
+  max-width: 17ch;
+  font-size: clamp(2.75rem, 1.4rem + 5.6vw, var(--type-display));
+  line-height: 0.95;
+  letter-spacing: -0.028em;
+}
+.hero--instrument .goal-track {
+  /* the nodes here are the size of coins: this is the one screen with the
+     whole container to spend on them */
+  --track-node-s: 1.5rem;
+  --track-node-m: 2.75rem;
+  --track-node-l: 4rem;
+  --track-hit: 5.25rem;
+}
+.hero--instrument .goal-track::before {
+  inset: -2.5rem -1.5rem;
+}
+.hero__band {
+  display: grid;
   gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  padding-top: var(--space-2);
+}
+@media (min-width: 60rem) {
+  .hero__band {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: var(--space-12);
+    align-items: end;
+  }
+}
+.hero__lede {
+  max-width: 52ch;
+  font-size: var(--type-subhead);
+  line-height: 1.45;
+  color: var(--muted);
+  margin: 0;
+}
+.hero__cta {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+/* The weight key: the three task sizes, drawn at the size they mean. It fills
+   the hero's right column with something that explains the track instead of
+   leaving it empty, and it is the legend the caption no longer has to spell. */
+.weightkey {
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-end;
+}
+.weightkey__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.weightkey__dot {
+  border-radius: 50%;
+  background: var(--weight-s);
+}
+.weightkey__item[data-weight="1"] .weightkey__dot {
+  width: var(--track-node-s, 1.5rem);
+  height: var(--track-node-s, 1.5rem);
+  background: var(--weight-s);
+}
+.weightkey__item[data-weight="3"] .weightkey__dot {
+  width: var(--track-node-m, 2.75rem);
+  height: var(--track-node-m, 2.75rem);
+  background: var(--weight-m);
+}
+.weightkey__item[data-weight="5"] .weightkey__dot {
+  width: var(--track-node-l, 4rem);
+  height: var(--track-node-l, 4rem);
+  background: var(--weight-l);
+}
+.weightkey__label {
+  font-size: var(--type-micro);
+  color: var(--muted);
+  white-space: nowrap;
 }
 .hero__headline {
   font-size: clamp(2rem, 1.4rem + 3vw, 3.25rem);
@@ -28,15 +165,14 @@
   max-width: 46ch;
 }
 .demo {
-  background: var(--surface);
-  border-top: var(--hairline) solid var(--line);
-  padding: var(--space-6) 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
 }
 .demo__control {
-  padding: 0 var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 .demo__count {
   font-size: var(--type-small);
@@ -47,7 +183,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 0 var(--space-4);
+  min-height: 0;
 }
 .demo__notif {
   display: grid;
@@ -359,7 +495,7 @@
   border-left-color: var(--danger);
 }
 .alert--warn {
-  border-left-color: var(--warn);
+  border-left-color: var(--attention);
 }
 .alert__head {
   display: flex;

@@ -1,12 +1,17 @@
 /**
- * The frame. Mobile first: a 56px strip, one column, a 4-item bottom tab bar.
+ * The frame. Mobile first: a 56px strip, one column, a 3-item bottom tab bar.
  * From 60rem: a 240px rail whose right edge is the same hairline that runs
  * through the content, and no top bar at all — so on desktop there is nothing
  * sticky that could ever obscure a focused control.
+ *
+ * Three destinations, not six. People was Today with a second copy of the same
+ * numbers, and Digests/Alerts/Repos are all configuration rather than places a
+ * lead browses, so they became sections of Settings. A rail with six items in
+ * it was mostly navigation to screens nobody visited daily.
  */
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { Activity, AlertTriangle, MessageSquare, Moon, Settings2, Sun, Target, Users } from "lucide-react";
+import { Activity, Moon, Settings2, Sun, Target } from "lucide-react";
 import type { Repo } from "../api/types.js";
 import { Logo } from "./brand.js";
 import { SignalDot } from "./glyphs.js";
@@ -18,14 +23,11 @@ type NavItem = { to: string; label: string; Icon: typeof Activity };
 const NAV: NavItem[] = [
   { to: "/today", label: "Today", Icon: Activity },
   { to: "/goals", label: "Goals", Icon: Target },
-  { to: "/people", label: "People", Icon: Users },
-  { to: "/digests", label: "Digests", Icon: MessageSquare },
-  { to: "/alerts", label: "Alerts", Icon: AlertTriangle },
-  { to: "/repos", label: "Repos", Icon: Settings2 },
+  { to: "/settings", label: "Settings", Icon: Settings2 },
 ];
 
-/** Four tabs, never more, each with an icon and a word (skill rule 46). */
-const TABS = NAV.slice(0, 4);
+/** Three tabs, never more, each with an icon and a word. */
+const TABS = NAV;
 
 function RepoSwitcher({
   repoRef,
@@ -66,14 +68,12 @@ export function AppShell({
   repoRef,
   repos,
   onRepoChange,
-  alertCount,
   hasNew,
 }: {
   children: ReactNode;
   repoRef: string;
   repos: Repo[];
   onRepoChange: (next: string) => void;
-  alertCount: number;
   hasNew: boolean;
 }) {
   const { theme, toggle, useSystem, overridden } = useTheme();
@@ -115,14 +115,6 @@ export function AppShell({
             <NavLink key={to} to={{ pathname: to, search: `?repo=${encodeURIComponent(repoRef)}` }} className="nav__item">
               <Icon size={16} strokeWidth={1.6} aria-hidden="true" />
               {label}
-              {label === "Alerts" && alertCount > 0 ? (
-                <span className="nav__count">
-                  {alertCount}{" "}
-                  <span className="visually-hidden">
-                    {alertCount === 1 ? "alert needs attention" : "alerts need attention"}
-                  </span>
-                </span>
-              ) : null}
             </NavLink>
           ))}
         </nav>

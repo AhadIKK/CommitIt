@@ -11,18 +11,22 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Link, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components/AppShell.js";
 import { Skeleton } from "./components/surfaces.js";
-import { useAlerts, useRepoRef, useRepos } from "./lib/queries.js";
+import { useRepoRef, useRepos } from "./lib/queries.js";
 import { useLive } from "./lib/useLive.js";
 import { currentScenario, scenarioLabel } from "./lib/scenario.js";
 import { Today } from "./screens/Today.js";
 
 const Landing = lazy(() => import("./screens/Landing.js").then((m) => ({ default: m.Landing })));
+const LedgerSite = lazy(() =>
+  import("./site/LedgerSite.js").then((m) => ({ default: m.LedgerSite })),
+);
 const Onboarding = lazy(() => import("./screens/Onboarding.js").then((m) => ({ default: m.Onboarding })));
 const Goals = lazy(() => import("./screens/Goals.js").then((m) => ({ default: m.Goals })));
 const Goal = lazy(() => import("./screens/Goal.js").then((m) => ({ default: m.Goal })));
 const People = lazy(() => import("./screens/People.js").then((m) => ({ default: m.People })));
 const Digests = lazy(() => import("./screens/Digests.js").then((m) => ({ default: m.Digests })));
 const Alerts = lazy(() => import("./screens/Alerts.js").then((m) => ({ default: m.Alerts })));
+const Settings = lazy(() => import("./screens/Settings.js").then((m) => ({ default: m.Settings })));
 const RepoSettings = lazy(() =>
   import("./screens/RepoSettings.js").then((m) => ({ default: m.RepoSettings })),
 );
@@ -80,7 +84,6 @@ function ScrollToTop() {
 function Shell() {
   const { ref, repoId, setRef } = useRepoRef();
   const repos = useRepos();
-  const alerts = useAlerts(repoId);
   const live = useLive(repoId);
 
   return (
@@ -88,7 +91,6 @@ function Shell() {
       repoRef={ref}
       repos={repos.data ?? []}
       onRepoChange={setRef}
-      alertCount={alerts.data?.filter((a) => a.severity === "danger").length ?? 0}
       hasNew={Boolean(live.newActivity)}
     >
       <ScenarioNote />
@@ -109,6 +111,15 @@ export function App() {
             path="/"
             element={
               <Suspense fallback={<RouteFallback />}>
+                <LedgerSite />
+              </Suspense>
+            }
+          />
+          {/* The previous product-first landing, kept reachable for comparison. */}
+          <Route
+            path="/welcome"
+            element={
+              <Suspense fallback={<RouteFallback />}>
                 <Landing />
               </Suspense>
             }
@@ -117,6 +128,9 @@ export function App() {
             <Route path="/today" element={<Today />} />
             <Route path="/goals" element={<Goals />} />
             <Route path="/goals/:id" element={<Goal />} />
+            <Route path="/settings" element={<Settings />} />
+            {/* Deep links still resolve: the rail shows Settings, but an old
+                bookmark or a Telegram link to a single section keeps working. */}
             <Route path="/people" element={<People />} />
             <Route path="/digests" element={<Digests />} />
             <Route path="/alerts" element={<Alerts />} />

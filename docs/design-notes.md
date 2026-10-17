@@ -7,6 +7,67 @@ revisions are in `docs/design-plan.md`; the skills log, conflicts and checkpoint
 
 ---
 
+## 0. Second pass — structure and identity
+
+The first pass was correct and too timid. This pass keeps its one idea and rebuilds everything
+around it.
+
+**A real bug found on the way in:** `--font-display: "Poppins"` and `--font-ui: "Public Sans"`
+were declared in `tokens.css` but never loaded — there was no `<link>` in `index.html` and no
+`@import` anywhere. The whole product had been rendering in the system UI face since the branch
+started. The new faces are loaded explicitly and `preconnect`ed.
+
+**Typography.** Bricolage Grotesque for the progress sentence, IBM Plex Sans for the interface,
+IBM Plex Mono for data. Bricolage is a variable face, so headings pull its width axis down and
+tighten as they grow (`wdth` 92 → 84 on `h1`): the sentence reads as a compressed instrument
+label and relaxes further down the page.
+
+**Colour.** The teal signal is gone from the interface and survives only on the brand mark, which
+the artwork fixes. In its place is one ramp that carries data, and two hues that carry alarms:
+
+| Token | Night | Means |
+|---|---|---|
+| `--weight-s / -m / -l` | `#6a94bb` `#8fb8dc` `#cbe4f8` | a 1 / 3 / 5-point task |
+| `--attention` | `#f0a02e` | needs you |
+| `--danger` | `#fb7185` | it failed |
+
+Day inverts the ramp — on a light ground a heavy task must be the darkest or it vanishes. Every
+step is contrast-tested in both themes, and a new test asserts the three steps stay far enough
+apart to be told apart. That test caught `--n-weight-s: #5c86ad` at 4.39:1 on its first run; it
+is now `#6a94bb` at 4.63:1. The old teal's job — "new since you last looked" — is now carried by
+the word *New* and a neutral mark, because "new" is not an alarm.
+
+**Structure: six destinations became three.** People was Today with a second copy of the same
+numbers (see §4.2 item 7), and Digests, Alerts and Repos are all configuration rather than places
+a lead browses. The rail is now **Today · Goals · Settings**, with Delivery, Alerts, People and
+Repositories as sections of Settings. The four deep links still resolve, so an old bookmark or a
+Telegram link keeps working.
+
+**The track stopped being timid.** Node diameter is now proportional to √weight, so a node's
+*area* is the number of points it carries — a 5-point task really does put five times the ink on
+the screen. Sizes went from 10/16/24px to 16/28/38px, the hit area from 44px to 52px, and the nodes
+are spread across the full measure instead of trailing off the left edge with 400px of empty line
+beside them. The rail is inset by half a hit area so it begins and ends on a task. A closed task
+fills in its own weight hue, so magnitude is legible twice — by size and by tone — while an open
+task stays a hollow ring in ink.
+
+**Commit rows are one line.** A twenty-commit list was sixty lines tall: AI summary, two thumbs,
+and `Original: feat: login form with inline validation` on every row, with "Suggestions are never
+applied on their own." printed once per row. All of that is now behind a **Details** toggle. The
+sentence that matters moved to the list header, once.
+
+**Atmosphere.** The ground is no longer flat: large concentric rings — the product's own motif, a
+circle whose area is a weight — and a fine grid to sit them on, with one soft glow behind the
+track. Every wash is an alpha at or under 7%, so none of it can move a measured contrast ratio.
+
+**One regression, caught by the existing guard.** `text-overflow: ellipsis` on the one-line subject
+tripped the "no text wider than its own box" spec, which cannot tell deliberate truncation from an
+accidental overflow. Rather than weaken the check, elements that clamp themselves now say so in
+the markup (`data-truncate`), and the spec exempts that marker — auditable, not a hidden exception
+inside the stylesheet.
+
+---
+
 ## 1. What was built
 
 Thirty commits on the branch, one decision each, all Conventional (the branch also carries one unrelated
@@ -205,9 +266,19 @@ Each of these was in the brief's starting proposal or implied by it, and each is
 
 ## 7. What I would do next, in order
 
-1. People: collapse the sentence and the stat row into one line so no number is stated twice.
+Items 1–3 of this list were done in the second pass (§0); the rest stand.
+
+1. ~~People: collapse the sentence and the stat row into one line so no number is stated twice.~~
+   Now a section of Settings rather than a screen of its own.
 2. Onboarding: render `/connect/:step` outside the app frame, with its own step indicator and no
    repository switcher until step 2.
-3. Digests: put quiet hours through the product's own time formatting so one screen has one clock.
-4. Ask the backend for the six endpoints in `docs/api-needs.md` §3 that carry the partial/stale contract,
-   and flip `USE_REAL_API` to `true` — everything on this branch was built to be switched over in one line.
+3. ~~Digests: put quiet hours through the product's own time formatting so one screen has one
+   clock.~~ Still open — it is inside Settings' Delivery section now, so the two clocks sit on one
+   screen more often than they used to, not less.
+4. Ask the backend for the six endpoints in `docs/api-needs.md` §3 that carry the partial/stale
+   contract, and flip `USE_REAL_API` to `true` — everything on this branch was built to be
+   switched over in one line.
+5. Mobile. This pass was reviewed at 1280px only, on the client's instruction. The guards pass at
+   360px, but the pass has not been *looked at* on a phone: the one-line commit row, the wider
+   52px track nodes and the distributed track layout all need a real mobile read. The Settings
+   tabs are the most likely to break first.

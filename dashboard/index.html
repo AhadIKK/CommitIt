@@ -18,6 +18,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>CommitIt</title>
     <!--
+      Instrument Serif sets the progress sentence, Archivo the interface, IBM
+      Plex Mono the data. These were named in tokens.css but never loaded, so
+      the whole product had been rendering in the system UI face.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap"
+    />
+    <!--
       The theme is applied before first paint so there is no flash and no layout
       shift. It follows the system preference and defers to a saved choice. The
       CSS media query in tokens.css is the no-JS fallback.
