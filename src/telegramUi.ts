@@ -20,6 +20,7 @@ export const CALLBACK_TOAST_MAX = 190;
 export const BOT_COMMANDS: BotCommand[] = [
   { command: "start", description: "Link this chat to CommitIt" },
   { command: "repos", description: "Your repos, with subscribe buttons" },
+  { command: "recent", description: "Latest commits in this chat's repos" },
   { command: "digest", description: "How often this chat is notified" },
   { command: "bind", description: "Subscribe this chat: /bind owner/repo" },
   { command: "unlink", description: "Unsubscribe: /unlink [owner/repo]" },

@@ -4,6 +4,7 @@ import { accessibleRepos, checkBindAllowed, getChatMemberStatus, type Sender } f
 import { isRateLimited } from "./rateLimit.js";
 import { claimLinkToken } from "./linkTokens.js";
 import { isDigestMode } from "./notifyPrefs.js";
+import { formatRecent } from "./formatter.js";
 import { answerCallbackQuery, editMessageText, sendMessage } from "./telegram.js";
 import {
   digestKeyboard,
@@ -29,6 +30,7 @@ import {
 // - /link — issues a short code bound to this chat (backup flow, legacy)
 // - /repos — repos your linked GitHub account can access (+ bound marks,
 //            with subscribe/unsubscribe buttons per repo)
+// - /recent [owner/repo] — newest commits across this chat's subscriptions
 // - /bind owner/repo — subscribe this chat (group: admin only)
 // - /unlink [owner/repo] — unsubscribe (group: admin only)
 // - /digest [mode] [owner/repo] — show/set notification frequency (+ buttons)
@@ -168,6 +170,7 @@ export const HELP =
   "/start — after tapping your Join link\n" +
   "/link — short code instead\n" +
   "/repos — your accessible repos\n" +
+  "/recent [owner/repo] — latest commits\n" +
   "/bind owner/repo — subscribe this chat\n" +
   "/unlink [owner/repo] — unsubscribe\n" +
   "/digest [instant|hourly|daily|weekly] [owner/repo] — notification frequency\n" +
@@ -263,6 +266,103 @@ async function cmdRepos(chatId: string, sender?: Sender, messageId?: number): Pr
     await reply(chatId, view.text, view.keyboard);
   }
   return { ok: true, note: `${repos.length} repo(s)` };
+}
+
+const RECENT_LIMIT = 10;
+
+/**
+ * The /recent view. With no argument it reads this chat's subscriptions (the
+ * same surface /digest lists); with an owner/repo it reads that repo, gated by
+ * the same access check /bind uses so a chat can never page through a repo its
+ * caller has no access to. Read-only: nothing here mutates state.
+ */
+async function cmdRecent(
+  chatId: string,
+  sender: Sender | undefined,
+  repoArg?: string,
+): Promise<Reply> {
+  const repo = (repoArg ?? "").trim();
+  if (repo && !REPO_RE.test(repo)) {
+    await reply(chatId, "Usage: /recent [owner/repo].");
+    return { ok: false, note: "Usage: /recent [owner/repo]" };
+  }
+  try {
+    const chat = await prisma.chat.findUnique({ where: { telegramChatId: chatId } });
+    let repoIds: string[];
+    if (repo) {
+      const check = await checkBindAllowed(chatId, sender ?? {}, repo);
+      if (!check.ok) {
+        await reply(
+          chatId,
+          check.reason === "group_needs_admin"
+            ? "Only group admins with a linked GitHub account may view another repo here."
+            : check.reason === "needs_link"
+              ? "Link your GitHub account on the website first."
+              : "Your account can't access that repo (App not installed or access removed).",
+        );
+        return {
+          ok: false,
+          note: check.reason === "group_needs_admin" ? "Admins only" : "Not allowed",
+        };
+      }
+      const row = await prisma.repo.findUnique({
+        where: { fullName: repo },
+        select: { id: true },
+      });
+      if (!row) {
+        await reply(chatId, `🕒 No commits recorded yet for <code>${repo}</code>.`);
+        return { ok: false, note: `No commits for ${repo}` };
+      }
+      repoIds = [row.id];
+    } else {
+      const subs = chat
+        ? await prisma.subscription.findMany({
+            where: { chatId: chat.id },
+            select: { repoId: true },
+            orderBy: { createdAt: "asc" },
+          })
+        : [];
+      repoIds = subs.map((s) => s.repoId);
+      if (repoIds.length === 0) {
+        await reply(chatId, "This chat has no subscriptions. /bind owner/repo to add one.");
+        return { ok: false, note: "No subscriptions" };
+      }
+    }
+    // Newest first by the commit's own date; legacy nulls sort last, never
+    // first. The extra row is what makes "+N more" truthful.
+    const rows = await prisma.commit.findMany({
+      where: { repoId: { in: repoIds } },
+      include: {
+        author: { select: { githubLogin: true } },
+        repo: { select: { fullName: true } },
+        issue: { select: { number: true } },
+      },
+      orderBy: [{ committedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+      take: RECENT_LIMIT + 1,
+    });
+    const shown = rows.slice(0, RECENT_LIMIT);
+    const body = formatRecent({
+      commits: shown.map((c) => ({
+        repo: c.repo.fullName,
+        sha: c.sha,
+        message: c.message,
+        // Unattributed rows must read honestly, never blank (rule 12).
+        author: c.author?.githubLogin ?? "unknown",
+        category: c.category,
+        isMerge: c.isMerge,
+        secretFlag: c.secretFlag,
+        issueNumber: c.issue?.number ?? null,
+        at: c.committedAt ?? c.createdAt,
+      })),
+      more: Math.max(0, rows.length - RECENT_LIMIT),
+      commitsUrl: repo ? `https://github.com/${repo}/commits` : undefined,
+    });
+    await reply(chatId, body, startKeyboard());
+    return { ok: shown.length > 0, note: `${shown.length} commit(s)` };
+  } catch {
+    await reply(chatId, "Reading commits failed — try again soon.");
+    return { ok: false, note: "Reading failed" };
+  }
 }
 
 async function cmdBind(chatId: string, sender: Sender | undefined, repoArg?: string): Promise<Reply> {
@@ -482,6 +582,9 @@ export async function handleMessage(chatId: string, text?: string, sender?: Send
       return;
     case "repos":
       await cmdRepos(chatId, sender);
+      return;
+    case "recent":
+      await cmdRecent(chatId, sender, parsed.arg);
       return;
     case "bind":
       await cmdBind(chatId, sender, parsed.arg);

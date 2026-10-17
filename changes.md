@@ -1,5 +1,16 @@
 # Changes
 
+## 2026-10-18 — Bot: `/recent`, see the latest commits without leaving Telegram
+- New command: **`/recent [owner/repo]`** lists the newest commits as one line each — short SHA, category, subject, author, age:
+  `<code>a1b2c3d</code> <b>feat</b> add /recent command → #7 — octocat, 2h ago`.
+- **Scoped to what the chat already owns.** With no argument it reads the repos this chat is subscribed to (the same surface `/digest` lists); with `owner/repo` it reads that repo, behind the *same* access check `/bind` uses — so a chat can never page through a repo its caller has no access to. In a group, the repo-argument form is admin-gated like `/digest`; the no-argument form is the chat's own data and stays open to members.
+- **Read-only and recomputed from the source of truth.** No counters are touched (rule 4): it queries `commits` newest first by `committedAt`, with legacy nulls sorted last and falling back to `createdAt`. Rule 12 holds — an unattributed row renders `unknown`, never blank.
+- **Flagged commits withhold their subject** (`🔑 possible secret — subject withheld`), matching `formatPush` rather than inventing a second behaviour for the same flag. Nothing secret is ever rendered.
+- The list shows the commit **subject** (metadata we already store) and never the AI summary, so `/recent` works identically whether or not `summarize()` has run.
+- `formatRecent()` + `timeAgo()` are pure and live in `src/formatter.ts`; the command in `src/telegramBot.ts`; the menu entry in `src/telegramUi.ts` is what makes `/re` autofill on a phone. Registered with `npm run bot:setup` (idempotent).
+- **12 new tests** (`test/formatRecent.test.ts` 13 cases, `test/recentCommand.test.ts` 12 cases): bucketing, escaping, subject capping, the `+N more` tail, secret withholding, unattributed rows, the access denials, and the 3800-char cap.
+- Note: `npm test` also reports 7 red suites that predate this change — the dashboard restructure on `main` deleted `dashboard/src/{telegramHtml,export,report}.ts` while `test/{telegramHtml,export,report}.test.ts` still import them, and `vitest.config.ts` has no `exclude`, so vitest now also tries to run the new Playwright specs in `e2e/`. Unrelated to the bot; left alone rather than fixed blind mid-refactor.
+
 ## 2026-10-17 — Why the site was slow: functions in US-East, database in Seoul
 - **Root cause of both "slow to load" and the 8-12s after linking:** functions ran in `iad1` (Washington, D.C. — Vercel's default) while Postgres lives in `ap-northeast-2` (Seoul). Every DB round trip crossed the planet (~190ms each way), and the OAuth callback `await`s `syncUserInstalls()`, which writes one row per repo.
 - **Measured, not guessed:** `/api/health` and `/api/meta` — which touch no database — sat at 410-660ms TTFB and never improved across six rapid hits. That is a floor, not warm-up. `X-Vercel-Id: bom1::iad1::…` showed the Mumbai edge handing off to a US-East function.
