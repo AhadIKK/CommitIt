@@ -74,6 +74,10 @@ export default async function handler(
       sendJson(res, 401, { ok: false, error: "bad_signature" });
       return;
     }
+  } else if (process.env.NODE_ENV === "production") {
+    // Fail closed: unsigned app deliveries are only acceptable in dev.
+    sendJson(res, 503, { ok: false, error: "webhook_secret_not_configured" });
+    return;
   } else {
     console.warn(
       JSON.stringify({ msg: "GITHUB_APP_WEBHOOK_SECRET not set — skipping verify (dev only)" }),

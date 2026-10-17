@@ -133,6 +133,28 @@ export function shapeActivity(
   );
 }
 
+/**
+ * Same shaping as shapeActivity, but from pre-aggregated counts. Lets
+ * getActivity roll authors up with a SQL GROUP BY instead of loading every
+ * in-window commit row into memory.
+ */
+export function shapeActivityFromCounts(
+  commits: { authorLogin: string; count: number }[],
+  mergedPRs: { authorLogin: string; count: number }[],
+): AuthorStat[] {
+  const byAuthor = new Map<string, AuthorStat>();
+  const bump = (login: string, field: "commits" | "mergedPRs", n: number) => {
+    const row = byAuthor.get(login) ?? { login, commits: 0, mergedPRs: 0 };
+    row[field] += n;
+    byAuthor.set(login, row);
+  };
+  for (const c of commits) bump(c.authorLogin, "commits", c.count);
+  for (const p of mergedPRs) bump(p.authorLogin, "mergedPRs", p.count);
+  return [...byAuthor.values()].sort(
+    (a, b) => b.commits + b.mergedPRs - (a.commits + a.mergedPRs),
+  );
+}
+
 /** Longest subject we will render; commit subjects are conventionally short. */
 export const COMMIT_SUBJECT_MAX = 200;
 
@@ -271,14 +293,16 @@ export async function getActivity(
         { committedAt: null, createdAt: { gte: since } },
       ],
     };
-    const [commits, prs, allCommits, allPrs, live, recent] = await Promise.all([
-      prisma.commit.findMany({
+    const [commitGroups, prGroups, allCommits, allPrs, live, recent] = await Promise.all([
+      prisma.commit.groupBy({
+        by: ["authorId"],
         where: { repoId: repoRow.id, ...window },
-        include: { author: { select: { githubLogin: true } } },
+        _count: { _all: true },
       }),
-      prisma.pullRequest.findMany({
+      prisma.pullRequest.groupBy({
+        by: ["authorId"],
         where: { repoId: repoRow.id, state: "merged", mergedAt: { gte: since } },
-        include: { author: { select: { githubLogin: true } } },
+        _count: { _all: true },
       }),
       prisma.commit.count({ where: { repoId: repoRow.id } }),
       prisma.pullRequest.count({ where: { repoId: repoRow.id, state: "merged" } }),
@@ -298,16 +322,34 @@ export async function getActivity(
         take: Math.min(Math.max(commitLimit, 1), 50),
       }),
     ]);
-    const authors = shapeActivity(
-      commits.map((c) => ({ authorLogin: c.author?.githubLogin ?? "unknown" })),
-      prs.map((p) => ({ authorLogin: p.author?.githubLogin ?? "unknown" })),
+    // Resolve the (few) author ids the rollup touches — bounded by distinct
+    // authors, never by commit count.
+    const authorIds = [
+      ...new Set(
+        [...commitGroups, ...prGroups]
+          .map((g) => g.authorId)
+          .filter((x): x is string => x != null),
+      ),
+    ];
+    const authorRows = authorIds.length
+      ? await prisma.author.findMany({
+          where: { id: { in: authorIds } },
+          select: { id: true, githubLogin: true },
+        })
+      : [];
+    const loginById = new Map(authorRows.map((a) => [a.id, a.githubLogin]));
+    const loginFor = (authorId: string | null): string =>
+      authorId ? (loginById.get(authorId) ?? "unknown") : "unknown";
+    const authors = shapeActivityFromCounts(
+      commitGroups.map((g) => ({ authorLogin: loginFor(g.authorId), count: g._count._all })),
+      prGroups.map((g) => ({ authorLogin: loginFor(g.authorId), count: g._count._all })),
     );
     return {
       repo,
       authors,
       commits: shapeCommits(recent),
-      totalCommits: commits.length,
-      totalMergedPRs: prs.length,
+      totalCommits: commitGroups.reduce((n, g) => n + g._count._all, 0),
+      totalMergedPRs: prGroups.reduce((n, g) => n + g._count._all, 0),
       totalCommitsAllTime: allCommits,
       totalMergedPRsAllTime: allPrs,
       githubMainCommits: live.count,

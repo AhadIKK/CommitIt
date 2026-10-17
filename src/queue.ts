@@ -32,7 +32,12 @@ export async function enqueueJob(
       update: {},
       create: { type, deliveryId, payload: payload as object },
     });
-  } catch {
+  } catch (err) {
+    // Loud, never silent: on a host that ends the process (Vercel) this job is
+    // lost with the instance, so the fallback must not hide the DB failure.
+    console.warn(
+      JSON.stringify({ msg: "enqueue_fallback_memory", deliveryId, err: String(err) }),
+    );
     if (!memoryFallback.some((j) => j.deliveryId === deliveryId)) {
       memoryFallback.push({
         id: `mem-${deliveryId}`,
@@ -50,7 +55,7 @@ export async function enqueueJob(
 export async function claimNextJob(): Promise<JobRow | null> {
   try {
     const rows = await prisma.$queryRaw<JobRow[]>`
-      UPDATE "Job" SET status = 'processing', attempts = attempts + 1
+      UPDATE "Job" SET status = 'processing', attempts = attempts + 1, "updatedAt" = NOW()
       WHERE id = (
         SELECT id FROM "Job"
         WHERE status = 'queued'

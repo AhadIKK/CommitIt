@@ -67,6 +67,7 @@ type PullRequestPayload = {
     merged?: boolean;
     merged_at?: string | null;
     body?: string | null;
+    html_url?: string;
     user?: { login?: string };
     base?: { ref?: string };
     head?: { ref?: string };
@@ -97,6 +98,33 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
   const branch = (payload.ref ?? "").replace("refs/heads/", "") || "main";
   const commits = payload.commits ?? [];
 
+  // One repo row up front: it carries ai_enabled (rule 7) and seeds the
+  // open-issue set used for real linking (rule 11). Null when the DB is
+  // unreachable — formatting + notification still run below.
+  let repoId: string | null = null;
+  let aiEnabled = true;
+  const issueByNumber = new Map<number, string>();
+  const openIssues: { number: number; title: string }[] = [];
+  try {
+    const repoRow = await prisma.repo.upsert({
+      where: { fullName: repo },
+      update: {},
+      create: { fullName: repo },
+    });
+    repoId = repoRow.id;
+    aiEnabled = repoRow.aiEnabled;
+    const rows = await prisma.issue.findMany({
+      where: { repoId: repoRow.id },
+      select: { id: true, number: true, title: true, state: true },
+    });
+    for (const i of rows) {
+      issueByNumber.set(i.number, i.id);
+      if (i.state !== "closed") openIssues.push({ number: i.number, title: i.title });
+    }
+  } catch {
+    // DB unreachable: no attribution/link/AI-flag persistence this pass
+  }
+
   const formatted: FormatCommit[] = [];
   let directToMain = false;
   for (const c of commits.slice(0, 20)) {
@@ -112,8 +140,14 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
     void trim;
     const category = classify(c.message);
     const isMerge = category === "merge";
-    const link = linkCommit({ message: c.message, branch });
-    void link;
+    // Real links only: strong (closes #N) or weak (#N / branch). A heuristic
+    // suggestion is deliberately NOT persisted — it stays "Unlinked work"
+    // (rule 11: never auto-assign a suggestion).
+    const link = linkCommit({ message: c.message, branch, openIssues });
+    const linkedIssueId =
+      link.kind === "strong" || link.kind === "weak" || link.kind === "pr"
+        ? issueByNumber.get(link.issue)
+        : undefined;
     const author = c.author?.username ?? c.author?.name ?? "unknown";
     // Author attribution (mirrors api/webhook storePushCommits): every push
     // commit gets an Author row. Missing this once rendered the whole
@@ -144,7 +178,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           repo,
           branch,
           sha: c.id,
-          file: "<message>",
+          file: "(commit message)",
           author,
         }),
         { priority: true },
@@ -157,7 +191,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
         sha: c.id,
         message: c.message,
         diffExcerpt: "",
-        aiEnabled: true,
+        aiEnabled,
       });
       aiSummary = s.text;
       degraded = s.degraded;
@@ -172,19 +206,15 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
       isMerge,
       secretFlag,
     });
+    if (!repoId) continue;
     try {
-      const repoRow = await prisma.repo.upsert({
-        where: { fullName: repo },
-        update: {},
-        create: { fullName: repo },
-      });
       let committedAt: Date | null = null;
       if (c.timestamp) {
         const parsed = new Date(c.timestamp);
         if (!Number.isNaN(parsed.getTime())) committedAt = parsed;
       }
       await prisma.commit.upsert({
-        where: { repoId_sha: { repoId: repoRow.id, sha: c.id } },
+        where: { repoId_sha: { repoId, sha: c.id } },
         update: {
           message: c.message.slice(0, 2000),
           category,
@@ -194,9 +224,10 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           branch,
           ...(committedAt ? { committedAt } : {}),
           ...(authorId ? { authorId } : {}),
+          ...(linkedIssueId ? { issueId: linkedIssueId } : {}),
         },
         create: {
-          repoId: repoRow.id,
+          repoId,
           sha: c.id,
           message: c.message.slice(0, 2000),
           category,
@@ -206,6 +237,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           aiSummary: aiSummary?.slice(0, 2000),
           branch,
           committedAt,
+          issueId: linkedIssueId ?? null,
           ...(authorId ? { authorId } : {}),
         },
       });
@@ -295,6 +327,7 @@ async function processPullRequest(job: JobRow, payload: PullRequestPayload): Pro
         prNumber: pr.number,
         title: pr.title,
         author: pr.user?.login ?? "unknown",
+        prUrl: pr.html_url,
       }),
     );
   }

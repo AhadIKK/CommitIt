@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { getInstallationToken, type KeyMaterial } from "./githubAuth.js";
-import { storeSyncedIssues, type SyncIssue } from "./github-sync.js";
+import { storeSyncedIssues, weightFromLabels, type SyncIssue } from "./github-sync.js";
 
 // backfill.ts — one-shot per-installation sync (Phase B). Lists the install's
 // repos, then pages issues with ETag (304 = skip, updates lastSyncAt).
@@ -36,16 +36,6 @@ const IssueResponse = z.array(
     milestone: z.object({ number: z.number(), title: z.string() }).nullable().optional(),
   }),
 );
-
-function weightFromLabels(labels: { name: string }[]): number {
-  for (const l of labels) {
-    const n = l.name.toLowerCase();
-    if (n === "s" || n.includes("small") || n.includes("1")) return 1;
-    if (n === "m" || n.includes("medium") || n.includes("3")) return 3;
-    if (n === "l" || n.includes("large") || n.includes("5")) return 5;
-  }
-  return 1;
-}
 
 function rateLimitWaitMs(res: Response): number | null {
   if (res.status === 429) {
@@ -263,6 +253,50 @@ const CommitListResponse = z.array(
 );
 
 /**
+ * Resolve a repo's default branch from GitHub and persist it. Returns null
+ * when unreachable; throws RateLimitedError so the worker backs off. Persisting
+ * it lets commit backfill pin `&sha=` and lets stale-branch checks see history.
+ */
+async function resolveDefaultBranch(
+  fullName: string,
+  token: string,
+  repoId: string,
+  fetchFn: typeof fetch,
+): Promise<string | null> {
+  const url = `https://api.github.com/repos/${fullName}`;
+  let res = await authedGet(url, token, {}, fetchFn);
+  if (!res.ok && rateLimitWaitMs(res) === null) {
+    try {
+      res = await fetchFn(url, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      });
+    } catch {
+      return null;
+    }
+  }
+  const waitMs = rateLimitWaitMs(res);
+  if (waitMs !== null) throw new RateLimitedError(waitMs);
+  if (!res.ok) return null;
+  let body: { default_branch?: unknown };
+  try {
+    body = (await res.json()) as { default_branch?: unknown };
+  } catch {
+    return null;
+  }
+  if (typeof body.default_branch !== "string" || !body.default_branch.trim()) return null;
+  const branch = body.default_branch.trim();
+  try {
+    await prisma.repo.update({ where: { id: repoId }, data: { defaultBranch: branch } });
+  } catch {
+    // metadata touch is best-effort
+  }
+  return branch;
+}
+
+/**
  * Backfill commit history. The `push` webhook only records commits pushed
  * *after* install, so a freshly installed repo otherwise reads 0 activity
  * forever. Fetches the default branch from GitHub (falls back to the repo's
@@ -289,7 +323,12 @@ export async function backfillRepoCommits(
   } catch {
     return null;
   }
-  const branch = repoRow.defaultBranch?.trim() || null;
+  let branch = repoRow.defaultBranch?.trim() || null;
+  // First run: learn + persist the default branch so `&sha=` pins the listing
+  // and stale-branch checks can see this history (branch was null before).
+  if (!branch) {
+    branch = await resolveDefaultBranch(fullName, token, repoRow.id, fetchFn);
+  }
   let stored = 0;
   for (let page = 1; page <= maxPages; page++) {
     const shaParam = branch ? `&sha=${encodeURIComponent(branch)}` : "";

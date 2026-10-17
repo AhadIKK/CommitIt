@@ -104,6 +104,33 @@ describe("api/webhook handler", () => {
       body: { ok: false, error: "invalid_json" },
     });
   });
+
+  it("fails closed with 503 when the secret is missing in production", async () => {
+    clearRateLimit();
+    const savedSecret = process.env.GITHUB_WEBHOOK_SECRET;
+    const savedEnv = process.env.NODE_ENV;
+    delete process.env.GITHUB_WEBHOOK_SECRET;
+    process.env.NODE_ENV = "production";
+    try {
+      const { res, done } = mockRes();
+      await webhookHandler(
+        mockReq({
+          headers: { "x-github-event": "ping", "x-github-delivery": "prod-1" },
+          body: "{}",
+        }),
+        res,
+      );
+      expect(await done).toEqual({
+        status: 503,
+        body: { ok: false, error: "webhook_secret_not_configured" },
+      });
+    } finally {
+      if (savedSecret !== undefined) process.env.GITHUB_WEBHOOK_SECRET = savedSecret;
+      else delete process.env.GITHUB_WEBHOOK_SECRET;
+      if (savedEnv !== undefined) process.env.NODE_ENV = savedEnv;
+      else delete process.env.NODE_ENV;
+    }
+  });
 });
 
 describe("api/health handler", () => {

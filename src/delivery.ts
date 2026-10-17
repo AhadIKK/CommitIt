@@ -103,9 +103,17 @@ export async function deliver(
           scheduledFor: deferAt(r, now),
         },
       });
-    } catch {
+    } catch (err) {
       // dev without DB: deferred message is dropped with the process —
       // logged by the caller path, never silently half-sent
+      console.warn(
+        JSON.stringify({
+          msg: "notification_queue_failed",
+          repo: repoFullName,
+          type,
+          err: String(err),
+        }),
+      );
     }
   }
 }
@@ -173,7 +181,8 @@ export async function dispatchDueNotifications(now: Date = new Date()): Promise<
       digests++;
     }
     return digests;
-  } catch {
+  } catch (err) {
+    console.warn(JSON.stringify({ msg: "dispatch_due_failed", err: String(err) }));
     return 0;
   }
 }

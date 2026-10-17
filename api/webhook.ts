@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import { prisma } from "../src/db.js";
+import { enqueueJob } from "../src/queue.js";
 import { isRateLimited } from "../src/rateLimit.js";
 import { verifySignature } from "../src/verify.js";
 
@@ -33,6 +34,14 @@ const CheckRunSchema = z.object({
   action: z.string().optional(),
   check_run: z
     .object({ name: z.string(), head_sha: z.string() })
+    .optional(),
+  repository: z.object({ full_name: z.string() }).optional(),
+});
+
+const IssuesSchema = z.object({
+  action: z.string().optional(),
+  issue: z
+    .object({ number: z.number(), title: z.string(), state: z.string() })
     .optional(),
   repository: z.object({ full_name: z.string() }).optional(),
 });
@@ -156,6 +165,11 @@ export default async function handler(
       sendJson(res, 401, { ok: false, error: "bad_signature" });
       return;
     }
+  } else if (process.env.NODE_ENV === "production") {
+    // Fail closed: a production host with no secret would otherwise accept
+    // forged deliveries. Mirrors the Telegram webhook's 503.
+    sendJson(res, 503, { ok: false, error: "webhook_secret_not_configured" });
+    return;
   } else {
     console.warn(
       JSON.stringify({
@@ -177,46 +191,69 @@ export default async function handler(
     return;
   }
 
-  // Light validation mirrors src/webhook.ts; storage/queue run in src path.
+  // Validate known event shapes (mirrors src/webhook.ts). Unknown events still
+  // enqueue; the worker ignores types it does not handle.
   const schema =
     event === "pull_request"
       ? PullRequestSchema
       : event === "check_run"
         ? CheckRunSchema
-        : event === "push"
-          ? PushSchema
-          : event === "milestone"
-            ? MilestoneSchema
-            : event === "repository"
-              ? RepositorySchema
-              : null;
-  if (schema) {
-    const checked = schema.safeParse(parsed);
-    if (!checked.success) {
-      sendJson(res, 400, { ok: false, error: "invalid_payload" });
-      return;
-    }
-    // Serverless ingest: Vercel never runs the worker poller, so push
-    // commits are stored directly (best-effort — a DB failure still acks
-    // 200; the long-lived path reprocesses via jobs). Never 500s.
-    if (event === "push") {
+        : event === "issues"
+          ? IssuesSchema
+          : event === "push"
+            ? PushSchema
+            : event === "milestone"
+              ? MilestoneSchema
+              : event === "repository"
+                ? RepositorySchema
+                : null;
+  if (schema && !schema.safeParse(parsed).success) {
+    sendJson(res, 400, { ok: false, error: "invalid_payload" });
+    return;
+  }
+
+  // Idempotency: events.delivery_id UNIQUE, insert-or-skip before processing.
+  // Same key seeds jobs.delivery_id via enqueueJob(), mirroring src/webhook.ts.
+  try {
+    await prisma.event.upsert({
+      where: { deliveryId: delivery },
+      update: {},
+      create: { deliveryId: delivery, type: event ?? "unknown" },
+    });
+  } catch (err) {
+    console.warn(JSON.stringify({ delivery, msg: "event store unavailable, continuing", err: String(err) }));
+  }
+
+  // Direct push ingest so the dashboard shows a push immediately even while
+  // the (sleeping) worker has not run the job yet. Idempotent on (repoId, sha),
+  // so the worker reprocessing the queued job is a safe no-op. Never 500s.
+  if (event === "push") {
+    const checked = PushSchema.safeParse(parsed);
+    if (checked.success) {
       try {
-        await storePushCommits(checked.data as z.infer<typeof PushSchema>);
+        await storePushCommits(checked.data);
       } catch (err) {
         console.warn(JSON.stringify({ delivery, msg: "push ingest failed", err: String(err) }));
       }
     }
   }
 
-  console.log(
-    JSON.stringify({
-      delivery,
-      event,
-      hasSignature: Boolean(signature),
-      body: parsed,
-      msg: "webhook received",
-    }),
-  );
+  // Full pipeline: enqueue the same job the Render worker processes. Vercel
+  // shares the Postgres-backed queue with Render, so this is how pushes get
+  // AI summaries, notifications and issue linking serverless. Delivery id
+  // carries the idempotency; a request that never lands here is retried by
+  // GitHub (we only 500 when enqueue genuinely fails).
+  try {
+    await enqueueJob(event ?? "unknown", delivery, parsed);
+  } catch (err) {
+    console.warn(JSON.stringify({ delivery, event, msg: "enqueue failed", err: String(err) }));
+    sendJson(res, 500, { ok: false, error: "enqueue_failed" });
+    return;
+  }
+
+  // Never log the payload body: commit messages and PR/issue bodies can carry
+  // secrets (AGENTS rule 6). Delivery/event ids are enough to trace.
+  console.log(JSON.stringify({ delivery, event, hasSignature: Boolean(signature), msg: "webhook received" }));
 
   sendJson(res, 200, { ok: true });
 }

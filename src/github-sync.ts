@@ -23,12 +23,22 @@ function headers(): Record<string, string> {
   return h;
 }
 
-function weightFromLabels(labels: { name: string }[]): number {
+/**
+ * Story-point weight from labels. Anchored to whole size labels (`s`, `small`,
+ * `size/s`, `1`, …) — the old `includes("1")` matched any label containing a
+ * digit (e.g. `p1`, `v1.0`), mis-sizing issues. Shared by the live sync and the
+ * install backfill so the two can never drift.
+ */
+const SIZE_WEIGHTS: { w: number; re: RegExp }[] = [
+  { w: 1, re: /^(?:1|s|small|size\s*[:/]?\s*(?:1|s))$/i },
+  { w: 3, re: /^(?:3|m|medium|size\s*[:/]?\s*(?:3|m))$/i },
+  { w: 5, re: /^(?:5|l|large|size\s*[:/]?\s*(?:5|l))$/i },
+];
+
+export function weightFromLabels(labels: { name: string }[]): number {
   for (const l of labels) {
-    const n = l.name.toLowerCase();
-    if (n === "s" || n.includes("small") || n.includes("1")) return 1;
-    if (n === "m" || n.includes("medium") || n.includes("3")) return 3;
-    if (n === "l" || n.includes("large") || n.includes("5")) return 5;
+    const n = l.name.trim();
+    for (const { w, re } of SIZE_WEIGHTS) if (re.test(n)) return w;
   }
   return 1;
 }

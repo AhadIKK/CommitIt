@@ -351,6 +351,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         req.log.warn({ delivery, event }, "app webhook rejected: bad signature");
         return reply.code(401).send({ ok: false, error: "bad_signature" });
       }
+    } else if (process.env.NODE_ENV === "production") {
+      req.log.error({ delivery, event }, "app webhook rejected: GITHUB_APP_WEBHOOK_SECRET not set");
+      return reply.code(503).send({ ok: false, error: "webhook_secret_not_configured" });
     } else {
       req.log.warn("GITHUB_APP_WEBHOOK_SECRET not set — skipping verify (dev only)");
     }

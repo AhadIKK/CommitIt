@@ -20,6 +20,25 @@ const MAX_CHARS = 3800;
 const MAX_COMMITS = 15;
 const COLLAPSE_AT = 10;
 
+/**
+ * Truncate HTML without cutting a tag or entity in half. A sliced
+ * `<a href="…">` or a dangling `&amp` makes Telegram reject the entire
+ * message ("can't parse entities"), so we back off to the last safe
+ * boundary before appending the ellipsis. Pure, tested.
+ */
+export function truncateHtml(s: string, max: number, ellipsis = "\n… truncated"): string {
+  if (s.length <= max) return s;
+  const budget = Math.max(0, max - ellipsis.length);
+  let cut = s.slice(0, budget);
+  // Drop an unterminated tag: `<` with no matching `>` after it.
+  const lastOpen = cut.lastIndexOf("<");
+  if (lastOpen > cut.lastIndexOf(">")) cut = cut.slice(0, lastOpen);
+  // Drop a dangling partial entity (`&`, `&am`, …) with no closing `;`.
+  const amp = cut.lastIndexOf("&");
+  if (amp !== -1 && !cut.slice(amp).includes(";")) cut = cut.slice(0, amp);
+  return cut + ellipsis;
+}
+
 export function formatPush(opts: {
   repo: string;
   branch: string;
@@ -75,14 +94,14 @@ export function formatPush(opts: {
 
   let out = lines.join("\n");
   if (out.length > MAX_CHARS) {
-    out = out.slice(0, MAX_CHARS - 20) + "\n… truncated";
-    if (compareUrl) out += ` <a href="${compareUrl}">view diff</a>`;
+    const tail = compareUrl ? ` <a href="${compareUrl}">view diff</a>` : "";
+    out = truncateHtml(out, MAX_CHARS - tail.length) + tail;
   }
   return out;
 }
 
 function cap(s: string): string {
-  return s.length > MAX_CHARS ? s.slice(0, MAX_CHARS - 20) + "\n… truncated" : s;
+  return truncateHtml(s, MAX_CHARS);
 }
 
 // Instant: PR merged (squash-merge included — the PR event is truth).

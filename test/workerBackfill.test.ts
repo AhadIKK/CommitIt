@@ -47,6 +47,7 @@ describe("worker backfill job", () => {
           ? json({ repositories: [{ full_name: "o/r" }] })
           : json({ repositories: [] });
       }
+      if (target.endsWith("/repos/o/r")) return json({ default_branch: "main" });
       if (target.includes("/issues?") || target.includes("/pulls?")) return json([]);
       if (target.includes("/commits?")) return json([]);
       throw new Error(`unexpected ${target}`);

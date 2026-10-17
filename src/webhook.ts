@@ -131,6 +131,10 @@ export async function webhookRoutes(app: FastifyInstance) {
         req.log.warn({ delivery, event }, "webhook rejected: bad signature");
         return reply.code(401).send({ ok: false, error: "bad_signature" });
       }
+    } else if (process.env.NODE_ENV === "production") {
+      // Fail closed: unsigned deliveries are only acceptable in dev.
+      req.log.error({ delivery, event }, "webhook rejected: GITHUB_WEBHOOK_SECRET not set");
+      return reply.code(503).send({ ok: false, error: "webhook_secret_not_configured" });
     } else {
       req.log.warn("GITHUB_WEBHOOK_SECRET not set — skipping verify (dev only)");
     }

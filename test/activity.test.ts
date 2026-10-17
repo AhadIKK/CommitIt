@@ -24,9 +24,18 @@ vi.mock("../src/db.js", () => ({
         lastWhere = args.where;
         return commits;
       },
+      groupBy: async (args: { where: unknown }) => {
+        lastWhere = args.where;
+        return commits.length ? [{ authorId: "a1", _count: { _all: commits.length } }] : [];
+      },
       count: async () => commits.length,
     },
-    pullRequest: { findMany: async () => [], count: async () => 0 },
+    pullRequest: {
+      findMany: async () => [],
+      groupBy: async () => [],
+      count: async () => 0,
+    },
+    author: { findMany: async () => [{ id: "a1", githubLogin: "octocat" }] },
   },
 }));
 
