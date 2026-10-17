@@ -20,9 +20,15 @@ import { relativeTime } from "../lib/format.js";
 
 const TRACK_QUERY = "(min-width: 60rem)";
 
-function taskOwner(detail: GoalDetail, issue: Issue): string {
+/**
+ * Who owns a task, and whether they are a person we actually know. The name is
+ * used for the label; the avatar is decoration and is only drawn for a real
+ * person — an "UN" chip beside the word "unassigned" means nothing (and an
+ * unknown id must not turn into one either).
+ */
+function taskOwner(detail: GoalDetail, issue: Issue): { name: string; known: boolean } {
   const found = detail.authors.find((a) => a.id === issue.assigneeId);
-  return found?.name ?? found?.login ?? "unassigned";
+  return { name: found?.name ?? found?.login ?? "unassigned", known: Boolean(found) };
 }
 
 export function Goal() {
@@ -135,6 +141,7 @@ export function Goal() {
           <ul className="tasks">
             {data.issues.map((issue) => {
               const label = sizeLabel(issue.sizeWeight);
+              const owner = taskOwner(data, issue);
               return (
                 <li className="task" key={issue.number} data-state={issue.state}>
                   <span className="task__number">#{issue.number}</span>
@@ -151,8 +158,8 @@ export function Goal() {
                       {label ? `${label}, ${weightOf(issue)} points` : "unestimated, counts as 1 point"}
                     </span>
                     <span className="task__owner">
-                      <Avatar name={taskOwner(data, issue)} />
-                      {taskOwner(data, issue)}
+                      {owner.known ? <Avatar name={owner.name} /> : null}
+                      {owner.name}
                     </span>
                     <span>
                       {issue.state === "closed"

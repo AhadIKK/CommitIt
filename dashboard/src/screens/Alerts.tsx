@@ -43,8 +43,8 @@ function AlertItem({ alert, repoFullName }: { alert: Alert; repoFullName: string
 
       {alert.kind === "secret" && alert.file ? (
         <p className="alert__body">
-          The file was <span className="code">{alert.file}</span>. The file was skipped before any AI call,
-          so its contents were never read, stored or summarised.
+          The file was <span className="code">{alert.file}</span>. It was skipped before any AI call, so
+          its contents were never read, stored or summarised.
         </p>
       ) : null}
 
