@@ -3,33 +3,57 @@
  *
  * Route-level code splitting keeps the first paint small: Today is the landing
  * screen for a signed-in person, so it loads first and the rest arrive on demand.
- * Landing is public and does not use the frame at all — no rail, no tab bar, one
+ * Landing is public and does not use the frame at all â€” no rail, no tab bar, one
  * column.
  */
 import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Link, Outlet, Route, Routes, useLocation } from "react-router-dom";
-import { AppShell } from "./components/AppShell.js";
+import { AppShell as OldAppShell } from "./components/AppShell.js";
 import { Skeleton } from "./components/surfaces.js";
 import { useRepoRef, useRepos } from "./lib/queries.js";
 import { useLive } from "./lib/useLive.js";
 import { currentScenario, scenarioLabel } from "./lib/scenario.js";
 import { Today } from "./screens/Today.js";
+import { AppShell } from "./app/Shell.js";
+import { ToastHost } from "./components/kit.js";
 
 const Landing = lazy(() => import("./screens/Landing.js").then((m) => ({ default: m.Landing })));
 const LedgerSite = lazy(() =>
   import("./site/LedgerSite.js").then((m) => ({ default: m.LedgerSite })),
 );
-const Onboarding = lazy(() => import("./screens/Onboarding.js").then((m) => ({ default: m.Onboarding })));
+// The new authenticated app (the ledger language). Aliased because the old
+// screens above still expose same-named routes for deep links.
+const OldOnboarding = lazy(() => import("./screens/Onboarding.js").then((m) => ({ default: m.Onboarding })));
 const Goals = lazy(() => import("./screens/Goals.js").then((m) => ({ default: m.Goals })));
 const Goal = lazy(() => import("./screens/Goal.js").then((m) => ({ default: m.Goal })));
 const People = lazy(() => import("./screens/People.js").then((m) => ({ default: m.People })));
 const Digests = lazy(() => import("./screens/Digests.js").then((m) => ({ default: m.Digests })));
 const Alerts = lazy(() => import("./screens/Alerts.js").then((m) => ({ default: m.Alerts })));
-const Settings = lazy(() => import("./screens/Settings.js").then((m) => ({ default: m.Settings })));
+const OldSettings = lazy(() => import("./screens/Settings.js").then((m) => ({ default: m.Settings })));
 const RepoSettings = lazy(() =>
   import("./screens/RepoSettings.js").then((m) => ({ default: m.RepoSettings })),
 );
+
+const AppOverview = lazy(() => import("./app/pages.js").then((m) => ({ default: m.Overview })));
+const AppRepoDetail = lazy(() => import("./app/pages.js").then((m) => ({ default: m.RepoDetail })));
+const AppTasks = lazy(() => import("./app/pages.js").then((m) => ({ default: m.TaskLedger })));
+const AppDigests = lazy(() => import("./app/pages.js").then((m) => ({ default: m.DigestLedger })));
+const AppAlerts = lazy(() => import("./app/pages.js").then((m) => ({ default: m.AlertFeed })));
+const AppChats = lazy(() => import("./app/pages.js").then((m) => ({ default: m.ChatLedger })));
+const AppPipeline = lazy(() => import("./app/pages.js").then((m) => ({ default: m.Pipeline })));
+const AppSecurity = lazy(() => import("./app/pages.js").then((m) => ({ default: m.Security })));
+const AppSettings = lazy(() => import("./app/Settings.js").then((m) => ({ default: m.Settings })));
+const DigestDetail = lazy(() => import("./app/details.js").then((m) => ({ default: m.DigestDetail })));
+const ChatDetail = lazy(() => import("./app/details.js").then((m) => ({ default: m.ChatDetail })));
+const Login = lazy(() => import("./app/Settings.js").then((m) => ({ default: m.Login })));
+const AppNotFound = lazy(() => import("./app/Settings.js").then((m) => ({ default: m.NotFound })));
+const OnboardingPublic = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Onboarding })));
+const Terms = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Terms })));
+const Privacy = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Privacy })));
+const Changelog = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Changelog })));
+const Docs = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Docs })));
+const RouteErrorPage = lazy(() => import("./app/Public.js").then((m) => ({ default: m.RouteError })));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
@@ -41,7 +65,7 @@ function ScenarioNote() {
   if (!label) return null;
   return (
     <p className="live live--stale" role="status">
-      <span aria-hidden="true">◆</span>
+      <span aria-hidden="true">â—†</span>
       <span>{label}</span>
     </p>
   );
@@ -58,20 +82,6 @@ function RouteFallback() {
   );
 }
 
-function NotFound() {
-  return (
-    <div className="screen">
-      <h1 className="display">That page is not here</h1>
-      <p className="screen__lede">
-        The address you followed does not match a screen.{" "}
-        <Link className="btn btn--inline" to="/today">
-          Go to today
-        </Link>
-      </p>
-    </div>
-  );
-}
-
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -80,14 +90,14 @@ function ScrollToTop() {
   return null;
 }
 
-/** Everything behind the rail and the tab bar. */
-function Shell() {
+/** Everything behind the old rail and tab bar (deep links kept working). */
+function OldShell() {
   const { ref, repoId, setRef } = useRepoRef();
   const repos = useRepos();
   const live = useLive(repoId);
 
   return (
-    <AppShell
+    <OldAppShell
       repoRef={ref}
       repos={repos.data ?? []}
       onRepoChange={setRef}
@@ -97,13 +107,28 @@ function Shell() {
       <Suspense fallback={<RouteFallback />}>
         <Outlet />
       </Suspense>
+    </OldAppShell>
+  );
+}
+
+/** The new authenticated shell, wrapped in the toast host. */
+function NewShell() {
+  return (
+    <AppShell>
+      <Suspense fallback={<RouteFallback />}>
+        <Outlet />
+      </Suspense>
     </AppShell>
   );
 }
 
+function Lazy({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
+
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}><ToastHost>
       <BrowserRouter>
         <ScrollToTop />
         <Routes>
@@ -124,22 +149,45 @@ export function App() {
               </Suspense>
             }
           />
-          <Route element={<Shell />}>
+          {/* Public legal/docs â€” no shell. */}
+          <Route path="/terms" element={<Lazy><Terms /></Lazy>} />
+          <Route path="/privacy" element={<Lazy><Privacy /></Lazy>} />
+          <Route path="/changelog" element={<Lazy><Changelog /></Lazy>} />
+          <Route path="/docs" element={<Lazy><Docs /></Lazy>} />
+          <Route path="/login" element={<Lazy><Login /></Lazy>} />
+          <Route path="/onboarding" element={<Lazy><OnboardingPublic /></Lazy>} />
+
+          {/* The new authenticated app. */}
+          <Route path="/app" element={<NewShell />}>
+            <Route index element={<Lazy><AppOverview /></Lazy>} />
+            <Route path="repos/:repoId" element={<Lazy><AppRepoDetail /></Lazy>} />
+            <Route path="tasks" element={<Lazy><AppTasks /></Lazy>} />
+            <Route path="digests" element={<Lazy><AppDigests /></Lazy>} />
+            <Route path="digests/:digestId" element={<Lazy><DigestDetail /></Lazy>} />
+            <Route path="alerts" element={<Lazy><AppAlerts /></Lazy>} />
+            <Route path="chats" element={<Lazy><AppChats /></Lazy>} />
+            <Route path="chats/:chatId" element={<Lazy><ChatDetail /></Lazy>} />
+            <Route path="system" element={<Lazy><AppPipeline /></Lazy>} />
+            <Route path="security" element={<Lazy><AppSecurity /></Lazy>} />
+            <Route path="settings" element={<Lazy><AppSettings /></Lazy>} />
+          </Route>
+
+          {/* The previous dashboard, kept reachable so old bookmarks and Telegram
+              links to single sections keep resolving. */}
+          <Route element={<OldShell />}>
             <Route path="/today" element={<Today />} />
             <Route path="/goals" element={<Goals />} />
             <Route path="/goals/:id" element={<Goal />} />
-            <Route path="/settings" element={<Settings />} />
-            {/* Deep links still resolve: the rail shows Settings, but an old
-                bookmark or a Telegram link to a single section keeps working. */}
+            <Route path="/settings" element={<OldSettings />} />
             <Route path="/people" element={<People />} />
             <Route path="/digests" element={<Digests />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/repos" element={<RepoSettings />} />
-            <Route path="/connect/:step" element={<Onboarding />} />
-            <Route path="*" element={<NotFound />} />
+            <Route path="/connect/:step" element={<OldOnboarding />} />
           </Route>
+          <Route path="*" element={<Lazy><AppNotFound /></Lazy>} />
         </Routes>
       </BrowserRouter>
-    </QueryClientProvider>
+    </ToastHost></QueryClientProvider>
   );
 }

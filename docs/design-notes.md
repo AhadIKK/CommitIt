@@ -282,3 +282,52 @@ Items 1–3 of this list were done in the second pass (§0); the rest stand.
    360px, but the pass has not been *looked at* on a phone: the one-line commit row, the wider
    52px track nodes and the distributed track layout all need a real mobile read. The Settings
    tabs are the most likely to break first.
+
+## 8. The app in the ledger language (third pass)
+
+The marketing site established the vocabulary; this pass carries it into every signed-in screen, so
+the product and the pitch are recognisably the same object.
+
+**The shell.** A narrow spine of section tabs down the left, a breadcrumb strip across the top, a
+persistent pipeline-status line at the foot. The tabs are words — no icon set was introduced — and
+the active tab carries a left ink bar plus a filled vermilion point, which is the same device as the
+Goal Track and costs nothing. Below 720px the spine becomes a horizontal scrolling strip and every
+table drops its header and stacks, because a nine-column ledger read on a phone is a wall.
+
+**Routes.** `/app` (overview, tasks, digests + detail, alerts, chats + detail, pipeline, safety,
+settings), plus `/login`, `/onboarding`, `/terms`, `/privacy`, `/changelog`, `/docs` and a `/404` that
+says "Not on the books." The previous dashboard still answers at its old paths so existing bookmarks
+and Telegram deep links keep resolving.
+
+**Semantics, applied consistently.** Success is a rotated mono stamp. Warning is a pencil hatch plus
+the word `CHECK`. Error is an `ERR` prefix and a double underline in ink — never red. Destructive is
+`VOID` on inverted ink. An invariant control renders its state as `LOCK` and is genuinely disabled;
+`seed before any model call` and `reopened tasks lose their points` are both invariants, so both are
+unreachable controls rather than warnings.
+
+**One bold element per screen.** It is the Goal Track, everywhere it can be. On Settings, where there
+is no track, it is the live message preview — the real Telegram message, updating as you change the
+options beside it. `--signal` appears at most once per screen: on filled track circles, on the reopen
+drag-back, and on the single primary action. Never on a link, a badge, a hover, or a toggle. There is
+an e2e test that fails if any `<a>` computes to the signal colour.
+
+**Progress is derived, never authored.** `REPOS` carries hand-written numbers for readability, but a
+block after `TASKS` recomputes `weights`, `open`, `pointsFinished`, `pointsTotal` and `needsDecision`
+from the task list on load. Authoring both meant they disagreed — `syncura` claimed 34 finished points
+while its tasks summed to 31 — and when they disagree the headline number lies. `seed.test.ts` now
+asserts the equality so it cannot drift again.
+
+**Secrets.** A finding carries exactly seven fields: id, path, rule, repoId, commitSha, at, status.
+There is no field that could hold matched text, and a test asserts the key set exactly so one cannot
+be added by accident. The safety page renders the path and rule and nothing else.
+
+**Fonts are now actually self-hosted.** `index.html` was loading Archivo, IBM Plex Mono and Instrument
+Serif from the Google Fonts CDN, which contradicted the rule stated in `main.tsx` and made every e2e
+run pay a network timeout (the suite went from 1.2m to 32s once it was gone). All three are installed
+through `@fontsource` and imported locally; the unused Poppins, Public Sans and JetBrains Mono packages
+were removed, since nothing referenced them any more.
+
+**Checks.** 64 dashboard unit tests, 398 backend tests, 177 e2e across two viewports and both themes.
+The new `e2e/app.spec.ts` covers every app and public route plus the ledger's own rules: sections are
+words with no icons, the active tab is marked for assistive technology, commits are labelled activity,
+the invariant switch is locked, and the unposted bar appears only once something has changed.

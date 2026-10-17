@@ -435,18 +435,7 @@
 /* The one focal element on the screen gets the one glow in the product. It is a
    wide, very soft wash sitting behind the track — enough to lift the instrument
    off the ground, not enough to read as a gradient card. */
-.goal-track::before {
-  content: "";
-  position: absolute;
-  inset: -1.5rem -1rem;
-  z-index: var(--z-base);
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 60% 120% at 50% 50%,
-    var(--atmo-glow),
-    transparent 70%
-  );
-}
+
 .track-scroll {
   min-width: 0;
   overflow-x: auto;
@@ -538,7 +527,7 @@
 .track__dot {
   display: block;
   border-radius: 50%;
-  background: var(--node-base);
+  background: var(--ground);
   border: 2px solid var(--node-open);
   transition:
     background-color var(--dur-state) var(--ease-out),
@@ -557,27 +546,17 @@
   height: var(--track-node-l);
 }
 .track__node[data-state="closed"] .track__dot {
-  background: var(--node-filled);
-  border-color: var(--node-filled);
+  background: var(--signal);
+  border-color: var(--signal);
 }
-/* A finished task fills in its own weight hue, so magnitude is legible twice
-   over — by size and by tone. Open tasks stay hollow rings in ink, so the
-   track reads as "tone = done, ring = not yet" without a legend. Unestimated
-   tasks carry weight 1, which is exactly what they count as. */
-.track__node[data-state="closed"][data-weight="1"] .track__dot {
-  background: var(--weight-s);
-  border-color: var(--weight-s);
-}
-.track__node[data-state="closed"][data-weight="3"] .track__dot {
-  background: var(--weight-m);
-  border-color: var(--weight-m);
-}
-.track__node[data-state="closed"][data-weight="5"] .track__dot {
-  background: var(--weight-l);
-  border-color: var(--weight-l);
-}
+/* A finished task is the one thing in the interface allowed to be vermilion.
+   Open tasks stay hollow rings in ink, so the track reads as "filled = done,
+   ring = not yet" without a legend. Unestimated tasks carry weight 1, which is
+   exactly what they count as. */
 .track__node[data-state="open"] .track__dot {
-  background: var(--node-base);
+  background: var(--ground);
+  border-color: var(--ink);
+}
 }
 /* unestimated: a dashed ring, and it counts as 1 point */
 .track__node[data-estimated="false"] .track__dot {

@@ -17,25 +17,9 @@
 }
 
 .main {
-  background-image:
-    repeating-radial-gradient(
-      circle at 82% -6%,
-      transparent 0 124px,
-      var(--atmo-ring) 124px 125px
-    ),
-    repeating-radial-gradient(
-      circle at 82% -6%,
-      transparent 0 58px,
-      var(--atmo-ring-fine) 58px 59px
-    ),
-    linear-gradient(var(--atmo-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--atmo-grid) 1px, transparent 1px);
-  background-size:
-    100% 100%,
-    100% 100%,
-    72px 72px,
-    72px 72px;
-  background-attachment: local;
+  background-image: linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 100% 32px;
+  opacity: 1;
 }
 
 .main {

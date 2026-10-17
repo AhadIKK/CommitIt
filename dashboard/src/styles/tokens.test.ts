@@ -53,10 +53,24 @@ describe("brand colours", () => {
     expect(css).toContain("--brand-signal-teal: #14b8a6");
   });
 
-  it("keep teal on the mark and nowhere else in the interface", () => {
-    // The logo is teal and stays teal. Nothing the interface paints may be:
-    // the weight ramp is the only chroma the product spends on data.
+  it("spend the vermilion on exactly one variable per theme", () => {
+    // --signal is the only chroma in the product, and it is the same value in
+    // both themes. If this ever forks, something has restyled the ink.
+    expect(css.match(/--signal: #e4440b;/g)?.length).toBeGreaterThanOrEqual(3);
     expect(css).not.toMatch(/--(n|d)-signal:/);
+  });
+
+  it("express no state with a new colour", () => {
+    // Errors are a double underline in ink, warnings a pencil hatch. Neither
+    // is allowed to grow a hue of its own.
+    expect(primitive("n", "danger")).toBe(primitive("n", "ink"));
+    expect(primitive("d", "danger")).toBe(primitive("d", "ink"));
+    expect(primitive("n", "attention")).toBe(primitive("n", "muted"));
+    expect(primitive("d", "attention")).toBe(primitive("d", "muted"));
+  });
+
+  it("carries no colour of its own for the retired weight ramp", () => {
+    expect(css).not.toMatch(/--(n|d)-weight-[sml]:/);
   });
 });
 
@@ -71,9 +85,6 @@ describe.each(THEMES)("$label theme", ({ key }) => {
   const focus = primitive(key, "focus");
   const edge = primitive(key, "edge");
   const hairline = primitive(key, "hairline");
-  const weightS = primitive(key, "weight-s");
-  const weightM = primitive(key, "weight-m");
-  const weightL = primitive(key, "weight-l");
 
   it("body text passes 4.5:1 on every surface", () => {
     for (const [name, bg] of [
@@ -102,28 +113,6 @@ describe.each(THEMES)("$label theme", ({ key }) => {
     ] as const) {
       expect(round(contrast(attention, bg)), `attention on ${name}`).toBeGreaterThanOrEqual(4.5);
       expect(round(contrast(danger, bg)), `danger on ${name}`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
-  it("every weight step is legible as text on the ground it sits on", () => {
-    for (const [name, value] of [
-      ["weight-s", weightS],
-      ["weight-m", weightM],
-      ["weight-l", weightL],
-    ] as const) {
-      expect(round(contrast(value, ground)), `${name} on ground`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
-  it("the three weight steps are distinguishable from each other", () => {
-    // The ramp is a magnitude scale, so consecutive steps must be far enough
-    // apart to read as different weights, not as one colour with noise.
-    const steps = [weightS, weightM, weightL];
-    for (let i = 0; i < steps.length - 1; i++) {
-      expect(
-        round(contrast(steps[i]!, steps[i + 1]!)),
-        `${steps[i]} vs ${steps[i + 1]}`,
-      ).toBeGreaterThanOrEqual(1.25);
     }
   });
 

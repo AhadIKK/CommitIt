@@ -10,26 +10,19 @@
 
 :root {
   /* --- primitive: night ---------------------------------------------------
-     A neutral graphite, not a navy. Navy on a dark ground is the developer-tool
-     tell — it is where every issue tracker and status page lives. Warm-neutral
-     charcoal reads as an instrument instead, and it lets the weight ramp be the
-     only thing on screen that is blue. */
-  --n-ground: #16161a;
-  --n-surface: #1e1e24;
-  --n-raised: #26262e;
-  --n-ink: #ececed;
-  --n-muted: #9a9aa4;
-  --n-hairline: #45454f; /* 1.91:1 on ground — #3a3a45 measured 1.41 and failed */
-  --n-edge: #7c7c88; /* 3.04:1 on surface — #6e6e7c measured 2.89 and failed */
-  /* The weight ramp. One hue, three steps: magnitude, and nothing else. It is
-     the only chroma the interface spends on data. Night runs dim→bright as the
-     task gets heavier, so a 5-point task is the brightest thing on the track. */
-  --n-weight-s: #6a94bb; /* 4.63:1 on ground — #5c86ad measured 4.39 and failed */
-  --n-weight-m: #8fb8dc;
-  --n-weight-l: #cbe4f8;
-  --n-attention: #f0a02e; /* the only "needs you" hue */
-  --n-danger: #fb7185; /* the only "it failed" hue */
-  --n-focus: #7dd3fc;
+     The Auditor's Ledger. Unbleached paper, graphite text, one vermilion. The
+     product ships light-first: a dark navy ground is the developer-tool tell,
+     and this design is explicitly not that. */
+  --n-ground: #f1ece0;
+  --n-surface: #e8e1d1;
+  --n-raised: #f7f3ea;
+  --n-ink: #14110f;
+  --n-muted: #67645e; /* 5.1:1 on ground — pencil #9a968b is only 2.7:1 and cannot be text */
+  --n-hairline: #c9c1af; /* a rule you can see, quieter than a border */
+  --n-edge: #837e72; /* 3.07:1 on surface */ /* control boundaries */
+  --n-attention: #67645e; /* warnings are a pencil hatch, not a colour */
+  --n-danger: #14110f; /* errors are a double underline, never red */
+  --n-focus: #14110f;
 
   /* --- primitive: atmosphere ----------------------------------------------
      The product's motif is a circle whose area is a weight. The ground carries
@@ -42,28 +35,19 @@
   --n-atmo-grid: rgb(226 232 240 / 0.02);
   --n-atmo-glow: rgb(143 184 220 / 0.07);
 
-  /* --- primitive: day ---------------------------------------------------- */
-  --d-ground: #f4f4f2;
-  --d-surface: #ececea;
-  --d-raised: #ffffff;
-  --d-ink: #141417;
-  --d-muted: #55555f;
-  --d-hairline: #c4c4c7; /* 1.59:1 on ground — #cfcfd0 measured 1.41 and failed */
-  --d-edge: #75757f; /* 3.11:1 on surface — #8a8a94 measured 2.89 and failed */
-  /* Day inverts the ramp: on a light ground a heavy task must be the darkest,
-     not the brightest, or it disappears. */
-  --d-weight-s: #33648f;
-  --d-weight-m: #1c5480;
-  --d-weight-l: #0e3a5c;
-  --d-attention: #a34a08; /* 4.81:1 on ground — measured, not guessed */
-  --d-danger: #be123c;
-  --d-focus: #0f5c8c;
-
-  /* Day washes the same way: ink on paper, never colour on colour. */
-  --d-atmo-ring: rgb(14 58 92 / 0.05);
-  --d-atmo-ring-fine: rgb(14 58 92 / 0.032);
-  --d-atmo-grid: rgb(30 41 59 / 0.028);
-  --d-atmo-glow: rgb(28 84 128 / 0.06);
+  /* --- primitive: day (the dark board) -----------------------------------
+     Same ledger, lit from the other side. The vermilion is the ink and does
+     not change — it is the one constant across both themes. */
+  --d-ground: #171614;
+  --d-surface: #201f1c;
+  --d-raised: #2a2925;
+  --d-ink: #f2ede1;
+  --d-muted: #a8a396; /* 6.4:1 on ground */
+  --d-hairline: #3b3934;
+  --d-edge: #6d6a62;
+  --d-attention: #a8a396;
+  --d-danger: #f2ede1;
+  --d-focus: #f2ede1;
 
   /* --- brand (fixed by section 3, never restyled) ------------------------- */
   --brand-ink-navy: #1e293b;
@@ -155,15 +139,9 @@
   --muted: var(--n-muted);
   --line: var(--n-hairline);
   --edge: var(--n-edge);
-  --weight-s: var(--n-weight-s);
-  --weight-m: var(--n-weight-m);
-  --weight-l: var(--n-weight-l);
+  --signal: #e4440b; /* the one vermilion: filled track circles, the reopen drag-back, and one action per screen */
   --attention: var(--n-attention);
   --danger: var(--n-danger);
-  --atmo-ring: var(--n-atmo-ring);
-  --atmo-ring-fine: var(--n-atmo-ring-fine);
-  --atmo-grid: var(--n-atmo-grid);
-  --atmo-glow: var(--n-atmo-glow);
   --focus: var(--n-focus);
   --on-ink: var(--n-ground);
 
@@ -193,15 +171,9 @@
   --muted: var(--d-muted);
   --line: var(--d-hairline);
   --edge: var(--d-edge);
-  --weight-s: var(--d-weight-s);
-  --weight-m: var(--d-weight-m);
-  --weight-l: var(--d-weight-l);
+  --signal: #e4440b;
   --attention: var(--d-attention);
   --danger: var(--d-danger);
-  --atmo-ring: var(--d-atmo-ring);
-  --atmo-ring-fine: var(--d-atmo-ring-fine);
-  --atmo-grid: var(--d-atmo-grid);
-  --atmo-glow: var(--d-atmo-glow);
   --focus: var(--d-focus);
   --on-ink: var(--d-ground);
 
@@ -231,9 +203,7 @@
     --muted: var(--d-muted);
     --line: var(--d-hairline);
     --edge: var(--d-edge);
-    --weight-s: var(--d-weight-s);
-    --weight-m: var(--d-weight-m);
-    --weight-l: var(--d-weight-l);
+  --signal: #e4440b;
     --attention: var(--d-attention);
     --danger: var(--d-danger);
     --focus: var(--d-focus);

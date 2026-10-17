@@ -34,7 +34,7 @@ export function Logo({ size = 32 }: { size?: number }) {
   );
 }
 
-/** The wordmark: CommitIt, Poppins 700, exactly that capitalisation. */
+/** The wordmark: CommitIt, exactly that capitalisation. */
 export function Wordmark({ className }: { className?: string }) {
   return <span className={className ?? "rail__word"}>CommitIt</span>;
 }
