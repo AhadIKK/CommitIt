@@ -1,7 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Chart as ChartJS, ArcElement, Tooltip, type ChartOptions } from "chart.js";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { Doughnut } from "react-chartjs-2";
 import type {
   AuthorStat,
   CommitRow,
@@ -13,37 +11,30 @@ import { avatarCells } from "./avatars.js";
 import { StatusIcon } from "./icons.js";
 import { parseTelegramHtml, trimSpans } from "./telegramHtml.js";
 
-ChartJS.register(ArcElement, Tooltip);
+// The rings are the only chart.js consumers in the app. Loading that module on
+// demand keeps the ~138KB chart chunk off first paint — the page paints, then
+// the rings swap in. The placeholder is the same size and the track colour, so
+// nothing shifts when they arrive.
+const LazyRing = lazy(() => import("./ring.js"));
 
-function cssVar(name: string, fallback: string): string {
-  if (typeof window === "undefined") return fallback;
+function Ring({ percent, cutout, size }: { percent: number; cutout: string; size: number }) {
   return (
-    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+    <Suspense
+      fallback={
+        <div
+          aria-hidden="true"
+          style={{
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            background: "var(--track, #2a3441)",
+          }}
+        />
+      }
+    >
+      <LazyRing percent={percent} cutout={cutout} />
+    </Suspense>
   );
-}
-
-function doughnutOptions(cutout: string, reduce: boolean): ChartOptions<"doughnut"> {
-  return {
-    cutout,
-    responsive: true,
-    maintainAspectRatio: true,
-    animation: reduce ? false : { duration: 800 },
-    plugins: { legend: { display: false } },
-  };
-}
-
-function doughnutData(percent: number, accent: string, track: string) {
-  return {
-    labels: ["Closed", "Open"],
-    datasets: [
-      {
-        data: [percent, Math.max(0, 100 - percent)],
-        backgroundColor: [accent, track],
-        borderWidth: 0,
-        hoverOffset: 0,
-      },
-    ],
-  };
 }
 
 // Animated figure to go with the ring (redundant encoding, never color alone).
@@ -71,9 +62,6 @@ function CountUp({ value, suffix = "%" }: { value: number; suffix?: string }) {
 }
 
 export function Donut({ m }: { m: MilestoneSnapshot }) {
-  const reduce = useReducedMotion() ?? false;
-  const accent = cssVar("--accent", "#1f6feb");
-  const track = cssVar("--track", "#2a3441");
   return (
     <motion.div
       className="mile"
@@ -84,7 +72,7 @@ export function Donut({ m }: { m: MilestoneSnapshot }) {
       transition={{ duration: 0.35 }}
     >
       <div style={{ width: 96, height: 96 }}>
-        <Doughnut data={doughnutData(m.percent, accent, track)} options={doughnutOptions("72%", reduce)} />
+        <Ring percent={m.percent} cutout="72%" size={96} />
       </div>
       <div className="mile-meta">
         <strong>{m.title}</strong>
@@ -284,9 +272,6 @@ export function Avatar({ login, size = 28 }: { login: string; size?: number }) {
 // OverallBand — the memorable element: one large progress figure with
 // redundant encoding (ring + animated number + text label), never color alone.
 export function OverallBand({ m }: { m: MilestoneSnapshot }) {
-  const reduce = useReducedMotion() ?? false;
-  const accent = cssVar("--accent", "#1f6feb");
-  const track = cssVar("--track", "#2a3441");
   return (
     <motion.div
       className="band"
@@ -297,7 +282,7 @@ export function OverallBand({ m }: { m: MilestoneSnapshot }) {
       transition={{ duration: 0.45 }}
     >
       <div style={{ width: 140, height: 140 }}>
-        <Doughnut data={doughnutData(m.percent, accent, track)} options={doughnutOptions("70%", reduce)} />
+        <Ring percent={m.percent} cutout="70%" size={140} />
       </div>
       <div className="band-meta">
         <span className="band-label">Overall progress</span>

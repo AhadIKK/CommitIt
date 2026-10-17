@@ -12,7 +12,11 @@
 
 **Measured:** every API call fell from ~400-450ms to ~230-260ms (Mumbai edge → Seoul function; it used to hand off to US-East), and a DB-backed read now costs only ~30-50ms more than one that touches no database — that round trip was ~190ms each way. `/assets/*` serve `max-age=31536000, immutable`.
 
-**Still open (next):** the JS bundle is ~593KB raw / ~196KB gzipped, and `vendor-chart` (138KB) is `modulepreload`ed although only the milestone rings need it — lazy-loading it takes a quarter of the bundle off first paint. Beyond that the remaining lever is geography: Supabase sits in Seoul while the users are in India, so moving the project to `ap-south-1` (Mumbai) and pinning functions to `bom1` would cut the ~230ms floor to near nothing.
+- **Fix 6 — the chart stopped blocking first paint.** chart.js + react-chartjs-2 (138KB raw / 48KB gzipped) were statically imported by `components.tsx` and `modulepreload`ed by `index.html`, although only the two milestone rings ever use them. They now live in `dashboard/src/ring.tsx` and load on demand behind a `Suspense` placeholder that is the same size and the track colour, so nothing shifts when the rings arrive. Critical-path JS: **593KB → 456KB** raw, ~196KB → ~148KB gzipped.
+- **Fix 7 — one identity call, not two.** The GitHub section and the Telegram section each called `/api/me` on their first render. `authApi.ts` now shares the *in-flight* promise — never the result — so a later call after sync/login/logout still reads fresh.
+- 55 files / 336 tests green.
+
+**Still open (next):** the only lever left is geography. Supabase sits in Seoul while the users are in India, so the ~230ms floor on every API call is distance — the client reaches the Mumbai edge quickly, and then the function is a private hop away in Seoul. Moving the Supabase project to `ap-south-1` (Mumbai) and pinning functions to `bom1` would collapse both hops, but it is a project migration (new project, data copy, `DATABASE_URL` changed in Vercel *and* Render), so it wants a decision, not a commit.
 
 ## 2026-10-17 — Dashboard: digest bodies render as content, not markup
 - The Digests timeline printed `notification.body` as a plain text child, but that body is Telegram parse-mode HTML (`src/formatter.ts` emits `<b>`/`<code>`/`<a>`), so the card read `📊 <b>mohd-Affan16/Cloud-ai</b> — api-working`. Reported from a phone screenshot.

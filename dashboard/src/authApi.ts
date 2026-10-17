@@ -17,11 +17,20 @@ async function parse<T>(res: Response): Promise<T> {
   return body.data as T;
 }
 
+// Two components ask who you are on the same render (the GitHub section and the
+// Telegram section), so the page used to pay two identical /api/me round
+// trips. Only the *in-flight* promise is shared, never the result: a later call
+// — after sync, login or logout — still hits the server for fresh data.
+let inFlightMe: Promise<Me | null> | null = null;
+
 /** Null when logged out (401). Never throws for logged_out. */
-export async function fetchMe(): Promise<Me | null> {
-  const res = await fetch("/api/me");
-  if (res.status === 401) return null;
-  return parse<Me>(res);
+export function fetchMe(): Promise<Me | null> {
+  inFlightMe ??= fetch("/api/me")
+    .then((res) => (res.status === 401 ? null : parse<Me>(res)))
+    .finally(() => {
+      inFlightMe = null;
+    });
+  return inFlightMe;
 }
 
 /** Re-run install attribution for this account ("Sync now" repair). */
