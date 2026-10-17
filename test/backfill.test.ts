@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RateLimitedError,
   backfillInstallation,
+  backfillRepoCommits,
   backfillRepoIssues,
   backfillRepoPRs,
   repairCommitAuthors,
@@ -15,7 +16,7 @@ vi.mock("../src/db.js", () => ({
     repo: {
       upsert: async () => {
         upserts.push({ op: "repo.upsert" });
-        return { id: "r1", syncEtag: null as string | null };
+        return { id: "r1", syncEtag: null as string | null, defaultBranch: "main" };
       },
       findUnique: async () => ({ id: "r1" }),
       findMany: async () => [],
@@ -44,6 +45,10 @@ vi.mock("../src/db.js", () => ({
     },
     commit: {
       findMany: async () => [],
+      upsert: async () => {
+        upserts.push({ op: "commit.upsert" });
+        return { id: "c1" };
+      },
       update: async () => {
         upserts.push({ op: "commit.update" });
         return {};
@@ -144,6 +149,49 @@ describe("backfillRepoPRs", () => {
   });
 });
 
+describe("backfillRepoCommits", () => {
+  const COMMIT = {
+    sha: "c0ffee",
+    commit: {
+      message: "feat: thing",
+      author: { name: "Octo Cat", date: "2026-10-16T09:00:00Z" },
+    },
+    author: { login: "octocat" },
+  };
+
+  it("stores commits with committedAt + branch from the default branch", async () => {
+    upserts.length = 0;
+    const seen: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      seen.push(target);
+      if (target.includes("/commits?")) {
+        return target.includes("page=1") ? json([COMMIT]) : json([]);
+      }
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    const out = await backfillRepoCommits("o/r", "tok", { fetchFn });
+    expect(out).toEqual({ commits: 1 });
+    expect(seen[0]).toContain("sha=main"); // repo.defaultBranch from the mock row
+    const ops = upserts.map((u) => u.op);
+    expect(ops).toContain("author.upsert");
+    expect(ops).toContain("commit.upsert");
+  });
+
+  it("returns null when GitHub errors before any commit is stored", async () => {
+    const fetchFn = (async () => new Response("nope", { status: 500 })) as typeof fetch;
+    await expect(backfillRepoCommits("o/r", "tok", { fetchFn })).resolves.toBeNull();
+  });
+
+  it("429 throws RateLimitedError for worker backoff", async () => {
+    const fetchFn = (async () =>
+      new Response("limited", { status: 429, headers: { "retry-after": "3" } })) as typeof fetch;
+    const err = await backfillRepoCommits("o/r", "tok", { fetchFn }).catch((e) => e);
+    expect(err).toBeInstanceOf(RateLimitedError);
+    expect((err as RateLimitedError).retryAfterMs).toBe(3000);
+  });
+});
+
 describe("repairCommitAuthors", () => {
   it("resolves unattributed SHAs and links authors", async () => {
     const { prisma } = await import("../src/db.js");
@@ -224,6 +272,7 @@ describe("backfillInstallation", () => {
       }
       if (target.includes("/issues?")) return json([]);
       if (target.includes("/pulls?")) return json([]);
+      if (target.includes("/commits?")) return json([]);
       throw new Error(`unexpected ${target}`);
     }) as typeof fetch;
     const keys = {
@@ -253,6 +302,7 @@ describe("backfillInstallation", () => {
         return json({ repositories: [] }); // empty grant, like prod
       }
       if (target.includes("/issues?") || target.includes("/pulls?")) return json([]);
+      if (target.includes("/commits?")) return json([]);
       throw new Error(`unexpected ${target}`);
     }) as typeof fetch;
     const keys = {

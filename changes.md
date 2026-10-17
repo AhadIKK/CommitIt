@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-10-17 — Activity reads real commit dates; commit history backfilled
+- Root cause of "commits exist but Activity is empty": the `push` webhook only records commits pushed *after* install, and there was no commit backfill — a freshly installed repo had zero `Commit` rows, so the 7d window read 0 while the header showed GitHub's live "164 commits on main". Verified against the live DB: installed repos had 0 commit rows.
+- New `backfillRepoCommits()` (`backfill.ts`) pages `GET /repos/{full}/commits` (default branch, 10-page cap, 429 → `RateLimitedError`), storing `sha`, message, `branch`, `authorId`, and the real `committedAt`. Idempotent on `(repoId, sha)`; updates heal missing `committedAt`/`branch`/`author`. Rides `backfillInstallation` alongside issues/PRs → next **Sync now** heals every repo.
+- `getActivity` now filters the window on `committedAt` (falling back to `createdAt` for legacy null rows), not on row-insert time — otherwise a history backfill would dump all past commits into "last 7 days".
+- Worker `processPush` now persists `committedAt` + `branch` (it stored neither), matching the serverless ingest path.
+- Tests: commit-backfill store/error/429 + activity-window `where` assertions; suite 45 files / 233 green, `tsc --noEmit` clean.
+
 ## 2026-10-17 — Telegram webhook primary (12/12 intact) + keep-warm cron fixed
 - **Root cause of the intermittent bot:** the `*/10` keep-warm cron never ran every 10 min — GitHub produced 5 runs in 13h (2–4.5h gaps), so Render hibernated ~15 min after each ping and the bot was dead ~95% of the time. Every `Server listening` in the Render logs matched a cron tick on a brand-new pod (cold start), confirming the duty cycle.
 - **Inbound moved to Vercel (primary):** `src/telegramWebhook.ts` + a `telegram` action on the existing `api/auth/[action].ts` dynamic function, reachable at `/api/telegram` via a `vercel.json` rewrite. **Function count unchanged at 12/12** — no new file under `api/`. Vercel never sleeps, so replies are instant 24/7.

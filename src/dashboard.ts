@@ -176,7 +176,17 @@ export async function getActivity(repo: string, days = 7): Promise<ActivitySnaps
     const since = new Date(Date.now() - days * 86_400_000);
     const [commits, prs, allCommits, allPrs, live] = await Promise.all([
       prisma.commit.findMany({
-        where: { repoId: repoRow.id, createdAt: { gte: since } },
+        where: {
+          repoId: repoRow.id,
+          // Activity is the commit's real author date, not when our row was
+          // written (backfills/repairs would otherwise land all history in
+          // the window). Legacy rows with no committedAt fall back to insert
+          // time so they still surface.
+          OR: [
+            { committedAt: { gte: since } },
+            { committedAt: null, createdAt: { gte: since } },
+          ],
+        },
         include: { author: { select: { githubLogin: true } } },
       }),
       prisma.pullRequest.findMany({

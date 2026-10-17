@@ -251,6 +251,100 @@ export async function backfillRepoPRs(
   return { prs: merged, merged };
 }
 
+const CommitListResponse = z.array(
+  z.object({
+    sha: z.string(),
+    commit: z.object({
+      message: z.string(),
+      author: z.object({ name: z.string(), date: z.string() }).nullish(),
+    }),
+    author: z.object({ login: z.string() }).nullish(),
+  }),
+);
+
+/**
+ * Backfill commit history. The `push` webhook only records commits pushed
+ * *after* install, so a freshly installed repo otherwise reads 0 activity
+ * forever. Fetches the default branch from GitHub (falls back to the repo's
+ * default when GitHub omits it) and stores real author dates in
+ * `committedAt` — the 7d Activity window filters on that, never on the row's
+ * insert time. Merges are kept (they are activity). Idempotent on
+ * (repoId, sha); updates heal missing committedAt/branch/author.
+ */
+export async function backfillRepoCommits(
+  fullName: string,
+  token: string,
+  deps: BackfillDeps = {},
+): Promise<{ commits: number } | null> {
+  const fetchFn = deps.fetchFn ?? fetch;
+  const perPage = Math.min(Math.max(deps.perPage ?? 100, 1), 100);
+  const maxPages = Math.min(Math.max(deps.maxPages ?? 10, 1), 10);
+  let repoRow;
+  try {
+    repoRow = await prisma.repo.upsert({
+      where: { fullName },
+      update: {},
+      create: { fullName },
+    });
+  } catch {
+    return null;
+  }
+  const branch = repoRow.defaultBranch?.trim() || null;
+  let stored = 0;
+  for (let page = 1; page <= maxPages; page++) {
+    const shaParam = branch ? `&sha=${encodeURIComponent(branch)}` : "";
+    const res = await authedGet(
+      `https://api.github.com/repos/${fullName}/commits?per_page=${perPage}${shaParam}&page=${page}`,
+      token,
+      {},
+      fetchFn,
+    );
+    const waitMs = rateLimitWaitMs(res);
+    if (waitMs !== null) throw new RateLimitedError(waitMs);
+    if (!res.ok) return stored > 0 ? { commits: stored } : null;
+    const parsed = CommitListResponse.safeParse(await res.json());
+    if (!parsed.success) return stored > 0 ? { commits: stored } : null;
+    if (parsed.data.length === 0) break;
+    for (const c of parsed.data) {
+      try {
+        let authorId: string | undefined;
+        const login = c.author?.login ?? c.commit.author?.name ?? null;
+        if (login) {
+          const author = await prisma.author.upsert({
+            where: { githubLogin: login },
+            update: {},
+            create: { githubLogin: login },
+          });
+          authorId = author.id;
+        }
+        const at = c.commit.author?.date ? new Date(c.commit.author.date) : null;
+        const committedAt = at && !Number.isNaN(at.getTime()) ? at : null;
+        await prisma.commit.upsert({
+          where: { repoId_sha: { repoId: repoRow.id, sha: c.sha } },
+          update: {
+            ...(committedAt ? { committedAt } : {}),
+            ...(branch ? { branch } : {}),
+            ...(authorId ? { authorId } : {}),
+          },
+          create: {
+            repoId: repoRow.id,
+            sha: c.sha,
+            message: c.commit.message.slice(0, 2000),
+            branch,
+            committedAt,
+            authorId,
+          },
+        });
+        stored += 1;
+      } catch {
+        // one bad row never blocks the page
+      }
+    }
+    if (parsed.data.length < perPage) break;
+  }
+  return { commits: stored };
+}
+
 const CommitShaResponse = z.object({
   sha: z.string(),
   author: z.object({ login: z.string() }).nullish(),
@@ -325,10 +419,10 @@ export async function backfillInstallation(
   installationId: bigint | number | string,
   keys: KeyMaterial,
   deps: BackfillDeps = {},
-): Promise<{ repos: number; issues: number; milestones: number; prs: number; authorsRepaired: number }> {
+): Promise<{ repos: number; issues: number; milestones: number; prs: number; commits: number; authorsRepaired: number }> {
   const fetchFn = deps.fetchFn ?? fetch;
   const token = await getInstallationToken(installationId, keys, { fetchFn });
-  const totals = { repos: 0, issues: 0, milestones: 0, prs: 0, authorsRepaired: 0 };
+  const totals = { repos: 0, issues: 0, milestones: 0, prs: 0, commits: 0, authorsRepaired: 0 };
   const perPage = 100;
   // API-listed repos first; then DB-known repos for this install. The API
   // list can be empty while our rows still reference the install (stale or
@@ -381,6 +475,11 @@ export async function backfillInstallation(
     // issues; repair is fully best-effort and never throws.
     const prOut = await backfillRepoPRs(fullName, token, deps);
     if (prOut) totals.prs += prOut.merged;
+    // Commit history rides the same install sync: without it Activity can
+    // only ever show pushes made after install. Rate limits propagate for
+    // worker backoff like issues/PRs.
+    const commitOut = await backfillRepoCommits(fullName, token, deps);
+    if (commitOut) totals.commits += commitOut.commits;
     const fixed = await repairCommitAuthors(fullName, token, deps).catch(() => ({
       repaired: 0,
     }));

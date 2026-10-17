@@ -12,7 +12,11 @@ vi.mock("../src/db.js", () => ({
     },
     author: { upsert: async () => ({ id: "a1" }) },
     pullRequest: { upsert: async () => ({}) },
-    commit: { findMany: async () => [], update: async () => ({}) },
+    commit: {
+      findMany: async () => [],
+      upsert: async () => ({}),
+      update: async () => ({}),
+    },
     userInstallation: { upsert: async () => ({}) },
     milestone: { upsert: async () => ({ id: "m1" }) },
     issue: { upsert: async () => ({}) },
@@ -44,6 +48,7 @@ describe("worker backfill job", () => {
           : json({ repositories: [] });
       }
       if (target.includes("/issues?") || target.includes("/pulls?")) return json([]);
+      if (target.includes("/commits?")) return json([]);
       throw new Error(`unexpected ${target}`);
     }) as typeof fetch;
     const logs: string[] = [];
