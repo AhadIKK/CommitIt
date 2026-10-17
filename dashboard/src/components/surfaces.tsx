@@ -97,10 +97,9 @@ export function SkeletonRows({ rows = 3 }: { rows?: number }) {
 
 /* ----------------------------------------------------------------- bubble */
 
-export function Bubble({ meta, children }: { meta: ReactNode; children: ReactNode }) {
+export function Bubble({ children }: { children: ReactNode }) {
   return (
     <div className="bubble">
-      <div className="bubble__meta">{meta}</div>
       <div className="bubble__body">{children}</div>
     </div>
   );

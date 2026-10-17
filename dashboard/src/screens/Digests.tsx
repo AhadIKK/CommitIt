@@ -382,17 +382,7 @@ export function Digests() {
             {subscription?.chatTitle ?? "your chat"}.
           </p>
 
-          <Bubble
-            meta={
-              <>
-                <span>{ref}</span>
-                <span className="muted">·</span>
-                <span>{DIGEST_MODE_LABEL[mode]}</span>
-              </>
-            }
-          >
-            {data.preview}
-          </Bubble>
+          <Bubble>{data.preview}</Bubble>
 
           <div className={`charcount${overLimit ? " charcount--over" : ""}`}>
             <span className="charcount__bar" aria-hidden="true">

@@ -68,7 +68,7 @@ export function CommitRow({
               </IconButton>
               {feedback ? (
                 <span className="micro muted" role="status">
-                  {feedback === "up" ? "Thanks, noted." : "Thanks, noted."}
+                  Thanks, noted.
                 </span>
               ) : null}
             </span>
@@ -106,9 +106,7 @@ export function CommitRow({
           Task {commit.issueNumber}
         </a>
       ) : (
-        <span className="row__task row__task--unlinked">
-          <span aria-hidden="true">○</span> Unlinked
-        </span>
+        <span className="row__task row__task--unlinked">Unlinked</span>
       )}
 
       {!issueUrl && !commit.secretFlag ? (

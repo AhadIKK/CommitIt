@@ -111,9 +111,7 @@ export function Onboarding() {
                 <p className="step__body" role="status">
                   Done.
                 </p>
-              ) : (
-                <p className="step__body muted">Available once the step above is done.</p>
-              )}
+              ) : null}
             </div>
           </li>
         );
@@ -299,7 +297,8 @@ export function Onboarding() {
       <div className="screen__head">
         <h1 className="display">Connect a repository</h1>
         <p className="screen__lede">
-          Five steps. Nothing is sent to a chat until the last one, and the test message is real.
+          Five steps, in order: each one unlocks when the step above it is done. Nothing is sent to a chat
+          until the last one, and the test message is real.
         </p>
       </div>
 

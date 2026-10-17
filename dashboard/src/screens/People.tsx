@@ -44,10 +44,6 @@ function Person({ person, repoFullName }: { person: PersonSummary; repoFullName:
           <span className="person__stat-legend">Pull requests merged</span>
           <span className="person__stat-value">{person.mergedPRs}</span>
         </span>
-        <span className="person__stat">
-          <span className="person__stat-legend">Commits</span>
-          <span className="person__stat-value">{person.commits.length}</span>
-        </span>
       </div>
 
       {person.commits.length > 0 ? (

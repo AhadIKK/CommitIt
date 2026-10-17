@@ -14,7 +14,7 @@ import { Bubble } from "../components/surfaces.js";
 import { SegmentedControl } from "../components/controls.js";
 import { CategoryGlyph } from "../components/glyphs.js";
 import { syncuraGroups, milestones, defaultRepo } from "../api/fixtures.js";
-import { renderDigest, DIGEST_MODE_LABEL } from "../lib/digest.js";
+import { renderDigest } from "../lib/digest.js";
 import { shortSha } from "../lib/format.js";
 import { progressSentence } from "../lib/weight.js";
 
@@ -101,19 +101,7 @@ export function Landing() {
 
           {collapsed ? (
             <div className="demo__digest">
-              <Bubble
-                meta={
-                  <>
-                    <span>{defaultRepo.fullName}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{DIGEST_MODE_LABEL[mode]}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>9:00</span>
-                  </>
-                }
-              >
-                {rendered.text}
-              </Bubble>
+              <Bubble>{rendered.text}</Bubble>
             </div>
           ) : (
             <p className="demo__digest small muted">
