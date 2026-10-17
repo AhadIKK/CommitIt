@@ -63,6 +63,8 @@
   --button-bg: var(--accent);
   --button-text: var(--on-accent);
   --logo-placeholder-border: var(--muted);
+  /* Brand marks: brighter blue keeps contrast on the dark canvas. */
+  --brand-telegram: #229ed9;
 }
 
 :root[data-theme="light"] {
@@ -88,4 +90,6 @@
   --button-bg: var(--accent);
   --button-text: var(--on-accent);
   --logo-placeholder-border: var(--muted);
+  /* Brand marks: deeper blue so the circle doesn't wash out on white. */
+  --brand-telegram: #1c8fc7;
 }

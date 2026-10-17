@@ -9,6 +9,7 @@ import { fetchActivity, fetchDigests, fetchIssues, fetchProgress } from "./api.j
 import { claimInstallSetup, fetchMe } from "./authApi.js";
 import { AuthorBars, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
 import { Button } from "./components/ui/button.js";
+import { GitHubMark, TelegramMark } from "./brandIcons.js";
 import NotifyPrefs from "./NotifyPrefs.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs.js";
@@ -322,14 +323,20 @@ export default function App() {
         )}
       <section aria-label="Telegram" id="section-telegram">
         <div className="section-head">
-          <h2>Telegram</h2>
+          <div className="section-title">
+            <TelegramMark />
+            <h2>Telegram</h2>
+          </div>
         </div>
         <Connect repo={repo} />
         <NotifyPrefs repo={repo} />
       </section>
       <section aria-label="GitHub" id="section-github">
         <div className="section-head">
-          <h2>GitHub</h2>
+          <div className="section-title">
+            <GitHubMark />
+            <h2>GitHub</h2>
+          </div>
         </div>
         <Auth repo={repo} />
       </section>
