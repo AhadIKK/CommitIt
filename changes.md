@@ -1,5 +1,13 @@
 # Changes
 
+## 2026-10-17 — Bot "not working": missing outbound token on Vercel
+- **Root cause:** `TELEGRAM_BOT_TOKEN` was never set on Vercel production. The webhook received updates correctly (Telegram: `pending_update_count: 0`, no delivery errors; Vercel logged the calls), the command handler ran, and `sendMessage()` hit its no-token branch — returning `{ok:true, placeholder:true}` and logging nothing. Every reply was silently discarded, and the fake `ok:true` hid it from every caller.
+- **Verified inbound end-to-end** without messaging a human: issued a link token via `/api/link?op=issue`, posted a `/start <token>` update from a fake chat id, and watched the token flip to claimed in the DB — only reachable if Vercel parsed the body, dispatched `handleMessage`, and wrote to Postgres.
+- **Fixed:** token added to Vercel production; `sendMessage` now returns `ok:false` and warns when the token is missing, logs Telegram's rejection reason on 4xx, and never throws on network errors (token never logged). 6 new tests.
+- **Keep-warm revision:** the previous `0 */6 * * *` cron fires at the top of the hour — GitHub's documented worst case — and its 12:00Z tick was dropped entirely; the original `*/10` was always on minute 0 for the same reason. Now `7 */2 * * *` with a 2h30m ping loop (30 min overlap) so a delayed or dropped tick can't open a hole. Loop script smoke-tested against the live endpoint.
+- Note: with inbound on Vercel, the keep-warm only affects digest/backfill punctuality — `dueAt <= now` delivery and delivery-id-idempotent schedulers mean a gap delays work rather than losing it.
+
+
 ## 2026-10-17 — History re-syncs itself; install backfill wakes the worker
 - Two gaps made "automatic" untrue: (1) a fresh install enqueued its backfill but never woke the sleeping Render worker (only **Sync now** did), so a new tester's history could sit queued indefinitely; (2) the backfill ran once at install, so a long-lived repo only ever showed pushes made after install.
 - `registerInstallFromSetup` now pings the worker after queuing (mirrors `syncUserInstalls`), logging `install_backfill_wake`. New testers' history starts on its own.
