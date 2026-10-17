@@ -136,9 +136,13 @@ async function boundRepos(chatDbId: string): Promise<Set<string>> {
 }
 
 const HELP =
-  "Commands: /start (after tapping your Join link), /link (short code instead), " +
-  "/repos (your accessible repos), /bind owner/repo, /unlink [owner/repo], " +
-  "/digest [instant|hourly|daily|weekly] [owner/repo].";
+  "Commands:\n" +
+  "/start — after tapping your Join link\n" +
+  "/link — short code instead\n" +
+  "/repos — your accessible repos\n" +
+  "/bind owner/repo — subscribe this chat\n" +
+  "/unlink [owner/repo] — unsubscribe\n" +
+  "/digest [instant|hourly|daily|weekly] [owner/repo] — notification frequency";
 
 function limited(cmd: string, chatId: string): boolean {
   return isRateLimited(`tg:${cmd}:${chatId}`, { max: 20 });
