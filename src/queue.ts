@@ -82,6 +82,12 @@ export async function completeJob(id: string): Promise<void> {
 }
 
 export async function failJob(id: string, attempts: number): Promise<void> {
+  // Poison pill: a job that keeps throwing (dead install, bad payload) must
+  // not retry forever. Give up after JOB_MAX_ATTEMPTS — loudly, never silently.
+  if (attempts >= JOB_MAX_ATTEMPTS) {
+    await abandonJob(id);
+    return;
+  }
   const retryAt = backoff(attempts);
   try {
     await prisma.job.update({
@@ -94,6 +100,17 @@ export async function failJob(id: string, attempts: number): Promise<void> {
       job.status = "queued";
       job.nextRetryAt = retryAt;
     }
+  }
+}
+
+export const JOB_MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS ?? 20);
+
+export async function abandonJob(id: string): Promise<void> {
+  try {
+    await prisma.job.update({ where: { id }, data: { status: "failed" } });
+  } catch {
+    const job = memoryFallback.find((j) => j.id === id);
+    if (job) job.status = "failed";
   }
 }
 

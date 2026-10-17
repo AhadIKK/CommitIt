@@ -18,7 +18,7 @@ import {
 } from "./formatter.js";
 import { linkCommit } from "./linker.js";
 import { syncRepoIssues } from "./github-sync.js";
-import { claimNextJob, completeJob, failJob, reclaimStuckJobs } from "./queue.js";
+import { claimNextJob, completeJob, failJob, JOB_MAX_ATTEMPTS, reclaimStuckJobs } from "./queue.js";
 import { findStaleBranches } from "./stale.js";
 import { deliver, dispatchDueNotifications } from "./delivery.js";
 import type { JobRow } from "./queue.js";
@@ -30,6 +30,7 @@ import type { JobRow } from "./queue.js";
 type PushCommit = {
   id: string;
   message: string;
+  timestamp?: string;
   author?: { username?: string; name?: string };
   added?: string[];
   modified?: string[];
@@ -176,6 +177,11 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
         update: {},
         create: { fullName: repo },
       });
+      let committedAt: Date | null = null;
+      if (c.timestamp) {
+        const parsed = new Date(c.timestamp);
+        if (!Number.isNaN(parsed.getTime())) committedAt = parsed;
+      }
       await prisma.commit.upsert({
         where: { repoId_sha: { repoId: repoRow.id, sha: c.id } },
         update: {
@@ -184,6 +190,8 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           secretFlag,
           isMerge,
           isForcePushContext: payload.forced ?? false,
+          branch,
+          ...(committedAt ? { committedAt } : {}),
           ...(authorId ? { authorId } : {}),
         },
         create: {
@@ -195,6 +203,8 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           isMerge,
           isForcePushContext: payload.forced ?? false,
           aiSummary: aiSummary?.slice(0, 2000),
+          branch,
+          committedAt,
           ...(authorId ? { authorId } : {}),
         },
       });
@@ -523,7 +533,22 @@ export function startWorker(
   const timer = setInterval(async () => {
     try {
       const job = await claimNextJob();
-      if (job) await processJob(job);
+      if (job) {
+        // Per-job catch: a throwing job must go back to the queue with
+        // backoff (failJob), not be left in `processing`. Without this the
+        // outer catch only logged, so every failure became an orphan —
+        // including the 429s that are explicitly not to be dropped.
+        try {
+          await processJob(job);
+        } catch (err) {
+          const abandoned = job.attempts >= JOB_MAX_ATTEMPTS;
+          log.error(
+            { err, jobId: job.id, type: job.type, attempts: job.attempts, abandoned },
+            abandoned ? "job_abandoned" : "job_failed",
+          );
+          await failJob(job.id, job.attempts);
+        }
+      }
       await dispatchDueNotifications();
       if (++ticks % reclaimEveryTicks === 0) {
         const n = await reclaimStuckJobs();
@@ -531,7 +556,6 @@ export function startWorker(
       }
     } catch (err) {
       log.error({ err }, "worker poll failed");
-      // never silently drop: job stays queued, failJob() sets backoff
     }
   }, intervalMs);
   timer.unref?.();
