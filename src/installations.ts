@@ -85,6 +85,61 @@ export async function removeInstallRepos(change: RemovedChange): Promise<void> {
     data: { installationId: null, installActive: false },
   });
   await prisma.installation.deleteMany({ where: { id: change.installationId } });
+  await cancelQueuedBackfills(change.installationId);
+}
+
+/**
+ * Terminal-cancel queued backfills for an installation that no longer exists.
+ * A job queued before the install was removed would otherwise outlive it and
+ * only surface later as a token 404 for an installation that is gone.
+ * Queued rows only: a `processing` row is in flight and is handled by the
+ * worker's permanent-error path rather than yanked out from under it.
+ * Best-effort like the rest of the lifecycle writes — the worker self-heals.
+ */
+export async function cancelQueuedBackfills(
+  installationId: bigint | number | string,
+): Promise<number> {
+  const id = installationId.toString();
+  try {
+    const res = await prisma.job.updateMany({
+      where: {
+        type: "backfill",
+        status: "queued",
+        OR: [
+          { deliveryId: { startsWith: `setup-${id}-` } },
+          { deliveryId: { startsWith: `sync-${id}-` } },
+        ],
+      },
+      data: { status: "failed", nextRetryAt: null },
+    });
+    return res.count;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Queue an installation backfill, but only for an installation we still know
+ * about. Guards the race where the install disappears between the caller
+ * deciding to sync and the job landing in the queue: work for an unknown
+ * installation can only ever end in a token 404.
+ */
+export async function enqueueBackfill(
+  installationId: bigint,
+  deliveryId: string,
+): Promise<boolean> {
+  try {
+    const known = await prisma.installation.findUnique({
+      where: { id: installationId },
+      select: { id: true },
+    });
+    if (!known) return false;
+    const { enqueueJob } = await import("./queue.js");
+    await enqueueJob("backfill", deliveryId, { installationId: installationId.toString() });
+    return true;
+  } catch {
+    return false; // backfill is best-effort; the install itself is recorded
+  }
 }
 
 /** Suspend (or unsuspend) an install: flip repos.installActive, keep rows. */
@@ -191,16 +246,7 @@ export async function registerInstallFromSetup(
   } catch {
     return { ok: false, error: "unavailable" };
   }
-  try {
-    const { enqueueJob } = await import("./queue.js");
-    await enqueueJob(
-      "backfill",
-      `setup-${installationId.toString()}-${Date.now()}`,
-      { installationId: installationId.toString() },
-    );
-  } catch {
-    // backfill is best-effort; the install itself is recorded
-  }
+  await enqueueBackfill(installationId, `setup-${installationId.toString()}-${Date.now()}`);
   return { ok: true, repos };
 }
 export async function revokeGithubAuthorization(body: unknown): Promise<number> {
@@ -451,15 +497,8 @@ export async function syncUserInstalls(login: string): Promise<InstallSyncResult
         update: {},
         create: { userId, installationId: id },
       });
-      try {
-        const { enqueueJob } = await import("./queue.js");
-        await enqueueJob("backfill", `sync-${id.toString()}-${Date.now()}`, {
-          installationId: id.toString(),
-        });
-        woken = true;
-      } catch {
-        // backfill is best-effort
-      }
+      woken =
+        (await enqueueBackfill(id, `sync-${id.toString()}-${Date.now()}`)) || woken;
       done += 1;
     } catch (err) {
       // one bad install never blocks the rest

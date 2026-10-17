@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyRepositoryChange,
+  enqueueBackfill,
   parseRepositoryEvent,
   recordInstall,
   registerInstallFromSetup,
@@ -30,6 +31,11 @@ vi.mock("../src/db.js", () => ({
       deleteMany: async (args: unknown) => {
         calls.push({ op: "installation.deleteMany", args });
         return { count: 1 };
+      },
+      findUnique: async (args: { where: { id?: bigint } }) => {
+        calls.push({ op: "installation.findUnique", args });
+        // Only installation 77 is "known"; anything else exercises the guard.
+        return args.where.id === 77n ? { id: 77n } : null;
       },
     },
     repo: {
@@ -82,6 +88,10 @@ vi.mock("../src/db.js", () => ({
         calls.push({ op: "job.upsert", args });
         return {};
       },
+      updateMany: async (args: unknown) => {
+        calls.push({ op: "job.updateMany", args });
+        return { count: 2 };
+      },
     },
   },
 }));
@@ -125,6 +135,48 @@ describe("install lifecycle", () => {
       data: Record<string, unknown>;
     };
     expect(update.data).toMatchObject({ installationId: null, installActive: false });
+  });
+
+  it("cancels queued backfills for an install that is deleted", async () => {
+    reset();
+    const change = parseInstallationEvent(deletedFixture);
+    if (!change || change.kind !== "removed") return;
+    await removeInstallRepos(change);
+    const cancel = calls.find((c) => c.op === "job.updateMany")?.args as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    };
+    expect(cancel).toBeDefined();
+    expect(cancel.where).toMatchObject({ type: "backfill", status: "queued" });
+    expect(cancel.data).toMatchObject({ status: "failed", nextRetryAt: null });
+    // both enqueue prefixes are covered, so pre-uninstall jobs cannot survive
+    const where = JSON.stringify(cancel.where);
+    expect(where).toContain("setup-");
+    expect(where).toContain("sync-");
+  });
+
+  it("leaves backfills alone when only some repos are removed", async () => {
+    reset();
+    await removeInstallRepos({
+      kind: "removed",
+      installationId: 9n,
+      repos: ["o/r"],
+      senderLogin: "AhadIKK",
+    });
+    expect(calls.map((c) => c.op)).not.toContain("job.updateMany");
+    expect(calls.map((c) => c.op)).not.toContain("installation.deleteMany");
+  });
+
+  it("refuses to queue a backfill for an installation we do not know", async () => {
+    reset();
+    await expect(enqueueBackfill(1234n, "setup-1234-1")).resolves.toBe(false);
+    expect(calls.map((c) => c.op)).not.toContain("job.upsert");
+  });
+
+  it("queues a backfill for a known installation", async () => {
+    reset();
+    await expect(enqueueBackfill(77n, "setup-77-1")).resolves.toBe(true);
+    expect(calls.map((c) => c.op)).toContain("job.upsert");
   });
 
   it("suspend flips inactive, unsuspend flips back", async () => {
