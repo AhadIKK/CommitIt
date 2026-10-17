@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import authHandler from "../api/auth/[action].js";
 import appWebhookHandler from "../api/github-app.js";
-import meHandler from "../api/me.js";
+import dataHandler from "../api/data/[view].js";
 import metaHandler from "../api/meta.js";
 import repoHandler from "../api/repo.js";
 import { signPayload } from "../src/verify.js";
@@ -90,19 +90,19 @@ const APP_SECRET = "test-app-webhook-secret";
 describe("api/me", () => {
   it("rejects wrong methods with 405", async () => {
     const { res, done } = mockRes();
-    await (meHandler as Handler)(mockReq({ method: "PUT" }), res);
+    await (dataHandler as Handler)(mockReq({ method: "PUT", url: "/api/me" }), res);
     expect((await done).status).toBe(405);
   });
 
   it("404s POST without a known op", async () => {
     const { res, done } = mockRes();
-    await (meHandler as Handler)(mockReq({ method: "POST" }), res);
+    await (dataHandler as Handler)(mockReq({ method: "POST", url: "/api/me" }), res);
     expect((await done).status).toBe(404);
   });
 
   it("returns 401 when logged out", async () => {
     const { res, done } = mockRes();
-    await (meHandler as Handler)(mockReq(), res);
+    await (dataHandler as Handler)(mockReq({ url: "/api/me" }), res);
     expect(await done).toMatchObject({ status: 401, body: { ok: false } });
   });
 
@@ -112,8 +112,11 @@ describe("api/me", () => {
     try {
       const token = sessionCookieValue("b".repeat(64), SECRET);
       const { res, done } = mockRes();
-      await (meHandler as Handler)(
-        mockReq({ headers: { cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}` } }),
+      await (dataHandler as Handler)(
+        mockReq({
+          url: "/api/me",
+          headers: { cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}` },
+        }),
         res,
       );
       expect(await done).toMatchObject({

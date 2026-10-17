@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ActivitySnapshot,
   DigestEntry,
   IssueRow,
   RepoProgress,
 } from "@src/dashboard.js";
-import { fetchActivity, fetchDigests, fetchIssues, fetchProgress } from "./api.js";
-import { claimInstallSetup, fetchMe } from "./authApi.js";
+import { fetchDashboard } from "./api.js";
+import { claimInstallSetup } from "./authApi.js";
 import { AuthorBars, CommitList, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
 import { Button } from "./components/ui/button.js";
 import { GitHubMark, TelegramMark } from "./brandIcons.js";
@@ -31,6 +31,14 @@ function initialRepo(): string {
   return new URLSearchParams(window.location.search).get("repo")?.trim() || DEFAULT_REPO;
 }
 
+// First load with nothing in the URL: let the server serve the account's first
+// repo instead of the placeholder, in the same request. Once a repo is in the
+// URL — shared link, typed, or "Load" — the choice is explicit, never overridden.
+function preferMine(r: string): boolean {
+  if (r !== DEFAULT_REPO) return false;
+  return !new URLSearchParams(window.location.search).get("repo");
+}
+
 type View = "dashboard" | "review" | "help";
 
 export default function App() {
@@ -46,6 +54,10 @@ export default function App() {
   const [errorKind, setErrorKind] = useState<"auth_required" | "forbidden" | "other" | null>(null);
   const [linked, setLinked] = useState(false);
   const [loading, setLoading] = useState(false);
+  // The repo whose data is currently on screen. When the server picks a repo
+  // for us (`preferMine`), the setRepo below must not re-load what we just
+  // rendered — removing that second round trip is the point of `prefer`.
+  const shown = useRef("");
 
   const load = useCallback(async (r: string, quiet = false) => {
     if (!quiet) {
@@ -54,16 +66,22 @@ export default function App() {
       setErrorKind(null);
     }
     try {
-      const [p, a, i, d] = await Promise.all([
-        fetchProgress(r),
-        fetchActivity(r),
-        fetchIssues(r),
-        fetchDigests(r),
-      ]);
-      setProgress(p);
-      setActivity(a);
-      setIssues(i);
-      setDigests(d);
+      const d = await fetchDashboard(r, preferMine(r));
+      // The account first: it decides which onboarding step Welcome shows,
+      // even when the repo itself is denied.
+      setLinked(!!d.me);
+      if (d.denied) throw new Error(d.denied.status === 401 ? "auth_required" : "forbidden");
+      setProgress(d.progress ?? null);
+      setActivity(d.activity ?? null);
+      setIssues(d.issues ?? []);
+      setDigests(d.digests ?? []);
+      if (d.repo && d.repo !== r) {
+        shown.current = d.repo;
+        setRepo(d.repo);
+        setInput(d.repo);
+      } else {
+        shown.current = r;
+      }
       if (quiet) {
         setError(null);
         setErrorKind(null);
@@ -110,29 +128,9 @@ export default function App() {
     (errorKind === "auth_required" || errorKind === "forbidden") && !progress && !activity;
 
   useEffect(() => {
+    if (shown.current === repo) return; // already displaying this repo
     void load(repo);
   }, [repo, load]);
-
-  // Smart default: with no ?repo= in the URL, a logged-in user with owned
-  // repos lands on their first repo instead of the hardcoded default.
-  // Never overrides an explicit choice (URL param or typed input).
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("repo")) return;
-    let alive = true;
-    fetchMe()
-      .then((me) => {
-        if (!alive) return;
-        setLinked(!!me);
-        if (!me || me.repos.length === 0) return;
-        const first = me.repos[0] as string;
-        setRepo((cur) => (cur === DEFAULT_REPO ? first : cur));
-        setInput((cur) => (cur === DEFAULT_REPO ? first : cur));
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   // GitHub App Setup-URL landing (?installation_id=): claim the install once,
   // show the result, then strip the params. setup_claimed=1 comes from the

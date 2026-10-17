@@ -2,10 +2,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import webhookHandler from "../api/webhook.js";
 import healthHandler from "../api/health.js";
-import progressHandler from "../api/progress.js";
-import activityHandler from "../api/activity.js";
-import issuesHandler from "../api/issues.js";
-import digestsHandler from "../api/digests.js";
+import dataHandler from "../api/data/[view].js";
 import { signPayload } from "../src/verify.js";
 import { clearRateLimit } from "../src/rateLimit.js";
 import { sessionCookieValue } from "../src/session.js";
@@ -150,7 +147,7 @@ function mockGetReq(url: string, headers: Record<string, string> = {}) {
     headers,
     socket: { remoteAddress: "127.0.0.1" },
     url,
-  } as unknown as Parameters<typeof progressHandler>[0];
+  } as unknown as Parameters<typeof dataHandler>[0];
 }
 
 describe("dashboard api handlers (Phase C gates)", () => {
@@ -200,7 +197,7 @@ describe("dashboard api handlers (Phase C gates)", () => {
     process.env.GITHUB_CLIENT_ID = "client-123";
     try {
       const { res, done } = mockRes();
-      await (progressHandler as typeof progressHandler)(
+      await (dataHandler as typeof dataHandler)(
         mockGetReq("/api/progress?repo=AhadIKK%2FCommitIt"),
         res as never,
       );
@@ -217,7 +214,7 @@ describe("dashboard api handlers (Phase C gates)", () => {
     const { headers, restore } = authedHeaders();
     try {
       const { res, done } = mockRes();
-      await (progressHandler as typeof progressHandler)(
+      await (dataHandler as typeof dataHandler)(
         mockGetReq("/api/progress?repo=o%2Fdenied", headers),
         res as never,
       );
@@ -236,12 +233,12 @@ describe("dashboard api handlers (Phase C gates)", () => {
     try {
     const cases = [
         {
-          handler: progressHandler,
+          handler: dataHandler,
           url: "/api/progress?repo=AhadIKK%2FCommitIt",
           data: { repo: "AhadIKK/CommitIt", milestones: [], overall: null },
         },
         {
-          handler: activityHandler,
+          handler: dataHandler,
           url: "/api/activity?repo=AhadIKK%2FCommitIt&days=7",
           data: {
             repo: "AhadIKK/CommitIt",
@@ -255,19 +252,19 @@ describe("dashboard api handlers (Phase C gates)", () => {
           },
         },
         {
-          handler: issuesHandler,
+          handler: dataHandler,
           url: "/api/issues?repo=AhadIKK%2FCommitIt",
           data: [],
         },
         {
-          handler: digestsHandler,
+          handler: dataHandler,
           url: "/api/digests?repo=AhadIKK%2FCommitIt",
           data: [],
         },
       ] as const;
       for (const { handler, url, data } of cases) {
         const { res, done } = mockRes();
-        await (handler as typeof progressHandler)(mockGetReq(url, headers), res as never);
+        await (handler as typeof dataHandler)(mockGetReq(url, headers), res as never);
         expect(await done).toEqual({ status: 200, body: { ok: true, data } });
       }
     } finally {

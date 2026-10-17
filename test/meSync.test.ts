@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import meHandler from "../api/me.js";
+import dataHandler from "../api/data/[view].js";
 import { registerAuthRoutes } from "../src/auth.js";
 import { clearRateLimit } from "../src/rateLimit.js";
 
@@ -65,13 +65,13 @@ describe("api/me sync op", () => {
   it("requires login", async () => {
     loggedIn = false;
     const { res, done } = mockRes();
-    await (meHandler as Handler)(mockReq({ method: "POST", url: "/api/me?op=sync" }), res);
+    await (dataHandler as Handler)(mockReq({ method: "POST", url: "/api/me?op=sync" }), res);
     expect(await done).toEqual({ status: 401, body: { ok: false, error: "logged_out" } });
   });
 
   it("reports app_not_configured without app keys (not silent zero)", async () => {
     const { res, done } = mockRes();
-    await (meHandler as Handler)(mockReq({ method: "POST", url: "/api/me?op=sync" }), res);
+    await (dataHandler as Handler)(mockReq({ method: "POST", url: "/api/me?op=sync" }), res);
     expect(await done).toEqual({
       status: 200,
       body: { ok: true, data: { synced: 0, status: "app_not_configured" } },
@@ -80,7 +80,7 @@ describe("api/me sync op", () => {
 
   it("404s unknown ops and keeps GET working", async () => {
     const bad = mockRes();
-    await (meHandler as Handler)(mockReq({ method: "POST", url: "/api/me?op=nope" }), bad.res);
+    await (dataHandler as Handler)(mockReq({ method: "POST", url: "/api/me?op=nope" }), bad.res);
     expect((await bad.done).status).toBe(404);
   });
 });

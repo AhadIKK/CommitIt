@@ -3,7 +3,27 @@
   "outputDirectory": "public",
   "regions": ["icn1"],
   "rewrites": [
-    { "source": "/api/telegram", "destination": "/api/auth/telegram" }
+    { "source": "/api/telegram", "destination": "/api/auth/telegram" },
+    {
+      "source": "/api/me",
+      "destination": "/api/data/me"
+    },
+    {
+      "source": "/api/progress",
+      "destination": "/api/data/progress"
+    },
+    {
+      "source": "/api/activity",
+      "destination": "/api/data/activity"
+    },
+    {
+      "source": "/api/issues",
+      "destination": "/api/data/issues"
+    },
+    {
+      "source": "/api/digests",
+      "destination": "/api/data/digests"
+    }
   ],
   "headers": [
     {
