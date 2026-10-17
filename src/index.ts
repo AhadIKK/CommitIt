@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import { registerAuthRoutes } from "./auth.js";
 import { registerDashboardRoutes } from "./dashboard.js";
 import { registerLinkingRoutes } from "./linking.js";
-import { startStaleScheduler } from "./scheduler.js";
+import { startAutoSyncScheduler, startStaleScheduler } from "./scheduler.js";
 import { startBotPolling } from "./telegramBot.js";
 import { webhookRoutes } from "./webhook.js";
 import { startWorker } from "./worker.js";
@@ -38,6 +38,9 @@ startWorker(app.log);
 
 // Hourly stale-branch enqueue (no-op unless STALE_CHECK_REPOS is set).
 startStaleScheduler(app.log);
+
+// Automatic history re-sync (default every 24h; SYNC_INTERVAL_HOURS=0 disables).
+startAutoSyncScheduler(app.log);
 
 // Telegram inbound (getUpdates). No-op without TELEGRAM_BOT_TOKEN.
 startBotPolling(app.log);

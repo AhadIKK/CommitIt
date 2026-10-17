@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-10-17 — History re-syncs itself; install backfill wakes the worker
+- Two gaps made "automatic" untrue: (1) a fresh install enqueued its backfill but never woke the sleeping Render worker (only **Sync now** did), so a new tester's history could sit queued indefinitely; (2) the backfill ran once at install, so a long-lived repo only ever showed pushes made after install.
+- `registerInstallFromSetup` now pings the worker after queuing (mirrors `syncUserInstalls`), logging `install_backfill_wake`. New testers' history starts on its own.
+- New `startAutoSyncScheduler()` (`scheduler.ts`, wired in `index.ts`): every `SYNC_INTERVAL_HOURS` (default 24, 0 disables) it enqueues one `backfill` per non-suspended installation, re-running issues + merged PRs + commit history. Delivery id `sync-<id>-auto-<bucket>` is idempotent and matches the `sync-<id>-` prefix `cancelQueuedBackfills()` uses on uninstall. Runs in the worker process, so the same poller picks it up — no wake ping.
+- Env: `SYNC_INTERVAL_HOURS` in `.env.example` + `render.yaml`.
+- Tests: interval parsing + per-installation enqueue/idempotency/disable; suite 48 files / 260 green, `tsc --noEmit` clean.
+
 ## 2026-10-17 — Activity reads real commit dates; commit history backfilled
 - Root cause of "commits exist but Activity is empty": the `push` webhook only records commits pushed *after* install, and there was no commit backfill — a freshly installed repo had zero `Commit` rows, so the 7d window read 0 while the header showed GitHub's live "164 commits on main". Verified against the live DB: installed repos had 0 commit rows.
 - New `backfillRepoCommits()` (`backfill.ts`) pages `GET /repos/{full}/commits` (default branch, 10-page cap, 429 → `RateLimitedError`), storing `sha`, message, `branch`, `authorId`, and the real `committedAt`. Idempotent on `(repoId, sha)`; updates heal missing `committedAt`/`branch`/`author`. Rides `backfillInstallation` alongside issues/PRs → next **Sync now** heals every repo.

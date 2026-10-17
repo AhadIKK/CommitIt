@@ -93,3 +93,65 @@ export function startStaleScheduler(
   timer.unref?.();
   return timer;
 }
+
+/**
+ * Interval for the automatic history re-sync, in hours. Empty/unset → 24.
+ * `0` disables it; a bad value falls back to 24. Pure, tested.
+ */
+export function syncIntervalHours(raw?: string): number {
+  if (raw === undefined || raw.trim() === "") return 24;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 24;
+  return Math.floor(n);
+}
+
+/**
+ * Automatic history re-sync. The install backfill is one-shot, so without
+ * this a repo only ever shows pushes made after install. Every interval
+ * bucket this enqueues one `backfill` job per known installation (idempotent
+ * via the delivery id, so restarts and overlapping ticks never pile up). The
+ * job re-runs issues + merged PRs + commit history for that install's repos.
+ *
+ * Runs inside the worker process (index.ts), so the same poller picks the
+ * job up immediately — no wake ping needed. `sync-<id>-auto-<bucket>` also
+ * matches the `sync-<id>-` prefix cancelQueuedBackfills() uses on uninstall.
+ * Returns null when disabled (`SYNC_INTERVAL_HOURS=0`).
+ */
+export function startAutoSyncScheduler(
+  log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void },
+  tickMs = 3_600_000,
+): NodeJS.Timeout | null {
+  const hours = syncIntervalHours(process.env.SYNC_INTERVAL_HOURS);
+  if (hours <= 0) {
+    log.info({}, "SYNC_INTERVAL_HOURS=0 — auto sync disabled");
+    return null;
+  }
+  const bucketMs = hours * 3_600_000;
+  const tick = async () => {
+    let ids: bigint[] = [];
+    try {
+      const { prisma } = await import("./db.js");
+      const rows = await prisma.installation.findMany({
+        where: { suspendedAt: null },
+        select: { id: true },
+      });
+      ids = rows.map((r) => r.id);
+    } catch {
+      return; // DB down: retry on the next tick
+    }
+    const bucket = Math.floor(Date.now() / bucketMs);
+    for (const id of ids) {
+      const sid = id.toString();
+      try {
+        await enqueueJob("backfill", `sync-${sid}-auto-${bucket}`, { installationId: sid });
+      } catch (err) {
+        log.error({ err, installationId: sid }, "auto-sync enqueue failed");
+      }
+    }
+  };
+  const run = () => void tick().catch((err) => log.error({ err }, "auto-sync tick failed"));
+  run();
+  const timer = setInterval(run, tickMs);
+  timer.unref?.();
+  return timer;
+}

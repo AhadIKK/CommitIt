@@ -63,3 +63,5 @@ services:
         sync: false
       - key: STALE_DAYS
         sync: false
+      - key: SYNC_INTERVAL_HOURS
+        sync: false
