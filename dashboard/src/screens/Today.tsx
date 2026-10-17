@@ -9,7 +9,9 @@
  */
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import type { Alert, AuthorGroup as AuthorGroupModel, Issue, TodaySnapshot } from "../api/types.js";
+import { api } from "../api/index.js";
 import { GoalTrack } from "../components/GoalTrack.js";
 import { CommitGroup } from "../components/CommitGroup.js";
 import { Banner, LiveBar, Skeleton, SkeletonRows, StatePanel } from "../components/surfaces.js";
@@ -106,6 +108,13 @@ export function Today() {
   const live = useLive(repoId);
   const wide = useMediaQuery(TRACK_QUERY);
   const repoQuery = repoSuffix(ref);
+
+  // Accepting a suggestion is the only way a commit becomes linked to a task.
+  const accept = useMutation({
+    mutationFn: ({ sha, issueNumber }: { sha: string; issueNumber: number }) =>
+      api.linkCommit(repoId, sha, issueNumber),
+    onSuccess: () => void query.refetch(),
+  });
 
   const { data, status, error, retry, refetching } = screenState<TodaySnapshot>(
     query,
@@ -266,12 +275,19 @@ export function Today() {
                   commits={group.commits}
                   repoFullName={data.repo.fullName}
                   suggestions={suggestionsFrom(data.unlinked)}
+                  onAcceptSuggestion={(sha, issueNumber) => accept.mutate({ sha, issueNumber })}
                 />
               ))}
             </div>
           )}
         </section>
       )}
+
+      {accept.isError ? (
+        <p className="small" role="status">
+          That suggestion was not saved. Nothing was changed; try again.
+        </p>
+      ) : null}
 
       <section className="card-less-section" aria-labelledby="needs-heading">
         <div className="section-head">

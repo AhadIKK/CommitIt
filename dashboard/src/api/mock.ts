@@ -141,6 +141,7 @@ export function createMockApi(): CommitItApi {
 
     async people(repoId: RepoId): Promise<PersonSummary[]> {
       if (currentScenario() === "empty") return guard([]);
+      if (currentScenario() === "burst") return guard(fx.peopleFixture("r_capstone"));
       return guard(fx.peopleFixture(repoId));
     },
 
@@ -150,8 +151,14 @@ export function createMockApi(): CommitItApi {
       return guard(fx.alerts[repoId] ?? []);
     },
 
+    async linkCommit(repoId: RepoId, sha: string, issueNumber: number) {
+      void repoId;
+      return guard({ ok: true as const, sha, issueNumber }, 240);
+    },
+
     async digests(repoId: RepoId, mode?: DigestMode): Promise<DigestSettings> {
-      const base = digest(repoId, mode);
+      const base =
+        currentScenario() === "burst" ? fx.digestFixture("r_capstone", mode) : digest(repoId, mode);
       if (currentScenario() === "empty") {
         return guard({ ...base, subscription: null, preview: "", charCount: 0 });
       }

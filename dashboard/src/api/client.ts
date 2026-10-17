@@ -41,6 +41,17 @@ export interface CommitItApi {
   people(repoId: RepoId): Promise<PersonSummary[]>;
   alerts(repoId: RepoId): Promise<Alert[]>;
 
+  /* linking --------------------------------------------------------------- */
+  /**
+   * Accept a suggested task for a commit. The only way a commit ever becomes
+   * linked: a suggestion is never applied on its own.
+   */
+  linkCommit(
+    repoId: RepoId,
+    sha: string,
+    issueNumber: number,
+  ): Promise<{ ok: true; sha: string; issueNumber: number }>;
+
   /* digests --------------------------------------------------------------- */
   digests(repoId: RepoId, mode?: DigestMode): Promise<DigestSettings>;
   saveDigest(repoId: RepoId, patch: DigestPatch): Promise<DigestSettings>;

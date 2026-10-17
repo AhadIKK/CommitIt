@@ -49,6 +49,12 @@ export function createHttpApi(): CommitItApi {
     people: (repoId) => json<PersonSummary[]>(`${repoPath(repoId)}/people`),
     alerts: (repoId) => json<Alert[]>(`${repoPath(repoId)}/alerts`),
 
+    linkCommit: (repoId, sha, issueNumber) =>
+      json<{ ok: true; sha: string; issueNumber: number }>(
+        `${repoPath(repoId)}/commits/${encodeURIComponent(sha)}/link`,
+        { method: "POST", body: JSON.stringify({ issueNumber }) },
+      ),
+
     digests: (repoId, mode?: DigestMode) =>
       json<DigestSettings>(`${repoPath(repoId)}/digest${mode ? `?mode=${mode}` : ""}`),
     saveDigest: (repoId, patch: DigestPatch) =>
