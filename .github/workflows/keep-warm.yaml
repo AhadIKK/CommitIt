@@ -1,33 +1,45 @@
 # Keep-warm for Render's free instance.
 #
-# Why this loop instead of a plain every-10-minutes cron: GitHub fires
-# `schedule` events on a best-effort basis and drops/delays high-frequency
-# crons hard. With `*/10` this workflow produced 5 runs in 13 hours (gaps of
-# 2-4.5h), so Render hibernated ~15 min after each ping and the Telegram
-# poller, backfill and digests went dark in between.
+# The getUpdates poller, digest delivery, stale checks and auto-sync all run in
+# the Render worker, and free instances hibernate after ~15 min idle.
 #
-# Instead: one job per 6h that pings every 10 min for ~5h50m. A running job is
-# never throttled, so only the job START can be delayed. Render's idle timeout
-# is 15 min, so a scheduling delay of up to ~20 min still leaves it warm.
+# Why a loop instead of a plain every-10-minutes cron: GitHub fires `schedule`
+# events best-effort and drops/delays high-frequency crons hard. Measured with
+# `*/10`: 5 runs in 13h (gaps of 2-4.5h) instead of ~80. A cron at minute 0 —
+# "*/10", or the "0 */6" this replaced — fires exactly when GitHub's own docs
+# say load is highest and queued jobs get dropped. This workflow's 12:00Z tick
+# was dropped entirely.
 #
-# Cost is free: GitHub Actions minutes are unlimited for public repositories.
-# Revisit once traffic justifies paid hosting.
+# So: schedule off the hour, and make each job ping in a loop. A running job is
+# never throttled, so only the job START can be delayed, and the 30 min of
+# overlap absorbs that. Every 2h, ping every 10 min for 2h30m.
+#
+# Correctness does not depend on this: digests deliver on `dueAt <= now` and
+# the stale/auto-sync jobs are bucket-idempotent, so a gap delays work rather
+# than losing it. This only keeps things punctual.
+#
+# Cost is real but free: ~30 runner-hours/day (one always-on machine is the
+# unavoidable price of keeping another machine awake). Unlimited for public
+# repos. A free uptime pinger does the same job for ~zero compute — swap to
+# that if the runner usage is ever unwelcome.
 name: keep-warm
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    # minute 7, not 0: avoid the top-of-hour drop window.
+    - cron: "7 */2 * * *"
   workflow_dispatch: {}
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 358
+    # 2h30m of pings, 6 min of headroom.
+    timeout-minutes: 156
     steps:
-      - name: Ping Render health every 10 minutes for ~5h50m
+      - name: Ping Render health every 10 minutes for 2h30m
         run: |
           set -u
-          deadline=$((SECONDS + 21000))   # 5h50m < the 6h job ceiling
+          deadline=$((SECONDS + 9000))
           streak=0
           longest=0
           pings=0
