@@ -246,7 +246,19 @@ export async function registerInstallFromSetup(
   } catch {
     return { ok: false, error: "unavailable" };
   }
-  await enqueueBackfill(installationId, `setup-${installationId.toString()}-${Date.now()}`);
+  const queued = await enqueueBackfill(
+    installationId,
+    `setup-${installationId.toString()}-${Date.now()}`,
+  );
+  // The free Render worker sleeps and its in-process poller only runs while
+  // awake, so a queued backfill would otherwise sit until unrelated traffic
+  // wakes it. Best-effort wake on install, mirroring syncUserInstalls — this
+  // is what makes a new tester's history start backfilling by itself.
+  if (queued) {
+    const { pingWorker } = await import("./workerWake.js");
+    const woke = await pingWorker();
+    console.warn(JSON.stringify({ msg: "install_backfill_wake", woke }));
+  }
   return { ok: true, repos };
 }
 export async function revokeGithubAuthorization(body: unknown): Promise<number> {

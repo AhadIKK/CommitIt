@@ -267,6 +267,44 @@ describe("install lifecycle", () => {
     }
   });
 
+  it("wakes the worker after queuing the install backfill", async () => {
+    reset();
+    const saved = { ...process.env };
+    const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    process.env.GITHUB_APP_ID = "42";
+    process.env.GITHUB_APP_PRIVATE_KEY_BASE64 = Buffer.from(
+      privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    ).toString("base64");
+    process.env.WORKER_URL = "https://worker.test";
+    const savedFetch = globalThis.fetch;
+    let health = 0;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      if (target === "https://worker.test/health") {
+        health += 1;
+        return new Response("ok", { status: 200 });
+      }
+      if (target.endsWith("/app/installations/77")) {
+        return new Response(JSON.stringify({ account: { login: "AhadIKK", type: "User" } }), {
+          status: 200,
+        });
+      }
+      if (target.includes("/app/installations/77/repositories")) {
+        return new Response(JSON.stringify({ repositories: [{ full_name: "o/r" }] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    try {
+      await expect(registerInstallFromSetup(77n)).resolves.toEqual({ ok: true, repos: ["o/r"] });
+      expect(health).toBe(1);
+    } finally {
+      process.env = saved;
+      globalThis.fetch = savedFetch;
+    }
+  });
+
   it("setup registration degrades without App config", async () => {
     const saved = { ...process.env };
     delete process.env.GITHUB_APP_ID;
