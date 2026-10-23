@@ -63,9 +63,17 @@ export function Onboarding() {
 
   const start = useMutation({ mutationFn: () => api.startGitHub() });
   const choose = useMutation({ mutationFn: (fullName: string) => api.chooseRepo(fullName) });
-  const startLink = useMutation({ mutationFn: () => api.startTelegramLink() });
-  const saveMode = useMutation({ mutationFn: (next: DigestMode) => api.saveOnboardingMode(next) });
+  const startLink = useMutation({ mutationFn: (repoRef?: string) => api.startTelegramLink(repoRef) });
+  const saveMode = useMutation({
+    mutationFn: (next: DigestMode) => api.saveOnboardingMode(next, ref),
+  });
   const sendTest = useMutation({ mutationFn: () => api.sendTestDigest(repoId) });
+
+  /* the repo list is read again when the step opens: the install may have
+     happened in another tab a moment ago */
+  useEffect(() => {
+    if (step === "repo") void me.refetch();
+  }, [step]);
 
   /* the link step polls until the bot sees the tap, and gives up gracefully */
   useEffect(() => {
@@ -129,7 +137,16 @@ export function Onboarding() {
         return (
           <>
             <Button
-              onClick={() => start.mutate(undefined, { onSuccess: () => go("repo") })}
+              onClick={() =>
+                start.mutate(undefined, {
+                  onSuccess: (result) => {
+                    // The App can only be granted on GitHub. Open it beside this
+                    // wizard, then move on: the repo step re-reads the list.
+                    window.open(result.url, "_blank", "noopener,noreferrer");
+                    go("repo");
+                  },
+                })
+              }
               loading={start.isPending}
               loadingLabel="Opening GitHub…"
             >
@@ -208,7 +225,7 @@ export function Onboarding() {
         if (!link) {
           return (
             <Button
-              onClick={() => startLink.mutate(undefined, { onSuccess: (l) => setLink(l) })}
+              onClick={() => startLink.mutate(ref, { onSuccess: (l) => setLink(l) })}
               loading={startLink.isPending}
               loadingLabel="Opening Telegram…"
             >

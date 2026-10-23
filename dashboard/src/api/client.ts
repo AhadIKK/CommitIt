@@ -65,9 +65,10 @@ export interface CommitItApi {
   /* onboarding ------------------------------------------------------------ */
   startGitHub(): Promise<{ url: string }>;
   chooseRepo(fullName: string): Promise<Me>;
-  startTelegramLink(): Promise<TelegramLink>;
+  /** The chat being linked is per repository, so say which one. */
+  startTelegramLink(repoRef?: string): Promise<TelegramLink>;
   pollTelegramLink(pollToken: string): Promise<{ linked: boolean; chatTitle?: string }>;
-  saveOnboardingMode(mode: DigestMode): Promise<{ saved: true; mode: DigestMode }>;
+  saveOnboardingMode(mode: DigestMode, repoRef?: string): Promise<{ saved: true; mode: DigestMode }>;
 
   /* live activity -------------------------------------------------------- */
   /**

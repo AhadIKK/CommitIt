@@ -1,12 +1,45 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "public",
-  "regions": ["icn1"],
+  "regions": [
+    "icn1"
+  ],
   "rewrites": [
-    { "source": "/api/telegram", "destination": "/api/auth/telegram" },
+    {
+      "source": "/api/telegram",
+      "destination": "/api/auth/telegram"
+    },
     {
       "source": "/api/me",
-      "destination": "/api/data/me"
+      "destination": "/api/product/me"
+    },
+    {
+      "source": "/api/repos",
+      "destination": "/api/product/repos"
+    },
+    {
+      "source": "/api/repos/:path*",
+      "destination": "/api/product/repos/:path*"
+    },
+    {
+      "source": "/api/auth/github/start",
+      "destination": "/api/product/auth/github/start"
+    },
+    {
+      "source": "/api/auth/github/repo",
+      "destination": "/api/product/auth/github/repo"
+    },
+    {
+      "source": "/api/link/telegram",
+      "destination": "/api/product/link/telegram"
+    },
+    {
+      "source": "/api/link/telegram/:path*",
+      "destination": "/api/product/link/telegram/:path*"
+    },
+    {
+      "source": "/api/onboarding/mode",
+      "destination": "/api/product/onboarding/mode"
     },
     {
       "source": "/api/progress",
@@ -29,12 +62,20 @@
     {
       "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/(favicon.svg|llms.txt)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
     },
     {
       "source": "/",

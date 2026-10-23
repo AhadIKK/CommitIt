@@ -1,20 +1,38 @@
 # CommitIt — what the frontend needs from the API
 
-Branch `front-end-redesign`. **No backend file was changed on this branch.** This document is the
-contract the redesign was built against, so the backend work can be planned from it.
+Branch `front-end-redesign`. **Implemented.** This document is the contract the redesign was built
+against, and the backend now serves it: the product screens read live data from Postgres.
+
+| Where | What |
+|---|---|
+| `src/contract.ts` | The payload types, once. `dashboard/src/api/types.ts` re-exports them, so the two sides cannot drift. |
+| `src/workspace.ts` | Every read and write below, plus the pure shaping (`commitDto`, `issueDto`, `milestoneDto`, `buildAlerts`, …). |
+| `src/workspaceRoutes.ts` | One router: auth/rate-limit gate, zod bodies, `handleWorkspace(path, method, …)`. |
+| `api/product/[...path].ts` | Vercel adapter that calls the same router — one serverless function, not twenty. |
+| `src/index.ts` | Fastify registration for local dev, so both hosts run identical code. |
 
 Every screen talks to exactly one interface — `CommitItApi` in `dashboard/src/api/client.ts` — and
-never to `fetch` directly. `dashboard/src/api/http.ts` already encodes the HTTP call for each method.
-The mock adapter (`dashboard/src/api/mock.ts`) satisfies the same interface, so switching to a live
-backend is one line:
+never to `fetch` directly. `dashboard/src/api/http.ts` encodes the HTTP call for each method. The
+mock adapter (`dashboard/src/api/mock.ts`) still satisfies the same interface and is what
+`?state=…` (design review) and `VITE_API_MODE=mock` (Playwright) select:
 
 ```ts
 // dashboard/src/api/index.ts
-const USE_REAL_API = false;   // → true
+export const api = wantsMock() ? createMockApi() : createHttpApi();
 ```
 
 Because the mock and the HTTP adapter implement the same interface, **every endpoint below has been
-exercised by the UI in the mock**: the shapes are known-good, not sketched.
+exercised by the UI in both adapters**: the shapes are known-good, not sketched.
+
+Two implementation notes worth knowing before reading the table:
+
+- **Live updates are polled, not streamed.** A serverless function cannot hold an SSE connection
+  open, so `subscribe()` polls `/events?since=` every 30 s and reports `polling`; it only reports
+  `live` after a successful poll. The UI's contract (`ActivityEvent` frames + a status callback) is
+  unchanged.
+- **The `/app/*` ledger screens are not part of this.** They are a separate prototype still reading
+  `dashboard/src/app/seed.ts`; the API-driven product is `/today`, `/goals`, `/people`, `/digests`,
+  `/alerts`, `/repos`, `/settings` and `/connect/*`.
 
 ---
 
@@ -22,28 +40,28 @@ exercised by the UI in the mock**: the shapes are known-good, not sketched.
 
 `repoId` is CommitIt's own repository id (not `owner/name`); `:id` in a path is that id, URL-encoded.
 
-| # | `CommitItApi` method | Endpoint | Verb | Returns | Backend today |
+| # | `CommitItApi` method | Endpoint | Verb | Returns | Shipped |
 |---|---|---|---|---|---|
-| 1 | `me()` | `/api/me` | GET | `Me` | Exists. Must gain `repos[]` and `telegramLinked`. |
-| 2 | `repos()` | `/api/repos` | GET | `Repo[]` | New. Today only `GET /api/repo?repo=owner/name` for one repo. |
-| 3 | `today(repoId)` | `/api/repos/:id/today` | GET | `TodaySnapshot` | New. Folds `/api/progress` + `/api/activity` + `/api/issues` into one first-paint request. |
-| 4 | `goals(repoId)` | `/api/repos/:id/goals` | GET | `Milestone[]` | New; `/api/progress` already computes the weights. |
-| 5 | `goal(repoId, goalId)` | `/api/repos/:id/goals/:goalId` | GET | `GoalDetail` | New. |
-| 6 | `people(repoId)` | `/api/repos/:id/people` | GET | `PersonSummary[]` | New. `/api/activity` has per-author commits; add `closedTasks` + `weightedPointsClosed`. |
-| 7 | `alerts(repoId)` | `/api/repos/:id/alerts` | GET | `Alert[]` | New. |
-| 8 | `linkCommit(repoId, sha, issueNumber)` | `/api/repos/:id/commits/:sha/link` | POST `{issueNumber}` | `{ok, sha, issueNumber}` | **New. The only write the dashboard performs.** |
-| 9 | `digests(repoId, mode?)` | `/api/repos/:id/digest?mode=` | GET | `DigestSettings` | New shape over the existing `/api/digests`. |
-| 10 | `saveDigest(repoId, patch)` | `/api/repos/:id/digest` | PUT | `DigestSettings` | New. |
-| 11 | `sendTestDigest(repoId)` | `/api/repos/:id/digest/test` | POST | `TestDigestResult` | New (uses the existing Telegram sender). |
-| 12 | `settings(repoId)` | `/api/repos/:id/settings` | GET | `RepoSettings` | New. |
-| 13 | `setAiEnabled(repoId, enabled)` | `/api/repos/:id/settings/ai` | PUT `{enabled}` | `RepoSettings` | New. Writes `repos.ai_enabled` (AGENTS.md rule 7). |
-| 14 | `disconnect(repoId)` | `/api/repos/:id/connection` | DELETE | `204` | New. Deleting the connection must not delete history. |
-| 15 | `startGitHub()` | `/api/auth/github/start` | GET | `{url}` | Exists as `/api/auth/login` (GitHub App install). |
-| 16 | `chooseRepo(fullName)` | `/api/auth/github/repo` | POST `{fullName}` | `Me` | New; persists the repo chosen in onboarding. |
-| 17 | `startTelegramLink()` | `/api/link/telegram` | POST | `TelegramLink` | Exists as `POST /api/link?op=issue`. Needs to return `{code, deepLink, pollToken}`. |
-| 18 | `pollTelegramLink(pollToken)` | `/api/link/telegram/:pollToken` | GET | `{linked, chatTitle?}` | Exists as `GET /api/link?op=poll&code=`. |
-| 19 | `saveOnboardingMode(mode)` | `/api/onboarding/mode` | POST `{mode}` | `{saved, mode}` | Exists as `POST /api/link?op=set-digest`. |
-| 20 | `subscribe(repoId, …)` | `/api/repos/:id/events` | SSE (GET) | `ActivityEvent` frames | New. Fallback `GET /api/repos/:id/events?since=last` (JSON array), polled every 30 s. |
+| 1 | `me()` | `/api/me` | GET | `Me` | `repos[]` + `telegramLinked` included; `POST /api/me?op=sync` stays in `src/auth.ts`. |
+| 2 | `repos()` | `/api/repos` | GET | `Repo[]` | Lists every repo the session may read; falls back to all repos while auth is unenforced (local dev). |
+| 3 | `today(repoId)` | `/api/repos/:id/today` | GET | `TodaySnapshot` | Folds progress + activity + issues + alerts into one first-paint request. |
+| 4 | `goals(repoId)` | `/api/repos/:id/goals` | GET | `Milestone[]` | Reuses the weighted progress computation. |
+| 5 | `goal(repoId, goalId)` | `/api/repos/:id/goals/:goalId` | GET | `GoalDetail` | 404 `goal_not_found` for a milestone of another repo. |
+| 6 | `people(repoId)` | `/api/repos/:id/people` | GET | `PersonSummary[]` | Week-windowed; `closedTasks` from commits linked to closed issues. |
+| 7 | `alerts(repoId)` | `/api/repos/:id/alerts` | GET | `Alert[]` | Derived from webhook health, secret flags, failed jobs and stale repos. |
+| 8 | `linkCommit(repoId, sha, issueNumber)` | `/api/repos/:id/commits/:sha/link` | POST `{issueNumber}` | `{ok, sha, issueNumber}` | **The only write the dashboard performs.** Idempotent; refuses closed issues, foreign issues and secret-flagged commits. |
+| 9 | `digests(repoId, mode?)` | `/api/repos/:id/digest?mode=` | GET | `DigestSettings` | Preview is rendered by `renderDigestBodies()` — the same function the sender uses. |
+| 10 | `saveDigest(repoId, patch)` | `/api/repos/:id/digest` | PUT | `DigestSettings` | Writes the per-subscription row (rule 10), never `users`. |
+| 11 | `sendTestDigest(repoId)` | `/api/repos/:id/digest/test` | POST | `TestDigestResult` | Uses the existing Telegram sender. |
+| 12 | `settings(repoId)` | `/api/repos/:id/settings` | GET | `RepoSettings` | Includes `aiAvailable` so the toggle can explain itself. |
+| 13 | `setAiEnabled(repoId, enabled)` | `/api/repos/:id/settings/ai` | PUT `{enabled}` | `RepoSettings` | Writes `repos.ai_enabled` (AGENTS.md rule 7). |
+| 14 | `disconnect(repoId)` | `/api/repos/:id/connection` | DELETE | `204` | Removes subscriptions; history is kept. |
+| 15 | `startGitHub()` | `/api/auth/github/start` | GET | `{url}` | App install URL, else OAuth login, else 503 `github_not_configured`. |
+| 16 | `chooseRepo(fullName)` | `/api/auth/github/repo` | POST `{fullName}` | `Me` | Persists the repo chosen in onboarding. |
+| 17 | `startTelegramLink()` | `/api/link/telegram` | POST | `TelegramLink` | Returns `{code, deepLink, pollToken}`. |
+| 18 | `pollTelegramLink(pollToken)` | `/api/link/telegram/:pollToken` | GET | `{linked, chatTitle?}` | Poll, not push. |
+| 19 | `saveOnboardingMode(mode)` | `/api/onboarding/mode` | POST `{mode}` | `{saved, mode}` | Repo-scoped when a `repo` is passed. |
+| 20 | `subscribe(repoId, …)` | `/api/repos/:id/events` | GET `?since=` (polled) | `ActivityEvent[]` | Polled every 30 s; see the note above on why there is no SSE. |
 
 Path style is a proposal, not a requirement: nothing in the UI depends on it. What matters is that each
 method maps to one request and returns the listed shape.
@@ -57,7 +75,7 @@ to the data contract, and each one exists because a screen cannot be correct wit
 
 | Field | Why the UI needs it |
 |---|---|
-| `Issue.reopenedAt` | The Goal Track draws a reopened task as **open again**, which moves the filled line back. Without it a reopened task still looks finished, and the track lies about progress. |
+| `Issue.reopenedAt` | The Goal Track draws a reopened task as **open again**, which moves the filled line back. Without it a reopened task still looks finished, and the track lies about progress. **Current backend: always `null`** — the schema has no reopen timestamp, so a reopened issue is drawn open but without a "moved back" marker. Adding it is a one-column migration (`prisma/migrations`), not an API change. |
 | `TodaySnapshot.focusIssues` | The tasks of the focus goal, in closing order — the Goal Track on the first screen. Returning them with `today` keeps first paint at **one** request. (Alternative rejected: a second call from Today to `goal()`.) |
 | `DigestSettings.subscription: Subscription \| null` | A repository with no chat connected must return `null`, not a 404 or a zero-filled object, so the Digests screen can show its "no chat connected" invitation instead of an error. |
 | `CommitItApi.linkCommit(...)` | Accepting a suggested task must be an explicit, single write. See §4. |
@@ -89,7 +107,7 @@ from exactly two signals: the promise outcome, and the shape of the payload. So:
 | empty | Return `200` with an empty collection (`[]`, `groups: []`, `focus: null`). **Never** 404 for "nothing in this window". The screen then shows its own invitation. |
 | error | Any non-2xx → the client throws `Request failed (status)` (or the response body text, which is used as the message). The screen shows a banner with a retry. |
 | partial | **Return `200` with the region that loaded and the region that did not left empty.** Today treats `goals.length > 0 && groups.length === 0 && alerts.length === 0` as "activity could not be loaded"; Goal treats `issues.length > 0 && commits.length === 0 && unlinked.length > 0` the same way. Failing the whole response for one broken sub-read would throw away good data. |
-| stale | The `subscribe` `onStatus` callback reports `live` / `polling` / `stale` / `offline`. SSE `onerror` → `stale`, then the client falls back to 30 s polling itself. |
+| stale | The `subscribe` `onStatus` callback reports `live` / `polling` / `stale` / `offline`. A failed poll → `offline` and the UI marks the last update as old; the next successful poll returns to `live`. |
 | 3800-char limit | `DigestSettings.preview` and `charCount` are computed **on the server** from the same renderer the bot uses, so the preview can never disagree with the message that is sent. |
 
 `DigestSettings.charLimit` is Telegram's 3800 (AGENTS.md rule 8); `charCount` is the length of
@@ -133,5 +151,6 @@ Response `{ok, sha, issueNumber}` lets the row update in place without refetchin
 - No pagination: `today` and `people` are windowed server-side (the digest window, the week).
 - No client-side progress maths: the percentage is displayed, never derived, so no commit data is
   required to draw the Goal Track.
-- No websocket: SSE with a polling fallback is enough for "new since you last looked".
+- No websocket: a 30 s poll of `/events?since=` is enough for "new since you last looked" and survives
+  serverless.
 - No separate "builds" or "notifications" endpoints (see §2).

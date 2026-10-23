@@ -45,5 +45,8 @@ export default defineConfig({
     timeout: 120_000,
     stdout: "ignore",
     stderr: "pipe",
+    // The suite asserts the design's state matrix, so it runs against the
+    // fixtures (?state=…) rather than whatever the database holds today.
+    env: { VITE_API_MODE: "mock" },
   },
 });

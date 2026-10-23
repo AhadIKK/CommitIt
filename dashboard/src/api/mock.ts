@@ -214,7 +214,7 @@ export function createMockApi(): CommitItApi {
       return guard({ ...fx.me, repos: fx.repos.map((r) => (r.id === repo.id ? r : r)) });
     },
 
-    async startTelegramLink(): Promise<TelegramLink> {
+    async startTelegramLink(_repoRef?: string): Promise<TelegramLink> {
       const code = "SYN-4821";
       return guard({ code, deepLink: `https://t.me/commitit_bot?start=${code}`, pollToken: code }, 420);
     },
@@ -228,7 +228,7 @@ export function createMockApi(): CommitItApi {
       return { linked: true, chatTitle: fx.subscriptions.r_syncura.chatTitle };
     },
 
-    async saveOnboardingMode(mode: DigestMode) {
+    async saveOnboardingMode(mode: DigestMode, _repoRef?: string) {
       return guard({ saved: true as const, mode }, 200);
     },
 

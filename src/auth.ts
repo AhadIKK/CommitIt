@@ -229,29 +229,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return reply.header("Set-Cookie", clearSessionCookieHeader()).send({ ok: true });
   });
 
-  app.get("/api/me", async (req, reply) => {
-    const session = await getSessionUser(
-      parseCookies(req.headers.cookie)[SESSION_COOKIE],
-      process.env.SESSION_SECRET ?? "",
-    );
-    if (!session) {
-      return reply.code(401).send({ ok: false, error: "logged_out" });
-    }
-    let repos: string[] = [];
-    try {
-      const rows = await prisma.repo.findMany({
-        where: { ownerUserId: session.id },
-        select: { fullName: true },
-      });
-      repos = rows.map((r) => r.fullName);
-    } catch {
-      repos = [];
-    }
-    return reply.send({
-      ok: true,
-      data: { login: session.login, avatarUrl: session.avatarUrl, repos },
-    });
-  });
+  // GET /api/me is served by src/workspaceRoutes.ts (the account payload the
+  // app reads); this module keeps only the install re-sync POST below.
 
   app.post("/api/me", async (req, reply) => {
     const q = req.query as { op?: string };

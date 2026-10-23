@@ -118,6 +118,17 @@ export async function deliver(
   }
 }
 
+/**
+ * The digest body, exactly as it will be sent: the queued messages joined,
+ * capped at Telegram's 3800 characters. The dashboard's preview calls this
+ * same function, so the preview can never disagree with the message.
+ */
+export function renderDigestBodies(bodies: string[]): string {
+  const body = bodies.join("\n\n");
+  if (body.length <= 3800) return body;
+  return body.slice(0, 3780) + "\n… truncated";
+}
+
 // Sends due queued notifications, one digest per subscription (grouped,
 // capped at Telegram's 3800 chars). Quiet hours reschedule, not drop.
 export async function dispatchDueNotifications(now: Date = new Date()): Promise<number> {
@@ -171,8 +182,7 @@ export async function dispatchDueNotifications(now: Date = new Date()): Promise<
         });
         continue;
       }
-      let body = notes.map((n) => n.body).join("\n\n");
-      if (body.length > 3800) body = body.slice(0, 3780) + "\n… truncated";
+      const body = renderDigestBodies(notes.map((n) => n.body));
       await sendMessage(sub.chat.telegramChatId, body);
       await prisma.notification.updateMany({
         where: { id: { in: notes.map((n) => n.id) } },

@@ -1,6 +1,6 @@
 /**
- * HTTP adapter. Same interface as the mock; used by flipping USE_REAL_API in
- * `api/index.ts`. No token ever touches the client: auth is a session cookie set
+ * HTTP adapter. Same interface as the mock; used for every build that is not a
+ * design review. No token ever touches the client: auth is a session cookie set
  * by the backend, so there is nothing here to put in localStorage.
  */
 import type { CommitItApi, DigestPatch, LiveStatus } from "./client.js";
@@ -36,6 +36,9 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const repoPath = (id: RepoId) => `/api/repos/${encodeURIComponent(id)}`;
+
+/** How often the live bar asks for new activity. */
+const POLL_MS = 30_000;
 
 export function createHttpApi(): CommitItApi {
   return {
@@ -73,59 +76,55 @@ export function createHttpApi(): CommitItApi {
     startGitHub: () => json<{ url: string }>("/api/auth/github/start"),
     chooseRepo: (fullName: string) =>
       json<Me>("/api/auth/github/repo", { method: "POST", body: JSON.stringify({ fullName }) }),
-    startTelegramLink: () => json<TelegramLink>("/api/link/telegram", { method: "POST" }),
+    startTelegramLink: (repoRef?: string) =>
+      json<TelegramLink>("/api/link/telegram", {
+        method: "POST",
+        body: JSON.stringify(repoRef ? { repo: repoRef } : {}),
+      }),
     pollTelegramLink: (pollToken: string) =>
       json<{ linked: boolean; chatTitle?: string }>(
         `/api/link/telegram/${encodeURIComponent(pollToken)}`,
       ),
-    saveOnboardingMode: (mode: DigestMode) =>
+    saveOnboardingMode: (mode: DigestMode, repoRef?: string) =>
       json<{ saved: true; mode: DigestMode }>("/api/onboarding/mode", {
         method: "POST",
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify(repoRef ? { mode, repo: repoRef } : { mode }),
       }),
 
+    /**
+     * New activity, polled. Serverless hosts cannot hold an event stream open,
+     * so the honest default is a short poll: one request now, then every 30 s,
+     * with the status saying exactly what is happening.
+     */
     subscribe(repoId, onEvent, onStatus) {
-      const url = `${repoPath(repoId)}/events`;
-      let source: EventSource | null = null;
-      let poll: ReturnType<typeof setInterval> | null = null;
+      if (!repoId) {
+        onStatus?.("offline");
+        return () => {};
+      }
+      let since = new Date().toISOString();
+      let stopped = false;
 
-      const startPolling = () => {
-        if (poll) return;
-        onStatus?.("polling");
-        poll = setInterval(async () => {
-          try {
-            const events = await json<ActivityEvent[]>(`${repoPath(repoId)}/events?since=last`);
-            for (const e of events) onEvent(e);
-            onStatus?.("live");
-          } catch {
-            onStatus?.("offline");
-          }
-        }, 30_000);
+      const tick = async () => {
+        try {
+          const events = await json<ActivityEvent[]>(
+            `${repoPath(repoId)}/events?since=${encodeURIComponent(since)}`,
+          );
+          if (stopped) return;
+          since = new Date().toISOString();
+          for (const event of events) onEvent(event);
+          onStatus?.("live");
+        } catch {
+          if (!stopped) onStatus?.("offline");
+        }
       };
 
-      try {
-        source = new EventSource(url);
-        source.onmessage = (m) => {
-          try {
-            onEvent(JSON.parse(m.data) as ActivityEvent);
-            onStatus?.("live");
-          } catch {
-            /* a malformed frame is not worth a banner */
-          }
-        };
-        source.onerror = () => {
-          onStatus?.("stale");
-          source?.close();
-          source = null;
-          startPolling();
-        };
-      } catch {
-        startPolling();
-      }
+      onStatus?.("polling");
+      void tick();
+      const timer = setInterval(() => void tick(), POLL_MS);
 
       return () => {
-        source?.close();
-        if (poll) clearInterval(poll);
+        stopped = true;
+        clearInterval(timer);
       };
     },
   };

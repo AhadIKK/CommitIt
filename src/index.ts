@@ -7,6 +7,7 @@ import { startAutoSyncScheduler, startStaleScheduler } from "./scheduler.js";
 import { startBotPolling } from "./telegramBot.js";
 import { webhookRoutes } from "./webhook.js";
 import { startWorker } from "./worker.js";
+import { registerWorkspaceRoutes } from "./workspaceRoutes.js";
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -32,6 +33,7 @@ await app.register(webhookRoutes);
 await app.register(registerDashboardRoutes);
 await app.register(registerLinkingRoutes);
 await app.register(registerAuthRoutes);
+await app.register(registerWorkspaceRoutes);
 
 // In-process worker poller (queue.ts SKIP LOCKED). Single stack, no Redis.
 startWorker(app.log);

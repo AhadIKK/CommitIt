@@ -234,7 +234,9 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           secretFlag,
           isMerge,
           isForcePushContext: payload.forced ?? false,
-          aiSummary: aiSummary?.slice(0, 2000),
+          // A degraded summary is the message itself: storing it would make
+          // every row carry a duplicate of its subject (rule 7).
+          ...(degraded || !aiSummary ? {} : { aiSummary: aiSummary.slice(0, 2000) }),
           branch,
           committedAt,
           issueId: linkedIssueId ?? null,
