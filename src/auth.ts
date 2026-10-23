@@ -229,27 +229,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return reply.header("Set-Cookie", clearSessionCookieHeader()).send({ ok: true });
   });
 
-  // GET /api/me is served by src/workspaceRoutes.ts (the account payload the
-  // app reads); this module keeps only the install re-sync POST below.
-
-  app.post("/api/me", async (req, reply) => {
-    const q = req.query as { op?: string };
-    if (q.op !== "sync") {
-      return reply.code(404).send({ ok: false, error: "not_found" });
-    }
-    if (isRateLimited(`me-sync:${clientIp(req)}`, { max: 5 })) {
-      return reply.code(429).send({ ok: false, error: "rate_limited" });
-    }
-    const session = await getSessionUser(
-      parseCookies(req.headers.cookie)[SESSION_COOKIE],
-      process.env.SESSION_SECRET ?? "",
-    );
-    if (!session) {
-      return reply.code(401).send({ ok: false, error: "logged_out" });
-    }
-    const result = await syncUserInstalls(session.login);
-    return reply.send({ ok: true, data: result });
-  });
+  // /api/me (GET the account, POST ?op=sync the install re-sync) is served by
+  // src/workspaceRoutes.ts, so both hosts answer it from one place.
 
   app.get("/api/meta", async (_req, reply) => {
     const slug = (process.env.GITHUB_APP_SLUG ?? "").trim();

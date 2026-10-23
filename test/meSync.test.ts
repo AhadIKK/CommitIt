@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import dataHandler from "../api/data/[view].js";
 import { registerAuthRoutes } from "../src/auth.js";
+import { registerWorkspaceRoutes } from "../src/workspaceRoutes.js";
 import { clearRateLimit } from "../src/rateLimit.js";
 
 let loggedIn = true;
@@ -89,7 +90,10 @@ describe("fastify POST /api/me", () => {
   it("requires login without touching the DB", async () => {
     loggedIn = false;
     const app = Fastify({ logger: false });
+    // The real app registers both: auth owns login/logout, the workspace router
+    // owns /api/me (GET account, POST ?op=sync re-sync).
     await app.register(registerAuthRoutes);
+    await app.register(registerWorkspaceRoutes);
     const res = await app.inject({ method: "POST", url: "/api/me?op=sync" });
     expect(res.statusCode).toBe(401);
     expect(res.json()).toEqual({ ok: false, error: "logged_out" });

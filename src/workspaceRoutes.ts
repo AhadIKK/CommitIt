@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { canAccessRepo, isAuthEnforced } from "./access.js";
+import { syncUserInstalls } from "./installations.js";
 import type { DigestMode } from "./contract.js";
 import { isRateLimited } from "./rateLimit.js";
 import { SESSION_COOKIE, getSessionUser, parseCookies, type SessionUser } from "./session.js";
@@ -122,6 +123,16 @@ async function route(req: WorkspaceRequest): Promise<WorkspaceResponse | null> {
   // --- account ------------------------------------------------------------
   if (method === "GET" && path === "/me") {
     return json(200, await meDto(await sessionOf(req)));
+  }
+  // The install re-sync that used to live on `POST /api/me?op=sync` in
+  // src/auth.ts: same path, same shape, but now inside the router both hosts
+  // share, so a serverless rewrite cannot quietly drop it.
+  if (method === "POST" && path === "/me") {
+    if ((req.query.get("op") ?? "") !== "sync") return fail(404, "not_found");
+    if (isRateLimited(`workspace-me-sync:${req.ip}`, { max: 5 })) return fail(429, "rate_limited");
+    const session = await sessionOf(req);
+    if (!session) return fail(401, "logged_out");
+    return json(200, { ok: true, data: await syncUserInstalls(session.login) });
   }
   if (method === "GET" && path === "/repos") {
     const me = await meDto(await sessionOf(req));
@@ -293,8 +304,8 @@ export async function registerWorkspaceRoutes(app: FastifyInstance) {
   ]) {
     app.route({ method: ["GET", "POST", "PUT", "DELETE"], url: path, handler });
   }
-  // GET /api/me only: the install re-sync POST stays in src/auth.ts.
-  app.get("/api/me", handler);
+  // Both verbs: GET is the account, POST is the install re-sync (?op=sync).
+  app.route({ method: ["GET", "POST"], url: "/api/me", handler });
 }
 
 /** A small helper the tests use: does this path belong to the workspace API? */
