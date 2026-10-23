@@ -4,8 +4,8 @@
  * "fixed" in a review without this test noticing.
  *
  * The brief's day-theme values were measured rather than trusted: `--d-signal`
- * needed darkening and `--d-warn` was too light to pass, and both live in
- * tokens.css with the measured ratio beside them.
+ * needed darkening to pass on Slate Mist, and the measured ratio lives in
+ * tokens.css beside the value.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -53,18 +53,17 @@ describe("brand colours", () => {
     expect(css).toContain("--brand-signal-teal: #14b8a6");
   });
 
-  it("spend the vermilion on exactly one variable per theme", () => {
-    // --signal is the only chroma in the product, and it is the same value in
-    // both themes. If this ever forks, something has restyled the ink.
-    expect(css.match(/--signal: #e4440b;/g)?.length).toBeGreaterThanOrEqual(3);
-    expect(css).not.toMatch(/--(n|d)-signal:/);
+  it("spend the signal on exactly one variable per theme", () => {
+    // --signal is the only chroma in the product. It is a theme primitive now,
+    // so the semantic alias must point at it rather than restate a hex.
+    expect(css).toMatch(/--n-signal:\s*#14b8a6/);
+    expect(css).toMatch(/--d-signal:\s*#0e6f68/);
+    expect(css.match(/--signal: var\(--[nd]-signal\);/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(css).not.toMatch(/--signal:\s*#[0-9a-fA-F]{6}/);
   });
 
-  it("express no state with a new colour", () => {
-    // Errors are a double underline in ink, warnings a pencil hatch. Neither
-    // is allowed to grow a hue of its own.
-    expect(primitive("n", "danger")).toBe(primitive("n", "ink"));
-    expect(primitive("d", "danger")).toBe(primitive("d", "ink"));
+  it("keeps warnings a pencil hatch, never a new hue", () => {
+    // Attention is muted text; only the signal and danger may carry chroma.
     expect(primitive("n", "attention")).toBe(primitive("n", "muted"));
     expect(primitive("d", "attention")).toBe(primitive("d", "muted"));
   });

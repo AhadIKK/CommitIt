@@ -549,14 +549,13 @@
   background: var(--signal);
   border-color: var(--signal);
 }
-/* A finished task is the one thing in the interface allowed to be vermilion.
-   Open tasks stay hollow rings in ink, so the track reads as "filled = done,
-   ring = not yet" without a legend. Unestimated tasks carry weight 1, which is
-   exactly what they count as. */
+/* A finished task is the one thing in the interface allowed to carry the
+   signal. Open tasks stay hollow rings in ink, so the track reads as "filled =
+   done, ring = not yet" without a legend. Unestimated tasks carry weight 1,
+   which is exactly what they count as. */
 .track__node[data-state="open"] .track__dot {
   background: var(--ground);
   border-color: var(--ink);
-}
 }
 /* unestimated: a dashed ring, and it counts as 1 point */
 .track__node[data-estimated="false"] .track__dot {

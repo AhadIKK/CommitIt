@@ -5,21 +5,13 @@
    is nothing sticky to obscure focus on desktop).
    ========================================================================== */
 
-/* The ground is not a flat fill. It carries the product's own motif at
-   architectural scale: large concentric rings — a circle whose area is a
-   weight, the thing the whole product is about — and a fine grid to sit them
-   on. Both are alpha washes at or under 7%, and they sit behind the content
-   area only, so they add depth without ever touching the rail or a control. */
+/* The ground is a flat fill. The product's motif — a circle whose area is a
+   weight — belongs to the Goal Track, not to a background texture, and a ruled
+   page behind every table only adds lines the content did not ask for. */
 .app {
   min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-}
-
-.main {
-  background-image: linear-gradient(to bottom, var(--line) 1px, transparent 1px);
-  background-size: 100% 32px;
-  opacity: 1;
 }
 
 .main {

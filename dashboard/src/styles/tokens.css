@@ -9,45 +9,35 @@
    ========================================================================== */
 
 :root {
-  /* --- primitive: night ---------------------------------------------------
-     The Auditor's Ledger. Unbleached paper, graphite text, one vermilion. The
-     product ships light-first: a dark navy ground is the developer-tool tell,
-     and this design is explicitly not that. */
-  --n-ground: #f1ece0;
-  --n-surface: #e8e1d1;
-  --n-raised: #f7f3ea;
-  --n-ink: #14110f;
-  --n-muted: #67645e; /* 5.1:1 on ground — pencil #9a968b is only 2.7:1 and cannot be text */
-  --n-hairline: #c9c1af; /* a rule you can see, quieter than a border */
-  --n-edge: #837e72; /* 3.07:1 on surface */ /* control boundaries */
-  --n-attention: #67645e; /* warnings are a pencil hatch, not a colour */
-  --n-danger: #14110f; /* errors are a double underline, never red */
-  --n-focus: #14110f;
+  /* --- primitive: night (Ink Navy) ---------------------------------------
+     The original CommitIt theme. Ink Navy ground, slate-mist text, and one
+     signal teal for "new since you last looked" and nothing else. */
+  --n-ground: #151d2e;
+  --n-surface: #1e293b;
+  --n-raised: #28364d;
+  --n-ink: #e2e8f0;
+  --n-muted: #94a3b8; /* 6.1:1 on ground */
+  --n-hairline: #445572; /* a rule you can see, quieter than a border */
+  --n-edge: #7285a0; /* 3.89:1 on surface — control boundaries */
+  --n-signal: #14b8a6; /* brand teal, not a theme colour */
+  --n-attention: #94a3b8;
+  --n-danger: #fb7185;
+  --n-focus: #7dd3fc;
 
-  /* --- primitive: atmosphere ----------------------------------------------
-     The product's motif is a circle whose area is a weight. The ground carries
-     that motif at architectural scale — a few very large concentric rings, the
-     way a track would be drawn on a plan — plus a fine grid to sit it on.
-     Both are alpha washes, not colours: they must never move a measured
-     contrast ratio, so nothing here exceeds 4% alpha. */
-  --n-atmo-ring: rgb(198 228 248 / 0.035);
-  --n-atmo-ring-fine: rgb(198 228 248 / 0.022);
-  --n-atmo-grid: rgb(226 232 240 / 0.02);
-  --n-atmo-glow: rgb(143 184 220 / 0.07);
-
-  /* --- primitive: day (the dark board) -----------------------------------
-     Same ledger, lit from the other side. The vermilion is the ink and does
-     not change — it is the one constant across both themes. */
-  --d-ground: #171614;
-  --d-surface: #201f1c;
-  --d-raised: #2a2925;
-  --d-ink: #f2ede1;
-  --d-muted: #a8a396; /* 6.4:1 on ground */
-  --d-hairline: #3b3934;
-  --d-edge: #6d6a62;
-  --d-attention: #a8a396;
-  --d-danger: #f2ede1;
-  --d-focus: #f2ede1;
+  /* --- primitive: day (Slate Mist) ---------------------------------------
+     The same product in daylight. The signal teal is darkened until it passes
+     contrast on the mist ground; the accent hue never changes. */
+  --d-ground: #e2e8f0;
+  --d-surface: #edf1f6;
+  --d-raised: #f8fafc;
+  --d-ink: #1e293b;
+  --d-muted: #475569; /* 7.4:1 on ground */
+  --d-hairline: #a6b2c2;
+  --d-edge: #64748b;
+  --d-signal: #0e6f68; /* 4.88:1 on ground */
+  --d-attention: #475569;
+  --d-danger: #be123c;
+  --d-focus: #0f5c8c;
 
   /* --- brand (fixed by section 3, never restyled) ------------------------- */
   --brand-ink-navy: #1e293b;
@@ -58,11 +48,11 @@
      Display is Instrument Serif: a high-contrast editorial serif, and the one
      thing that puts this product outside the developer-tool look. The progress
      sentence is a statement about a goal, so it is set like one — large, tight,
-     and unmistakably not UI text. Interface is Archivo, a grotesque that holds
-     up small; data is IBM Plex Mono, because points, shas and task numbers are
+     and unmistakably not UI text. Interface is IBM Plex Sans, which holds up
+     small; data is IBM Plex Mono, because points, shas and task numbers are
      identifiers and are set in fixed columns. */
   --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
-  --font-ui: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --font-ui: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --font-code: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
 
   --type-display: 6.5rem; /* 104 — the landing hero is set like a poster */
@@ -139,7 +129,7 @@
   --muted: var(--n-muted);
   --line: var(--n-hairline);
   --edge: var(--n-edge);
-  --signal: #e4440b; /* the one vermilion: filled track circles, the reopen drag-back, and one action per screen */
+  --signal: var(--n-signal); /* filled track circles, the reopen drag-back, and one action per screen */
   --attention: var(--n-attention);
   --danger: var(--n-danger);
   --focus: var(--n-focus);
@@ -171,7 +161,7 @@
   --muted: var(--d-muted);
   --line: var(--d-hairline);
   --edge: var(--d-edge);
-  --signal: #e4440b;
+  --signal: var(--d-signal);
   --attention: var(--d-attention);
   --danger: var(--d-danger);
   --focus: var(--d-focus);
@@ -203,7 +193,7 @@
     --muted: var(--d-muted);
     --line: var(--d-hairline);
     --edge: var(--d-edge);
-  --signal: #e4440b;
+    --signal: var(--d-signal);
     --attention: var(--d-attention);
     --danger: var(--d-danger);
     --focus: var(--d-focus);

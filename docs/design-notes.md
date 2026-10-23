@@ -331,3 +331,37 @@ were removed, since nothing referenced them any more.
 The new `e2e/app.spec.ts` covers every app and public route plus the ledger's own rules: sections are
 words with no icons, the active tab is marked for assistive technology, commits are labelled activity,
 the invariant switch is locked, and the unposted bar appears only once something has changed.
+
+## 9. The blue pass (merge of the two branches)
+
+Fizan's marketing page and Ahad's dashboard were both on this branch, in two different palettes:
+unbleached paper with a vermilion signal on the site, ink navy with a teal signal in the product.
+This pass keeps Fizan's page and type, and puts the product's original palette back everywhere.
+
+**One palette.** `tokens.css` is restored to the brand values the artwork fixes — Ink Navy
+(`#151d2e`) for night, Slate Mist (`#e2e8f0`) for day, Signal Teal (`#14b8a6` / `#0e6f68`) as the
+one accent — and the ledger's own `--paper / --graphite / --signal` variables now resolve to the
+same values, so the marketing page and the signed-in app are the same object again. `--signal` is
+a theme primitive, not a hardcoded hex, so the contrast test can still measure it in both themes.
+
+**One type system.** Instrument Serif for display, IBM Plex Sans for the interface, IBM Plex Mono
+for data — Fizan's three faces, now self-hosted through `@fontsource/ibm-plex-sans` and loaded in
+`main.tsx`. Archivo and the Poppins/Public Sans/JetBrains set are gone.
+
+**The ruled paper is gone.** The 32px ruled-line background on `.ledger::before` and the same
+stripes behind `.main` were decoration, not information, and they read as a notebook page behind
+every table. The paper grain stays at 3% and nothing else changed: section rules, table rows and
+the Goal Track frame are still there, because those are separators the content asks for.
+
+**The rail carries the whole product.** Today, Goals, People, Digests, Alerts, Repos and Settings
+are all in the left rail again. The phone still keeps three tabs (Today, Goals, Settings); the
+desktop rail is where the full set lives.
+
+**The track follows the theme.** `GoalTrackSVG` no longer paints `#E4440B` and `#2B2B28` into its
+circles: finished nodes take `--signal`, open nodes take `--graphite`, and the reopen animation
+reads the computed colour from the element it is animating. A blue product cannot ship an orange
+track.
+
+**Checks.** 398 backend tests, 64 dashboard unit tests, 177 e2e across two viewports and both
+themes. The e2e signal assertion now reads the colour from the track instead of asserting a hex,
+so a retheme cannot silently break it.

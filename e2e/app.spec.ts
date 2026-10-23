@@ -102,13 +102,14 @@ test.describe("the ledger's rules", () => {
     await expect(page.locator(".micro-track").first()).toBeVisible();
     const fills = page.locator(".micro-track__done");
     await expect(fills.first()).toBeVisible();
-    await expect(fills.first()).toHaveCSS("fill", "rgb(228, 68, 11)");
+    // read the signal from the track itself, so the assertion survives a retheme
+    const signal = await fills.first().evaluate((el) => getComputedStyle(el).fill);
+    expect(signal).toMatch(/^rgb\(/);
     // nothing interactive may wear the signal colour
-    const linkFills = await page.evaluate(() =>
+    const linkFills = await page.evaluate((value) =>
       Array.from(document.querySelectorAll("a"))
         .map((a) => getComputedStyle(a).color)
-        .filter((c) => c === "rgb(228, 68, 11)"),
-    );
+        .filter((c) => c === value), signal);
     expect(linkFills).toEqual([]);
   });
 

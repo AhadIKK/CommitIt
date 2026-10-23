@@ -1,21 +1,21 @@
 /* ============================================================================
-   THE AUDITOR'S LEDGER
-   Unbleached paper, graphite text, one vermilion. The only saturated thing on
+   THE LEDGER
+   Slate Mist paper, ink-navy text, one signal teal. The only saturated thing on
    any screen is the Goal Track; everything else is pencil. Where two bold
    things compete, one of them is removed.
 
    Corners are 0–2px, borders are hairlines, and there are no shadows anywhere:
-   separation is done with rules and offsets, not blur.
+   separation is done by offset and type, not blur.
    ========================================================================== */
 
 .ledger {
   /* --- palette --------------------------------------------------------- */
-  --paper: #f1ece0;
-  --paper-2: #e8e1d1;
-  --graphite: #2b2b28;
-  --pencil: #9a968b;
-  --ink: #14110f;
-  --signal: #e4440b;
+  --paper: #e2e8f0;
+  --paper-2: #edf1f6;
+  --graphite: #1e293b;
+  --pencil: #475569;
+  --ink: #0f172a;
+  --signal: #0e6f68; /* 4.88:1 on Slate Mist */
   --ok-stamp: #2f5d3a;
 
   --rule: color-mix(in srgb, var(--pencil) 34%, transparent);
@@ -46,46 +46,39 @@
   line-height: 1.6;
 }
 
-/* Dark: the paper turns to a ledger board and the graphite turns to chalk. The
-   vermilion is deliberately unchanged — it is the ink, not a theme colour. */
+/* Dark: the paper turns to Ink Navy and the graphite turns to slate mist. The
+   signal teal brightens so it still reads on the dark ground. */
 .ledger[data-scheme="dark"] {
-  --paper: #171614;
-  --paper-2: #201f1c;
-  --graphite: #e6e0d2;
-  --pencil: #8b877c;
-  --ink: #f4efe2;
+  --paper: #151d2e;
+  --paper-2: #1e293b;
+  --graphite: #e2e8f0;
+  --pencil: #94a3b8;
+  --ink: #f1f5f9;
+  --signal: #14b8a6;
+  --ok-stamp: #34d399;
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   .ledger:not([data-scheme="light"]) {
-    --paper: #171614;
-    --paper-2: #201f1c;
-    --graphite: #e6e0d2;
-    --pencil: #8b877c;
-    --ink: #f4efe2;
+    --paper: #151d2e;
+    --paper-2: #1e293b;
+    --graphite: #e2e8f0;
+    --pencil: #94a3b8;
+    --ink: #f1f5f9;
+    --signal: #14b8a6;
+    --ok-stamp: #34d399;
     color-scheme: dark;
   }
 }
 
-/* --- paper texture -------------------------------------------------------
-   Ruled lines at a 32px rhythm, a single left margin rule, and a grain filter
-   under 4% opacity. The grain is an inline SVG feTurbulence so there is no
-   image request. */
+/* --- paper grain ---------------------------------------------------------
+   A grain filter under 4% opacity, an inline SVG feTurbulence so there is no
+   image request. No ruled lines: the page is not a notebook. */
 .ledger {
   position: relative;
   min-height: 100dvh;
   overflow-x: clip;
-}
-.ledger::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background-image: linear-gradient(to bottom, var(--rule) 1px, transparent 1px);
-  background-size: 100% 32px;
-  opacity: 0.34;
 }
 .ledger::after {
   content: "";
@@ -93,7 +86,7 @@
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.035;
+  opacity: 0.03;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .ledger > * {
@@ -223,10 +216,10 @@ kbd,
 .ld-btn--primary {
   background: var(--signal);
   border-color: var(--signal);
-  color: #fff;
+  color: var(--paper);
 }
 .ld-btn--primary:hover {
-  background: color-mix(in srgb, var(--signal) 86%, black);
+  background: color-mix(in srgb, var(--signal) 86%, var(--graphite));
 }
 .ld-btn--mono {
   font-family: var(--ld-mono);
@@ -399,6 +392,14 @@ kbd,
 .gt-dot {
   cursor: pointer;
   transition: stroke-width 140ms ease;
+}
+/* A finished node is the one saturated thing on the screen; an open node is
+   ink. Both read the theme, so the track follows day and night. */
+.gt-dot--done {
+  color: var(--signal);
+}
+.gt-dot--open {
+  color: var(--graphite);
 }
 .gt-dot:hover,
 .gt-dot:focus-visible {

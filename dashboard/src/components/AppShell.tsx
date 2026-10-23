@@ -4,14 +4,14 @@
  * through the content, and no top bar at all — so on desktop there is nothing
  * sticky that could ever obscure a focused control.
  *
- * Three destinations, not six. People was Today with a second copy of the same
- * numbers, and Digests/Alerts/Repos are all configuration rather than places a
- * lead browses, so they became sections of Settings. A rail with six items in
- * it was mostly navigation to screens nobody visited daily.
+ * The rail carries every section the product has — Today, Goals, People,
+ * Digests, Alerts, Repos, Settings — because the daily screens and the
+ * configuration screens are all places a lead goes looking for an answer. The
+ * phone keeps three tabs: Today, Goals and Settings.
  */
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { Activity, Moon, Settings2, Sun, Target } from "lucide-react";
+import { Activity, Bell, FolderGit2, MessageSquare, Moon, Settings2, Sun, Target, Users } from "lucide-react";
 import type { Repo } from "../api/types.js";
 import { Logo } from "./brand.js";
 import { SignalDot } from "./glyphs.js";
@@ -23,11 +23,19 @@ type NavItem = { to: string; label: string; Icon: typeof Activity };
 const NAV: NavItem[] = [
   { to: "/today", label: "Today", Icon: Activity },
   { to: "/goals", label: "Goals", Icon: Target },
+  { to: "/people", label: "People", Icon: Users },
+  { to: "/digests", label: "Digests", Icon: MessageSquare },
+  { to: "/alerts", label: "Alerts", Icon: Bell },
+  { to: "/repos", label: "Repos", Icon: FolderGit2 },
   { to: "/settings", label: "Settings", Icon: Settings2 },
 ];
 
-/** Three tabs, never more, each with an icon and a word. */
-const TABS = NAV;
+/** The phone keeps three tabs; the rail carries the whole set. */
+const TABS: NavItem[] = [
+  { to: "/today", label: "Today", Icon: Activity },
+  { to: "/goals", label: "Goals", Icon: Target },
+  { to: "/settings", label: "Settings", Icon: Settings2 },
+];
 
 function RepoSwitcher({
   repoRef,

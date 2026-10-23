@@ -57,6 +57,10 @@ const SHOTS: Shot[] = [
 const UNFIX = ".strip, .landing__top, .tabbar { position: static !important; }";
 
 async function prepare(page: Page, theme: string): Promise<void> {
+  // The landing page follows the system scheme rather than the saved app theme,
+  // so the capture has to emulate the same choice or a "night" shot of / comes
+  // out light.
+  await page.emulateMedia({ colorScheme: theme === "night" ? "dark" : "light" });
   await page.addInitScript((value) => {
     try {
       localStorage.setItem("commitit-theme", value);
@@ -77,7 +81,9 @@ for (const shot of SHOTS) {
       await page.waitForTimeout(250);
     } else {
       await page.locator("h1").first().waitFor({ state: "visible" });
-      await page.waitForTimeout(150);
+      // the landing's track counts up and hands a reopened point back; wait for
+      // it to settle so the shot shows the real total, not a frame of the count
+      await page.waitForTimeout(shot.path === "/" ? 2800 : 150);
     }
     await page.addStyleTag({ content: UNFIX });
     await page.screenshot({ path: `docs/screenshots/${shot.name}.png`, fullPage: true });

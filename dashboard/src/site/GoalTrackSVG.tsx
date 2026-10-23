@@ -137,11 +137,14 @@ export function GoalTrackSVG({
       if (reopened && reopenedAt(reopened) !== null) {
         const node = root.querySelector<SVGCircleElement>(`[data-task="${reopened.id}"]`);
         const fillLine = root.querySelector<SVGLineElement>(".gt-fill");
+        // the ink for an open node comes from the theme, never from a literal
+        const openInk =
+          getComputedStyle(root).getPropertyValue("--graphite").trim() || "currentColor";
         tl.to(
           node,
           {
             attr: { fill: "none" },
-            stroke: "#2B2B28",
+            stroke: openInk,
             strokeWidth: 1.5,
             duration: 0.5,
             ease: "power2.inOut",
@@ -229,19 +232,17 @@ export function GoalTrackSVG({
             // Drawn as merged, then handed back by the timeline above.
             const done = task.closedAt !== null;
             const reopens = Boolean(task.reopenedAt);
-            const fillFor = done ? "#E4440B" : "none";
-            const strokeFor = done ? "#E4440B" : "#2B2B28";
             return (
               <circle
                 key={task.id}
                 data-task={task.id}
-                className="gt-dot"
+                className={`gt-dot gt-dot--${done ? "done" : "open"}`}
                 data-reopened={task.reopenedAt ? "true" : "false"}
                 cx={x}
                 cy={BASELINE}
                 r={r}
-                fill={fillFor}
-                stroke={strokeFor}
+                fill={done ? "currentColor" : "none"}
+                stroke={done ? "none" : "currentColor"}
                 strokeWidth={done ? 0 : 1.5}
                 tabIndex={0}
                 role="button"
