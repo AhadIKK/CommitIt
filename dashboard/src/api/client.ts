@@ -13,6 +13,7 @@ import type {
   GoalDetail,
   Me,
   Milestone,
+  OpsPayload,
   PersonSummary,
   Repo,
   RepoId,
@@ -40,6 +41,12 @@ export interface CommitItApi {
   goal(repoId: RepoId, goalId: string): Promise<GoalDetail>;
   people(repoId: RepoId): Promise<PersonSummary[]>;
   alerts(repoId: RepoId): Promise<Alert[]>;
+
+  /**
+   * The operator ledger behind /app: every repository, task, message and
+   * delivery in one payload, because those screens are tables.
+   */
+  ops(): Promise<OpsPayload>;
 
   /* linking --------------------------------------------------------------- */
   /**

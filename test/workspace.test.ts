@@ -14,6 +14,7 @@ import {
   subscriptionDto,
 } from "../src/workspace.js";
 import { handleWorkspace, isWorkspacePath, workspacePath } from "../src/workspaceRoutes.js";
+import { pointsOf, weightOf } from "../src/ops.js";
 import { chatNameOf } from "../src/chatTitle.js";
 
 describe("commit shaping", () => {
@@ -332,17 +333,36 @@ describe("repo naming", () => {
   });
 });
 
+describe("the ledger's weights", () => {
+  it("only trusts a stored size of 1, 3 or 5", () => {
+    expect(weightOf(1)).toBe(1);
+    expect(weightOf(3)).toBe(3);
+    expect(weightOf(5)).toBe(5);
+    expect(weightOf(0)).toBeNull();
+    expect(weightOf(2)).toBeNull();
+  });
+
+  it("counts an unestimated task as one point, the way the track draws it", () => {
+    expect(pointsOf(0)).toBe(1);
+    expect(pointsOf(1)).toBe(1);
+    expect(pointsOf(3)).toBe(3);
+    expect(pointsOf(5)).toBe(5);
+  });
+});
+
 describe("routing", () => {
   it("normalises both hosts' prefixes to the same path", () => {
     expect(workspacePath("/api/repos/abc/today")).toBe("/repos/abc/today");
     expect(workspacePath("/api/product/repos/abc/today")).toBe("/repos/abc/today");
     expect(workspacePath("/api/me")).toBe("/me");
     expect(workspacePath("/api/repos")).toBe("/repos");
+    expect(workspacePath("/api/ops")).toBe("/ops");
   });
 
   it("knows which paths it owns", () => {
     expect(isWorkspacePath("/api/repos/abc/goals")).toBe(true);
     expect(isWorkspacePath("/api/link/telegram/tok")).toBe(true);
+    expect(isWorkspacePath("/api/ops")).toBe(true);
     expect(isWorkspacePath("/api/progress")).toBe(false);
     expect(isWorkspacePath("/api/webhook")).toBe(false);
   });
@@ -372,6 +392,20 @@ describe("routing", () => {
       const out = await handleWorkspace({
         method: "GET",
         path: "/repos/abc/today",
+        query: new URLSearchParams(),
+        body: {},
+        cookies: {},
+        ip: "127.0.0.1",
+      });
+      expect(out?.status).toBe(401);
+      expect(out?.body).toEqual({ ok: false, error: "logged_out" });
+    });
+
+    it("refuses the operator ledger without a session", async () => {
+      process.env.GITHUB_CLIENT_ID = "client-id";
+      const out = await handleWorkspace({
+        method: "GET",
+        path: "/ops",
         query: new URLSearchParams(),
         body: {},
         cookies: {},

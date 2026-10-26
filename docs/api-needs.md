@@ -30,9 +30,12 @@ Two implementation notes worth knowing before reading the table:
   open, so `subscribe()` polls `/events?since=` every 30 s and reports `polling`; it only reports
   `live` after a successful poll. The UI's contract (`ActivityEvent` frames + a status callback) is
   unchanged.
-- **The `/app/*` ledger screens are not part of this.** They are a separate prototype still reading
-  `dashboard/src/app/seed.ts`; the API-driven product is `/today`, `/goals`, `/people`, `/digests`,
-  `/alerts`, `/repos`, `/settings` and `/connect/*`.
+- **The `/app/*` ledger screens read the same data.** They are tables, not a second product: one
+  request, `GET /api/ops`, returns every repository, task, message, alert, delivery and job, and the
+  eight screens read it through `dashboard/src/app/data.tsx`. Where the database does not store a
+  value (a digest's point count, a chat's member count, a finding's file path) the payload says
+  `null` and the table prints "not recorded" - it never estimates a number to fill a column. The
+  seed file is now only the mock adapter's fixture (`dashboard/src/api/mockOps.ts`).
 
 ---
 
@@ -58,6 +61,7 @@ Two implementation notes worth knowing before reading the table:
 | 14 | `disconnect(repoId)` | `/api/repos/:id/connection` | DELETE | `204` | Removes subscriptions; history is kept. |
 | 15 | `startGitHub()` | `/api/auth/github/start` | GET | `{url}` | App install URL, else OAuth login, else 503 `github_not_configured`. |
 | 16 | `chooseRepo(fullName)` | `/api/auth/github/repo` | POST `{fullName}` | `Me` | Persists the repo chosen in onboarding. |
+| 17 | `ops()` | `/api/ops` | GET | `OpsPayload` | The operator ledger behind `/app`: repos, tasks, digests, alerts, chats, findings, deliveries and jobs in one read. Scoped to the session's repos when auth is enforced. |
 | 17 | `startTelegramLink()` | `/api/link/telegram` | POST | `TelegramLink` | Returns `{code, deepLink, pollToken}`. |
 | 18 | `pollTelegramLink(pollToken)` | `/api/link/telegram/:pollToken` | GET | `{linked, chatTitle?}` | Poll, not push. |
 | 19 | `saveOnboardingMode(mode)` | `/api/onboarding/mode` | POST `{mode}` | `{saved, mode}` | Repo-scoped when a `repo` is passed. |
@@ -70,12 +74,15 @@ method maps to one request and returns the listed shape.
 
 ## 2. Model fields the backend must supply
 
-The redesign added four fields to the model in `dashboard/src/api/types.ts`. They are the only changes
-to the data contract, and each one exists because a screen cannot be correct without it.
+The redesign added these fields to the model. They are the only changes to the data contract, and each
+one exists because a screen cannot be correct without it.
 
 | Field | Why the UI needs it |
 |---|---|
-| `Issue.reopenedAt` | The Goal Track draws a reopened task as **open again**, which moves the filled line back. Without it a reopened task still looks finished, and the track lies about progress. **Current backend: always `null`** — the schema has no reopen timestamp, so a reopened issue is drawn open but without a "moved back" marker. Adding it is a one-column migration (`prisma/migrations`), not an API change. |
+| `Issue.closedAt` | When the task actually closed. The ledger sorts finished work by it and the Goal Track fills in that order; before the column existed every read borrowed `updatedAt`, which any edit moves. |
+| `Issue.reopenedAt` | The Goal Track draws a reopened task as **open again**, which moves the filled line back. GitHub exposes a reopen only as an event, so the `issues` webhook and the API sync stamp it. `null` means the task has not been reopened since it closed. |
+| `Chat.title` | The name Telegram gives the chat, captured from the update the bot already receives (or `getChat`). Without it every direct message reads "Direct message" in the ledger and in the digest history. |
+| `Event.repoId` | Webhook health compared a cuid to `owner/name`, so every repository claimed it had never received a delivery. Ingest now writes the resolved repo id, and `prisma/migrations/7_backfill_event_repo_id` rebuilt the link for deliveries already stored. |
 | `TodaySnapshot.focusIssues` | The tasks of the focus goal, in closing order — the Goal Track on the first screen. Returning them with `today` keeps first paint at **one** request. (Alternative rejected: a second call from Today to `goal()`.) |
 | `DigestSettings.subscription: Subscription \| null` | A repository with no chat connected must return `null`, not a 404 or a zero-filled object, so the Digests screen can show its "no chat connected" invitation instead of an error. |
 | `CommitItApi.linkCommit(...)` | Accepting a suggested task must be an explicit, single write. See §4. |

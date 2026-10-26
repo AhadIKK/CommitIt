@@ -4,6 +4,7 @@ import { canAccessRepo, isAuthEnforced } from "./access.js";
 import { syncUserInstalls } from "./installations.js";
 import type { DigestMode } from "./contract.js";
 import { isRateLimited } from "./rateLimit.js";
+import { opsPayload } from "./ops.js";
 import { SESSION_COOKIE, getSessionUser, parseCookies, type SessionUser } from "./session.js";
 import {
   activitySince,
@@ -137,6 +138,20 @@ async function route(req: WorkspaceRequest): Promise<WorkspaceResponse | null> {
   if (method === "GET" && path === "/repos") {
     const me = await meDto(await sessionOf(req));
     return json(200, me.repos);
+  }
+  // The operator ledger. Same data as the product screens, one payload: the
+  // /app pages are tables, and eight round-trips to draw eight tables is how a
+  // ledger ends up disagreeing with itself.
+  if (method === "GET" && path === "/ops") {
+    const session = await sessionOf(req);
+    if (isAuthEnforced() && !session) return fail(401, "logged_out");
+    if (!isAuthEnforced() || !session) return json(200, await opsPayload());
+    const me = await meDto(session);
+    const scope: string[] = [];
+    for (const repo of me.repos) {
+      if (await canAccessRepo(session.id, repo.fullName)) scope.push(repo.id);
+    }
+    return json(200, await opsPayload(scope));
   }
 
   // --- onboarding / auth ---------------------------------------------------
@@ -306,6 +321,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance) {
   }
   // Both verbs: GET is the account, POST is the install re-sync (?op=sync).
   app.route({ method: ["GET", "POST"], url: "/api/me", handler });
+  app.route({ method: ["GET"], url: "/api/ops", handler });
 }
 
 /** A small helper the tests use: does this path belong to the workspace API? */
@@ -313,6 +329,7 @@ export function isWorkspacePath(path: string): boolean {
   const p = workspacePath(path);
   return (
     p === "/me" ||
+    p === "/ops" ||
     p === "/repos" ||
     p.startsWith("/repos/") ||
     p.startsWith("/auth/github/") ||

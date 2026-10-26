@@ -14,6 +14,7 @@ import type {
   GoalDetail,
   Me,
   Milestone,
+  OpsPayload,
   PersonSummary,
   Repo,
   RepoId,
@@ -23,6 +24,7 @@ import type {
   TodaySnapshot,
 } from "./types.js";
 import * as fx from "./fixtures.js";
+import { mockOps } from "./mockOps.js";
 import { currentScenario } from "../lib/scenario.js";
 
 const latencyFor = () => {
@@ -149,6 +151,14 @@ export function createMockApi(): CommitItApi {
       if (currentScenario() === "empty") return guard([]);
       if (currentScenario() === "partial") return guard([]);
       return guard(fx.alerts[repoId] ?? []);
+    },
+
+    async ops(): Promise<OpsPayload> {
+      if (currentScenario() === "empty") {
+        return guard({ ...mockOps(), repos: [], tasks: [], digests: [], alerts: [], chats: [], findings: [], deliveries: [], jobs: [] });
+      }
+      if (currentScenario() === "error") return refuse();
+      return guard(mockOps());
     },
 
     async linkCommit(repoId: RepoId, sha: string, issueNumber: number) {

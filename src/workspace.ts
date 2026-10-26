@@ -31,7 +31,7 @@ import { milestoneProgress } from "./progress.js";
 import { hashToken, type SessionUser } from "./session.js";
 import { botUsername, sendMessage } from "./telegram.js";
 
-// workspace.ts â€” the reads and writes the signed-in product performs, against
+// workspace.ts — the reads and writes the signed-in product performs, against
 // the database. One module, so every screen is answered by the same queries:
 //   me, repos, today, goals, goal, people, alerts, digest, settings
 // and the four writes the interface allows (link a commit, save a digest,
@@ -51,7 +51,7 @@ const COMMIT_LIMIT = 60;
 
 // --- structural row types (what we select, not the whole Prisma model) ------
 
-type RepoRow = {
+export type RepoRow = {
   id: string;
   fullName: string;
   defaultBranch: string | null;
@@ -385,7 +385,7 @@ export function repoNames(fullName: string): { owner: string; name: string } {
 
 // --- database reads ---------------------------------------------------------
 
-function windowStart(now: Date = new Date()): Date {
+export function windowStart(now: Date = new Date()): Date {
   return new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * 86_400_000);
 }
 
@@ -451,7 +451,7 @@ export async function repoDto(row: RepoRow): Promise<Repo> {
 /**
  * Repos this caller can see. A signed-in account sees what it owns plus what its
  * installations expose. In a webhooks-only setup (no OAuth configured) the read
- * API is public by design, so every repo is listed â€” same escape hatch as
+ * API is public by design, so every repo is listed — same escape hatch as
  * src/access.ts.
  */
 async function visibleRepoRows(session: SessionUser | null): Promise<RepoRow[]> {
@@ -1130,7 +1130,7 @@ export async function pollTelegramLink(
 
 /**
  * The onboarding rhythm. Stored where every other preference lives: on the
- * subscription row for that chat Ã— repo (AGENTS.md rule 10).
+ * subscription row for that chat × repo (AGENTS.md rule 10).
  */
 export async function saveOnboardingMode(
   session: SessionUser | null,
@@ -1170,7 +1170,7 @@ export async function saveOnboardingMode(
   }
 }
 
-/** New activity since a timestamp â€” what the live bar polls for. */
+/** New activity since a timestamp — what the live bar polls for. */
 export async function activitySince(
   row: RepoRow,
   since: Date,
@@ -1186,7 +1186,7 @@ export async function activitySince(
       type: "commit" as const,
       at: c.createdAt.toISOString(),
       repoId: row.id,
-      summary: `${splitMessage(c.message).subject} â€” ${c.author?.githubLogin ?? "unknown"}`,
+      summary: `${splitMessage(c.message).subject} — ${c.author?.githubLogin ?? "unknown"}`,
     }));
   } catch {
     return [];

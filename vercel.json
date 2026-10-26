@@ -22,6 +22,10 @@
       "destination": "/api/product/repos/:path*"
     },
     {
+      "source": "/api/ops",
+      "destination": "/api/product/ops"
+    },
+    {
       "source": "/api/auth/github/start",
       "destination": "/api/product/auth/github/start"
     },

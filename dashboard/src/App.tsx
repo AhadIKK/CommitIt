@@ -3,7 +3,7 @@
  *
  * Route-level code splitting keeps the first paint small: Today is the landing
  * screen for a signed-in person, so it loads first and the rest arrive on demand.
- * Landing is public and does not use the frame at all â€” no rail, no tab bar, one
+ * Landing is public and does not use the frame at all — no rail, no tab bar, one
  * column.
  */
 import { lazy, Suspense, useEffect } from "react";
@@ -16,6 +16,7 @@ import { useLive } from "./lib/useLive.js";
 import { currentScenario, scenarioLabel } from "./lib/scenario.js";
 import { Today } from "./screens/Today.js";
 import { AppShell } from "./app/Shell.js";
+import { OpsProvider } from "./app/data.js";
 import { ToastHost } from "./components/kit.js";
 
 const Landing = lazy(() => import("./screens/Landing.js").then((m) => ({ default: m.Landing })));
@@ -65,7 +66,7 @@ function ScenarioNote() {
   if (!label) return null;
   return (
     <p className="live live--stale" role="status">
-      <span aria-hidden="true">â—†</span>
+      <span aria-hidden="true">◆</span>
       <span>{label}</span>
     </p>
   );
@@ -114,11 +115,13 @@ function OldShell() {
 /** The new authenticated shell, wrapped in the toast host. */
 function NewShell() {
   return (
-    <AppShell>
-      <Suspense fallback={<RouteFallback />}>
-        <Outlet />
-      </Suspense>
-    </AppShell>
+    <OpsProvider>
+      <AppShell>
+        <Suspense fallback={<RouteFallback />}>
+          <Outlet />
+        </Suspense>
+      </AppShell>
+    </OpsProvider>
   );
 }
 
@@ -149,7 +152,7 @@ export function App() {
               </Suspense>
             }
           />
-          {/* Public legal/docs â€” no shell. */}
+          {/* Public legal/docs — no shell. */}
           <Route path="/terms" element={<Lazy><Terms /></Lazy>} />
           <Route path="/privacy" element={<Lazy><Privacy /></Lazy>} />
           <Route path="/changelog" element={<Lazy><Changelog /></Lazy>} />

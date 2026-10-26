@@ -263,3 +263,123 @@ export type TelegramLink = {
 
 /** Telegram's message ceiling, enforced by the sender (AGENTS.md rule 8). */
 export const DIGEST_CHAR_LIMIT = 3800;
+
+/* --- the ledger (/app) ----------------------------------------------------
+ * The operator view: every repository, task, message, alert and delivery in
+ * one payload. It is the same data the product screens read, shaped for a
+ * table instead of a page. Where the database does not store a value the field
+ * is null and the table says so; nothing here is estimated to look complete.
+ */
+
+/** Task weights, the only sizes progress is counted at. */
+export type OpsWeight = 1 | 3 | 5;
+
+export type OpsRepo = {
+  id: RepoId;
+  fullName: string;
+  defaultBranch: string;
+  /** A delivery has been recorded for this repo. */
+  connected: boolean;
+  pointsFinished: number;
+  pointsTotal: number;
+  /** Activity only. Never added into points. */
+  commitCount: number;
+  /** Reopened tasks: the ones that want an answer. */
+  needsDecision: number;
+  lastDigestAt: string | null;
+  health: "VERIFIED" | "CHECK";
+  /** Weights of finished tasks, in closing order. */
+  finishedWeights: OpsWeight[];
+  /** Weights still open. */
+  openWeights: OpsWeight[];
+};
+
+export type OpsTask = {
+  id: string;
+  repoId: RepoId;
+  number: number;
+  title: string;
+  /** null = unestimated; the track counts it as 1 point. */
+  weight: OpsWeight | null;
+  state: "open" | "closed";
+  closedAt: string | null;
+  reopenedAt: string | null;
+  /** The PR that closed it, when one did. */
+  pr: number | null;
+};
+
+export type OpsDigest = {
+  id: string;
+  repoId: RepoId;
+  chatTitle: string;
+  sentAt: string;
+  cadence: "instant" | "hourly" | "daily";
+  /** The message exactly as it was queued or sent. */
+  body: string;
+  /** Not stored per message: null, never an invented number. */
+  pointsFinished: number | null;
+  status: "DELIVERED" | "QUEUED" | "FAILED";
+  messageCount: number;
+};
+
+export type OpsAlert = {
+  id: string;
+  kind: string;
+  repoId: RepoId;
+  actor: string;
+  at: string;
+  detail: string;
+  delivered: boolean;
+};
+
+export type OpsChat = {
+  id: string;
+  title: string;
+  kind: "group" | "dm";
+  /** Telegram does not tell us; null, never a guess. */
+  members: number | null;
+  /** The repositories this chat is subscribed to. */
+  linkedRepoIds: RepoId[];
+  lastMessageAt: string | null;
+  status: "VERIFIED" | "CHECK";
+};
+
+export type OpsFinding = {
+  id: string;
+  /** The file path is not stored; the value never was. */
+  path: string | null;
+  rule: string;
+  repoId: RepoId;
+  commitSha: string;
+  at: string;
+  status: "SKIPPED";
+};
+
+export type OpsDelivery = {
+  id: string;
+  at: string;
+  event: string;
+  /** We only record deliveries that passed verification. */
+  signature: "VERIFIED";
+  rateLimited: boolean;
+  key: string;
+  outcome: string;
+};
+
+export type OpsJob = {
+  id: string;
+  kind: string;
+  status: "queued" | "running" | "retrying" | "dead" | "done";
+  attempts: number;
+};
+
+export type OpsPayload = {
+  repos: OpsRepo[];
+  tasks: OpsTask[];
+  digests: OpsDigest[];
+  alerts: OpsAlert[];
+  chats: OpsChat[];
+  findings: OpsFinding[];
+  deliveries: OpsDelivery[];
+  jobs: OpsJob[];
+};

@@ -12,6 +12,7 @@ import type {
   GoalDetail,
   Me,
   Milestone,
+  OpsPayload,
   PersonSummary,
   Repo,
   RepoId,
@@ -51,6 +52,7 @@ export function createHttpApi(): CommitItApi {
       json<GoalDetail>(`${repoPath(repoId)}/goals/${encodeURIComponent(goalId)}`),
     people: (repoId) => json<PersonSummary[]>(`${repoPath(repoId)}/people`),
     alerts: (repoId) => json<Alert[]>(`${repoPath(repoId)}/alerts`),
+    ops: () => json<OpsPayload>("/api/ops"),
 
     linkCommit: (repoId, sha, issueNumber) =>
       json<{ ok: true; sha: string; issueNumber: number }>(
