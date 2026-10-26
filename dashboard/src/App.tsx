@@ -8,10 +8,21 @@
  */
 import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Link, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import { AppShell as OldAppShell } from "./components/AppShell.js";
 import { Skeleton } from "./components/surfaces.js";
-import { useRepoRef, useRepos } from "./lib/queries.js";
+import { isReviewMode } from "./api/index.js";
+import { needsConnectWizard } from "./lib/connect.js";
+import { useMe, useRepoRef, useRepos } from "./lib/queries.js";
 import { useLive } from "./lib/useLive.js";
 import { currentScenario, scenarioLabel } from "./lib/scenario.js";
 import { Today } from "./screens/Today.js";
@@ -129,6 +140,46 @@ function Lazy({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
 }
 
+/**
+ * The connect wizard is the first-run path, and every "Connect a repo" button
+ * on the marketing pages points at it. A person who is already signed in and
+ * already watches a repository has nothing to do here, so they go to the
+ * dashboard instead of walking the four steps again. `?repo=` opts back in —
+ * that is how "Reconnect GitHub" asks for one repository on purpose.
+ */
+function ConnectGate() {
+  const me = useMe();
+  const [params] = useSearchParams();
+  const account = me.data;
+  // `?repo=` is how the product asks for one repository on purpose (RepoSettings'
+  // "Reconnect GitHub", Digests' empty state). Those links never wait and never
+  // bounce: the answer to them cannot be "go to the dashboard".
+  const repoScoped = params.has("repo");
+
+  if (!repoScoped) {
+    // The route is lazy anyway, so this is the same skeleton the chunk load
+    // already shows; it just lasts until the account is known. That is what
+    // keeps a returning visitor from seeing — and clicking — a wizard that is
+    // about to be taken away.
+    if (me.isPending) return <RouteFallback />;
+
+    if (
+      account &&
+      !needsConnectWizard({
+        signedIn: account.signedIn,
+        repoCount: account.repos.length,
+        repoScoped,
+        reviewMode: isReviewMode(),
+      })
+    ) {
+      return <Navigate to="/today" replace />;
+    }
+  }
+
+  // Signed out, still setting up, or `me` could not be read: the wizard.
+  return <OldOnboarding />;
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}><ToastHost>
@@ -186,7 +237,7 @@ export function App() {
             <Route path="/digests" element={<Digests />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/repos" element={<RepoSettings />} />
-            <Route path="/connect/:step" element={<OldOnboarding />} />
+            <Route path="/connect/:step" element={<ConnectGate />} />
           </Route>
           <Route path="*" element={<Lazy><AppNotFound /></Lazy>} />
         </Routes>

@@ -10,14 +10,15 @@ import type { CommitItApi } from "./client.js";
 import { createHttpApi } from "./http.js";
 import { createMockApi } from "./mock.js";
 
-function wantsMock(): boolean {
+/** True when the fixtures are answering, i.e. nothing here is a real account. */
+export function isReviewMode(): boolean {
   if (import.meta.env.VITE_API_MODE === "mock") return true;
   if (typeof window === "undefined") return false;
   // `?state=` is the review switch: it only means something to the mock.
   return new URLSearchParams(window.location.search).has("state");
 }
 
-export const api: CommitItApi = wantsMock() ? createMockApi() : createHttpApi();
+export const api: CommitItApi = isReviewMode() ? createMockApi() : createHttpApi();
 
 export type { CommitItApi, DigestPatch, LiveStatus } from "./client.js";
 export * from "./types.js";
