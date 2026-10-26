@@ -8,7 +8,7 @@ against, and the backend now serves it: the product screens read live data from 
 | `src/contract.ts` | The payload types, once. `dashboard/src/api/types.ts` re-exports them, so the two sides cannot drift. |
 | `src/workspace.ts` | Every read and write below, plus the pure shaping (`commitDto`, `issueDto`, `milestoneDto`, `buildAlerts`, …). |
 | `src/workspaceRoutes.ts` | One router: auth/rate-limit gate, zod bodies, `handleWorkspace(path, method, …)`. |
-| `api/product/[...path].ts` | Vercel adapter that calls the same router — one serverless function, not twenty. |
+| `api/product/[a]/…` | Vercel adapters that call the same router — one function per path depth, not twenty endpoints. |
 | `src/index.ts` | Fastify registration for local dev, so both hosts run identical code. |
 
 Every screen talks to exactly one interface — `CommitItApi` in `dashboard/src/api/client.ts` — and
@@ -52,7 +52,7 @@ Two implementation notes worth knowing before reading the table:
 | 5 | `goal(repoId, goalId)` | `/api/repos/:id/goals/:goalId` | GET | `GoalDetail` | 404 `goal_not_found` for a milestone of another repo. |
 | 6 | `people(repoId)` | `/api/repos/:id/people` | GET | `PersonSummary[]` | Week-windowed; `closedTasks` from commits linked to closed issues. |
 | 7 | `alerts(repoId)` | `/api/repos/:id/alerts` | GET | `Alert[]` | Derived from webhook health, secret flags, failed jobs and stale repos. |
-| 8 | `linkCommit(repoId, sha, issueNumber)` | `/api/repos/:id/commits/:sha/link` | POST `{issueNumber}` | `{ok, sha, issueNumber}` | **The only write the dashboard performs.** Idempotent; refuses closed issues, foreign issues and secret-flagged commits. |
+| 8 | `linkCommit(repoId, sha, issueNumber)` | `/api/repos/:id/commits/:sha` | POST `{issueNumber}` | `{ok, sha, issueNumber}` | **The only write the dashboard performs.** Idempotent; refuses closed issues, foreign issues and secret-flagged commits. |
 | 9 | `digests(repoId, mode?)` | `/api/repos/:id/digest?mode=` | GET | `DigestSettings` | Preview is rendered by `renderDigestBodies()` — the same function the sender uses. |
 | 10 | `saveDigest(repoId, patch)` | `/api/repos/:id/digest` | PUT | `DigestSettings` | Writes the per-subscription row (rule 10), never `users`. |
 | 11 | `sendTestDigest(repoId)` | `/api/repos/:id/digest/test` | POST | `TestDigestResult` | Uses the existing Telegram sender. |

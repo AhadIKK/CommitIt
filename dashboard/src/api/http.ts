@@ -56,7 +56,7 @@ export function createHttpApi(): CommitItApi {
 
     linkCommit: (repoId, sha, issueNumber) =>
       json<{ ok: true; sha: string; issueNumber: number }>(
-        `${repoPath(repoId)}/commits/${encodeURIComponent(sha)}/link`,
+        `${repoPath(repoId)}/commits/${encodeURIComponent(sha)}`,
         { method: "POST", body: JSON.stringify({ issueNumber }) },
       ),
 

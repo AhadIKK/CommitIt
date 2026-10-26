@@ -419,7 +419,7 @@ describe("routing", () => {
       process.env.GITHUB_CLIENT_ID = "client-id";
       const out = await handleWorkspace({
         method: "POST",
-        path: "/repos/abc/commits/deadbeef/link",
+        path: "/repos/abc/commits/deadbeef",
         query: new URLSearchParams(),
         body: { issueNumber: 1 },
         cookies: {},
@@ -432,7 +432,7 @@ describe("routing", () => {
   it("rejects a malformed link body before touching the store", async () => {
     const out = await handleWorkspace({
       method: "POST",
-      path: "/repos/abc/commits/deadbeef/link",
+      path: "/repos/abc/commits/deadbeef",
       query: new URLSearchParams(),
       body: { issueNumber: "not a number" },
       cookies: {},

@@ -1,14 +1,17 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { parseCookies } from "../../src/session.js";
-import { handleWorkspace, workspacePath } from "../../src/workspaceRoutes.js";
+import { parseCookies } from "./session.js";
+import { handleWorkspace, workspacePath } from "./workspaceRoutes.js";
 
-// api/product/[...path].ts — the whole signed-in API in ONE serverless
-// function (Vercel Hobby caps at 12 per deployment). vercel.json rewrites
-// /api/repos/*, /api/me, /api/auth/github/*, /api/link/telegram* and
-// /api/onboarding/mode here, so the paths the client calls stay short.
+// vercelFunction.ts — the Node adapter for the shared workspace router.
 //
-// The rules live in src/workspaceRoutes.ts, shared with the Fastify host used
-// for local dev. This file only adapts Node's request/response.
+// Vercel only gives a plain Node function ONE path segment of dynamic routing
+// (`api/product/[a].ts`), so `api/product/[a]/[b]/...` files at every depth the
+// product uses all point here. The function reads the real path off `req.url`,
+// which Vercel leaves intact, so routing stays exactly what workspaceRoutes.ts
+// defines and no path is ever rebuilt from query parameters.
+//
+// The rules themselves live in src/workspaceRoutes.ts, shared with the Fastify
+// host used for local dev. This file only adapts Node's request/response.
 
 function readBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve) => {

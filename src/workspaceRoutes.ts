@@ -31,7 +31,8 @@ import {
 // workspaceRoutes.ts — the HTTP surface for the signed-in product.
 //
 // One router, two hosts: Fastify registers it for local dev (`npm run dev`),
-// and `api/product/[...path].ts` adapts the same function to Vercel. There is
+// and `api/product/[a]/…` adapts the same function to Vercel (one file per
+// path depth, because Vercel matches a single dynamic segment per bracket). There is
 // exactly one implementation of every rule, so the two hosts cannot drift.
 //
 // Reads degrade to empty (never a 500). Writes answer honestly: 404 when the
@@ -249,7 +250,10 @@ async function route(req: WorkspaceRequest): Promise<WorkspaceResponse | null> {
     return result.ok ? { status: 204 } : fail(result.status, result.error);
   }
 
-  const linkMatch = /^\/commits\/([^/]+)\/link$/.exec(rest);
+  // POST /repos/:id/commits/:sha {issueNumber}. Four segments deep on purpose:
+  // a Vercel function can only match one dynamic segment per bracket, so the
+  // deepest route the product needs decides how many function files exist.
+  const linkMatch = /^\/commits\/([^/]+)$/.exec(rest);
   if (method === "POST" && linkMatch) {
     if (isRateLimited(`workspace-link-commit:${req.ip}`, WRITE_LIMIT)) {
       return fail(429, "rate_limited");
