@@ -14,6 +14,7 @@ import {
   subscriptionDto,
 } from "../src/workspace.js";
 import { handleWorkspace, isWorkspacePath, workspacePath } from "../src/workspaceRoutes.js";
+import { chatNameOf } from "../src/chatTitle.js";
 
 describe("commit shaping", () => {
   it("maps every stored category onto the contract's seven", () => {
@@ -125,10 +126,43 @@ describe("issue shaping", () => {
       sizeWeight: 2,
       state: "open",
       milestoneId: null,
+      closedAt: null,
+      reopenedAt: null,
       updatedAt: new Date("2026-10-01T00:00:00Z"),
     });
     expect(dto.sizeWeight).toBeNull();
     expect(dto.closedAt).toBeNull();
+  });
+
+  it("reports the stored close and reopen moments, not updatedAt", () => {
+    const closed = issueDto({
+      id: "i2",
+      number: 4,
+      title: "Auth",
+      sizeWeight: 3,
+      state: "closed",
+      milestoneId: "m1",
+      closedAt: new Date("2026-10-02T10:00:00Z"),
+      reopenedAt: null,
+      // A later edit must not move the close date.
+      updatedAt: new Date("2026-10-20T10:00:00Z"),
+    });
+    expect(closed.closedAt).toBe("2026-10-02T10:00:00.000Z");
+
+    const reopened = issueDto({
+      id: "i3",
+      number: 5,
+      title: "Login",
+      sizeWeight: 1,
+      state: "open",
+      milestoneId: "m1",
+      closedAt: null,
+      reopenedAt: new Date("2026-10-03T09:30:00Z"),
+      updatedAt: new Date("2026-10-03T09:30:00Z"),
+    });
+    expect(reopened.state).toBe("open");
+    expect(reopened.closedAt).toBeNull();
+    expect(reopened.reopenedAt).toBe("2026-10-03T09:30:00.000Z");
   });
 });
 
@@ -245,7 +279,7 @@ describe("subscription shaping", () => {
       filterAuthors: ["a1"],
       filterEventTypes: ["commits"],
       isMuted: true,
-      chat: { telegramChatId: "9", type: "dm" },
+      chat: { telegramChatId: "9", type: "dm", title: null },
     });
     expect(dto.mode).toBe("daily");
     expect(dto.quietHours).toEqual({ enabled: true, from: "22:00", to: "07:00" });
@@ -256,6 +290,19 @@ describe("subscription shaping", () => {
   it("labels a group chat and a DM without inventing a title", () => {
     expect(chatTitleOf({ type: "group" })).toBe("Group chat");
     expect(chatTitleOf({ type: "dm" })).toBe("Direct message");
+    // The name Telegram gave us wins; "Direct message" was only a stand-in.
+    expect(chatTitleOf({ type: "dm", title: "Fizzzzz" })).toBe("Fizzzzz");
+    expect(chatTitleOf({ type: "group", title: "  SynCura team  " })).toBe("SynCura team");
+    expect(chatTitleOf({ type: "group", title: "   " })).toBe("Group chat");
+  });
+});
+
+describe("telegram chat names", () => {
+  it("prefers the group title, then a person's name, then their handle", () => {
+    expect(chatNameOf({ title: "SynCura team" })).toBe("SynCura team");
+    expect(chatNameOf({ first_name: "Affan" })).toBe("Affan");
+    expect(chatNameOf({ username: "affan" })).toBe("affan");
+    expect(chatNameOf({})).toBe("");
   });
 });
 

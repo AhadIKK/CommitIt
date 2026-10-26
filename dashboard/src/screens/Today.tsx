@@ -150,17 +150,17 @@ export function Today() {
   if (status === "loading") {
     return (
       <div className="screen today" aria-busy="true">
-        <Skeleton variant="display" width="62%" />
-        <div className="today__track">
-          <Skeleton variant="line-sm" width="30%" />
+        <Skeleton variant="line-sm" width="22%" />
+        <div className="today__band">
+          <Skeleton variant="line" width="55%" />
           <div className="row" aria-hidden="true">
             {Array.from({ length: 7 }).map((_, i) => (
               <Skeleton key={i} variant="node" width={i % 3 === 0 ? 24 : 16} height={i % 3 === 0 ? 24 : 16} />
             ))}
           </div>
         </div>
-        <span className="visually-hidden">Loading today.</span>
         <SkeletonRows rows={4} />
+        <span className="visually-hidden">Loading today.</span>
       </div>
     );
   }
@@ -209,8 +209,19 @@ export function Today() {
     <div className="screen today">
       {secret ? <SecretBanner alert={secret} repoQuery={repoQuery} /> : null}
 
-      <div className="today__track">
-        <h1 className="display">{sentence}</h1>
+      <LiveBar status={live.status} lastUpdated={live.lastUpdated} newActivity={live.newActivity} />
+
+      {/*
+        The goal is a band, not a poster: one line at heading size with the
+        track directly beneath it. It stays above the feed so the answer to
+        "are we on track" is visible on arrival, but it no longer pushes the
+        activity off the screen. With no milestone the band collapses to the
+        sentence and a link.
+      */}
+      <section className="today__band" aria-labelledby="goal-heading">
+        <h1 className="today__sentence" id="goal-heading">
+          {sentence}
+        </h1>
         {data.focus ? (
           <GoalTrack
             milestone={data.focus}
@@ -232,14 +243,19 @@ export function Today() {
             }
           />
         ) : (
-          <StatePanel
-            title="No goal is being tracked yet."
-            body="Create a milestone on GitHub and it will appear here."
-          />
+          <p className="small muted">
+            A goal here is a GitHub milestone.{" "}
+            <a
+              className="btn btn--inline"
+              href={`https://github.com/${data.repo.fullName}/milestones/new`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Create one on GitHub
+            </a>
+          </p>
         )}
-      </div>
-
-      <LiveBar status={live.status} lastUpdated={live.lastUpdated} newActivity={live.newActivity} />
+      </section>
 
       {partial ? (
         <Banner

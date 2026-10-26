@@ -125,3 +125,55 @@ export async function answerCallbackQuery(
 }
 
 export { escapeHtml };
+
+/**
+ * A Bot API call whose answer we need (getChat, getMe). Not a send: it returns
+ * the `result` payload, or null with Telegram's reason logged. The token never
+ * appears in the log.
+ */
+export async function telegramApi<T = unknown>(
+  method: string,
+  payload: Record<string, unknown> = {},
+): Promise<T | null> {
+  const token = (process.env.TELEGRAM_BOT_TOKEN ?? "").trim();
+  if (!token) return null;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = (await res.json()) as { ok?: boolean; result?: T; description?: string };
+    if (!res.ok || !body.ok) {
+      console.warn(
+        JSON.stringify({
+          msg: "telegram api rejected",
+          method,
+          status: res.status,
+          detail: body.description ?? "",
+        }),
+      );
+      return null;
+    }
+    return (body.result ?? null) as T | null;
+  } catch (err) {
+    console.warn(JSON.stringify({ msg: "telegram api failed", method, err: String(err) }));
+    return null;
+  }
+}
+
+let cachedBotUsername = "";
+
+/**
+ * The bot's own @username, from getMe. The connect flow can therefore build a
+ * deep link from the token alone, instead of failing with "bot_not_configured"
+ * when TELEGRAM_BOT_NAME was never copied into the environment.
+ */
+export async function botUsername(): Promise<string> {
+  const configured = (process.env.TELEGRAM_BOT_NAME ?? "").trim().replace(/^@/, "");
+  if (configured) return configured;
+  if (cachedBotUsername) return cachedBotUsername;
+  const me = await telegramApi<{ username?: string }>("getMe");
+  cachedBotUsername = (me?.username ?? "").trim().replace(/^@/, "");
+  return cachedBotUsername;
+}

@@ -111,6 +111,25 @@ function markSeen(delivery: string): void {
   }
 }
 
+/**
+ * The repo a delivery belongs to, by `owner/name`. Case-insensitive because
+ * GitHub echoes the owner's casing, which may differ from what we stored.
+ * Never throws: a delivery must still be accepted if the lookup fails.
+ */
+async function repoIdFor(fullName: string | undefined): Promise<string | null> {
+  const name = (fullName ?? "").trim();
+  if (!name) return null;
+  try {
+    const row = await prisma.repo.findFirst({
+      where: { fullName: { equals: name, mode: "insensitive" } },
+      select: { id: true },
+    });
+    return row?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function webhookRoutes(app: FastifyInstance) {
   app.post("/webhook", async (req, reply) => {
     const ip = req.ip ?? req.headers["x-forwarded-for"]?.toString() ?? "unknown";
@@ -165,12 +184,17 @@ export async function webhookRoutes(app: FastifyInstance) {
     }
 
     // Idempotency: events.delivery_id UNIQUE, insert-or-skip before processing.
-    // Same key seeds jobs.delivery_id via enqueueJob().
+    // Same key seeds jobs.delivery_id via enqueueJob(). The repo is recorded on
+    // the delivery itself: webhook health reads events, and without this every
+    // repo claimed it had never received one.
+    const repoId = await repoIdFor(
+      (parsed.data as { repository?: { full_name?: string } }).repository?.full_name,
+    );
     try {
       await prisma.event.upsert({
         where: { deliveryId: delivery },
-        update: {},
-        create: { deliveryId: delivery, type: event },
+        update: repoId ? { repoId } : {},
+        create: { deliveryId: delivery, type: event, repoId },
       });
     } catch (err) {
       req.log.warn({ delivery, err }, "event store unavailable, continuing");

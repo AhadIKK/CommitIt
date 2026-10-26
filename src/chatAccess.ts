@@ -7,7 +7,7 @@ import { canAccessRepo } from "./access.js";
 // Sender identity is the Telegram user id (message.from.id), matched to
 // User.telegramUserId. Pure logic + thin Bot API adapter (injectable fetch).
 
-export type Sender = { telegramUserId?: string; chatType?: string };
+export type Sender = { telegramUserId?: string; chatType?: string; chatTitle?: string };
 
 export function isGroupChat(chatType?: string): boolean {
   return chatType === "group" || chatType === "supergroup";

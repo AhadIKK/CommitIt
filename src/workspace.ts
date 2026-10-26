@@ -29,9 +29,9 @@ import { createLinkToken, PURPOSE_TELEGRAM_LINK, TOKEN_RE } from "./linkTokens.j
 import { isDigestMode } from "./notifyPrefs.js";
 import { milestoneProgress } from "./progress.js";
 import { hashToken, type SessionUser } from "./session.js";
-import { sendMessage } from "./telegram.js";
+import { botUsername, sendMessage } from "./telegram.js";
 
-// workspace.ts — the reads and writes the signed-in product performs, against
+// workspace.ts â€” the reads and writes the signed-in product performs, against
 // the database. One module, so every screen is answered by the same queries:
 //   me, repos, today, goals, goal, people, alerts, digest, settings
 // and the four writes the interface allows (link a commit, save a digest,
@@ -87,6 +87,8 @@ type IssueRow = {
   sizeWeight: number;
   state: string;
   milestoneId: string | null;
+  closedAt: Date | null;
+  reopenedAt: Date | null;
   updatedAt: Date;
 };
 
@@ -98,7 +100,7 @@ type MilestoneRow = {
   issues: IssueRow[];
 };
 
-type ChatRow = { telegramChatId: string; type: string };
+type ChatRow = { telegramChatId: string; type: string; title: string | null };
 
 type SubscriptionRow = {
   id: string;
@@ -168,11 +170,12 @@ export function issueDto(row: IssueRow): Issue {
     state,
     milestoneId: row.milestoneId,
     assigneeId: null,
-    // Issue has no closedAt column; updatedAt is the last state change, which
-    // for a closed issue is the close. Null while open.
-    closedAt: state === "closed" ? row.updatedAt.toISOString() : null,
-    // No reopenedAt column yet: a reopened issue is open, which is truthful.
-    reopenedAt: null,
+    // Written by the `issues` webhook and the API sync. A closed issue with no
+    // timestamp predates the column, so the migration seeded it from updatedAt.
+    closedAt: state === "closed" ? (row.closedAt?.toISOString() ?? null) : null,
+    // Only a reopen sets this, and reopening clears closedAt, so the Goal Track
+    // can draw the task open again and move the filled line back.
+    reopenedAt: row.reopenedAt?.toISOString() ?? null,
   };
 }
 
@@ -340,7 +343,10 @@ export function buildAlerts(input: AlertInput): Alert[] {
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
 
-export function chatTitleOf(chat: { type: string }): string {
+/** The chat's Telegram name when we captured one, else a truthful stand-in. */
+export function chatTitleOf(chat: { type: string; title?: string | null }): string {
+  const stored = chat.title?.trim();
+  if (stored) return stored;
   return chat.type === "group" ? "Group chat" : "Direct message";
 }
 
@@ -400,11 +406,13 @@ export function expectedWebhookUrl(): string {
   return `${base}/api/webhook`;
 }
 
-async function webhookHealth(fullName: string): Promise<WebhookHealth> {
+async function webhookHealth(repoId: string): Promise<WebhookHealth> {
   const expectedUrl = expectedWebhookUrl();
   try {
     const last = await prisma.event.findFirst({
-      where: { repoId: fullName },
+      // Event.repoId is the repo's id, not its name: comparing the two never
+      // matched, so every repo claimed it had never received a delivery.
+      where: { repoId },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true, status: true },
     });
@@ -434,7 +442,7 @@ export async function repoDto(row: RepoRow): Promise<Repo> {
     fullName: row.fullName,
     defaultBranch: row.defaultBranch ?? "main",
     aiEnabled: row.aiEnabled,
-    webhook: await webhookHealth(row.fullName),
+    webhook: await webhookHealth(row.id),
     // Access lost (App uninstalled, suspended): readable rows stay, but say so.
     unreadable: row.installActive === false,
   };
@@ -443,7 +451,7 @@ export async function repoDto(row: RepoRow): Promise<Repo> {
 /**
  * Repos this caller can see. A signed-in account sees what it owns plus what its
  * installations expose. In a webhooks-only setup (no OAuth configured) the read
- * API is public by design, so every repo is listed — same escape hatch as
+ * API is public by design, so every repo is listed â€” same escape hatch as
  * src/access.ts.
  */
 async function visibleRepoRows(session: SessionUser | null): Promise<RepoRow[]> {
@@ -840,7 +848,7 @@ export async function pickSubscription(
   try {
     const subs = (await prisma.subscription.findMany({
       where: { repoId },
-      include: { chat: { select: { telegramChatId: true, type: true } } },
+      include: { chat: { select: { telegramChatId: true, type: true, title: true } } },
       orderBy: { createdAt: "asc" },
     })) as SubscriptionRow[];
     if (subs.length === 0) return null;
@@ -1075,7 +1083,7 @@ export async function startTelegramLink(
   session: SessionUser | null,
   repoSelector?: string,
 ): Promise<WriteResult<{ code: string; deepLink: string; pollToken: string }>> {
-  const botName = (process.env.TELEGRAM_BOT_NAME ?? "").trim().replace(/^@/, "");
+  const botName = await botUsername();
   if (!botName) return { ok: false, status: 503, error: "bot_not_configured" };
 
   let fullName = repoSelector ?? "";
@@ -1085,7 +1093,8 @@ export async function startTelegramLink(
   }
   if (!fullName) return { ok: false, status: 409, error: "no_repo" };
 
-  const issued = await createLinkToken(fullName, session?.login);  if (!issued) return { ok: false, status: 503, error: "unavailable" };
+  const issued = await createLinkToken(fullName, session?.login);
+  if (!issued) return { ok: false, status: 503, error: "unavailable" };
   return {
     ok: true,
     data: {
@@ -1121,7 +1130,7 @@ export async function pollTelegramLink(
 
 /**
  * The onboarding rhythm. Stored where every other preference lives: on the
- * subscription row for that chat × repo (AGENTS.md rule 10).
+ * subscription row for that chat Ã— repo (AGENTS.md rule 10).
  */
 export async function saveOnboardingMode(
   session: SessionUser | null,
@@ -1161,7 +1170,7 @@ export async function saveOnboardingMode(
   }
 }
 
-/** New activity since a timestamp — what the live bar polls for. */
+/** New activity since a timestamp â€” what the live bar polls for. */
 export async function activitySince(
   row: RepoRow,
   since: Date,
@@ -1177,7 +1186,7 @@ export async function activitySince(
       type: "commit" as const,
       at: c.createdAt.toISOString(),
       repoId: row.id,
-      summary: `${splitMessage(c.message).subject} — ${c.author?.githubLogin ?? "unknown"}`,
+      summary: `${splitMessage(c.message).subject} â€” ${c.author?.githubLogin ?? "unknown"}`,
     }));
   } catch {
     return [];

@@ -24,6 +24,7 @@ model Chat {
   id             String         @id @default(cuid())
   telegramChatId String         @unique
   type           String // dm | group
+  title          String? // Telegram name, captured at link time
   subscriptions  Subscription[]
   createdAt      DateTime       @default(now())
 }
@@ -109,6 +110,8 @@ model Issue {
   title      String
   sizeWeight Int       @default(1)
   state      String    @default("open") // open | closed
+  closedAt   DateTime?
+  reopenedAt DateTime?
   milestoneId String?
   milestone  Milestone? @relation(fields: [milestoneId], references: [id])
   closedByPrId String?

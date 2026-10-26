@@ -17,7 +17,7 @@ import {
   type FormatCommit,
 } from "./formatter.js";
 import { linkCommit } from "./linker.js";
-import { syncRepoIssues } from "./github-sync.js";
+import { syncRepoIssues, stampIssueTimestamps } from "./github-sync.js";
 import { claimNextJob, completeJob, failJob, JOB_MAX_ATTEMPTS, reclaimStuckJobs, abandonJob } from "./queue.js";
 import { jobFailureAction, PermanentJobError } from "./jobErrors.js";
 import { findStaleBranches } from "./stale.js";
@@ -461,11 +461,24 @@ export async function processJob(job: JobRow): Promise<void> {
       await processCheckRun(job, job.payload as CheckRunPayload);
       return;
     case "issues": {
-      const repo =
-        (job.payload as { repository?: { full_name?: string } }).repository?.full_name ??
-        "unknown";
-      // closed/reopened edited directly on GitHub — recompute from the API.
-      if (repo !== "unknown") await syncRepoIssues(repo);
+      const p = job.payload as {
+        action?: string;
+        repository?: { full_name?: string };
+        issue?: {
+          number?: number;
+          state?: string;
+          closed_at?: string | null;
+          updated_at?: string;
+        };
+      };
+      const repo = p.repository?.full_name ?? "unknown";
+      // closed/reopened edited directly on GitHub — recompute from the API,
+      // then stamp the moment: the sync knows the state, only the event knows
+      // when a reopen happened.
+      if (repo !== "unknown") {
+        await syncRepoIssues(repo);
+        await stampIssueTimestamps(repo, p);
+      }
       await completeJob(job.id);
       return;
     }
