@@ -182,6 +182,22 @@ export async function reconcileRepo(fullName: string): Promise<ReconcileSummary 
     if (diff.orphanMilestoneIds.length > 0) {
       await prisma.milestone.deleteMany({ where: { id: { in: diff.orphanMilestoneIds } } });
     }
+    // The timeline is not a drift signal, so it is not part of the diff: an
+    // open task never keeps a close date, and a closed one that has none gets
+    // the date GitHub reports. Two bulk writes per repo, not one per issue.
+    await prisma.issue.updateMany({
+      where: { repoId: repoRow.id, state: "open", closedAt: { not: null } },
+      data: { closedAt: null },
+    });
+    for (const i of fetched.issues) {
+      if (i.state !== "closed" || !i.closedAt) continue;
+      const when = new Date(i.closedAt);
+      if (Number.isNaN(when.getTime())) continue;
+      await prisma.issue.updateMany({
+        where: { repoId: repoRow.id, number: i.number, closedAt: null },
+        data: { closedAt: when },
+      });
+    }
     await prisma.repo.update({ where: { id: repoRow.id }, data: { lastSyncAt: new Date() } });
     return {
       updated: diff.toUpdate.length,

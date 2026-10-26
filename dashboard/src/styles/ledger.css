@@ -1,0 +1,899 @@
+/* ============================================================================
+   THE LEDGER
+   Slate Mist paper, ink-navy text, one signal teal. The only saturated thing on
+   any screen is the Goal Track; everything else is pencil. Where two bold
+   things compete, one of them is removed.
+
+   Corners are 0–2px, borders are hairlines, and there are no shadows anywhere:
+   separation is done by offset and type, not blur.
+   ========================================================================== */
+
+.ledger {
+  /* --- palette --------------------------------------------------------- */
+  --paper: #e2e8f0;
+  --paper-2: #edf1f6;
+  --graphite: #1e293b;
+  --pencil: #475569;
+  --ink: #0f172a;
+  --signal: #0e6f68; /* 4.88:1 on Slate Mist */
+  --ok-stamp: #2f5d3a;
+
+  --rule: color-mix(in srgb, var(--pencil) 34%, transparent);
+  --rule-strong: color-mix(in srgb, var(--pencil) 62%, transparent);
+
+  /* --- type ------------------------------------------------------------ */
+  --ld-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --ld-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --ld-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* --- 4 / 8 / 16 / 24 / 40 / 72 / 120 --------------------------------- */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 16px;
+  --s4: 24px;
+  --s5: 40px;
+  --s6: 72px;
+  --s7: 120px;
+
+  --margin-col: 108px;
+  --measure: 34em;
+
+  color-scheme: light;
+  background: var(--paper);
+  color: var(--graphite);
+  font-family: var(--ld-body);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* Dark: the paper turns to Ink Navy and the graphite turns to slate mist. The
+   signal teal brightens so it still reads on the dark ground. */
+.ledger[data-scheme="dark"] {
+  --paper: #151d2e;
+  --paper-2: #1e293b;
+  --graphite: #e2e8f0;
+  --pencil: #94a3b8;
+  --ink: #f1f5f9;
+  --signal: #14b8a6;
+  --ok-stamp: #34d399;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ledger:not([data-scheme="light"]) {
+    --paper: #151d2e;
+    --paper-2: #1e293b;
+    --graphite: #e2e8f0;
+    --pencil: #94a3b8;
+    --ink: #f1f5f9;
+    --signal: #14b8a6;
+    --ok-stamp: #34d399;
+    color-scheme: dark;
+  }
+}
+
+/* --- paper grain ---------------------------------------------------------
+   A grain filter under 4% opacity, an inline SVG feTurbulence so there is no
+   image request. No ruled lines: the page is not a notebook. */
+.ledger {
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: clip;
+}
+.ledger::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.ledger > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- the asymmetric 12-column grid, with a persistent margin column ------ */
+.ledger__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  max-width: 1320px;
+  margin-inline: auto;
+  padding-inline: var(--s3);
+}
+@media (min-width: 900px) {
+  .ledger__grid {
+    grid-template-columns: var(--margin-col) minmax(0, 1fr);
+    column-gap: var(--s5);
+    padding-inline: var(--s4);
+  }
+}
+.ledger__main {
+  min-width: 0;
+}
+
+/* Marginalia: the annotations that live in the left margin, in mono. */
+.margin-note {
+  display: none;
+  font-family: var(--ld-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--pencil);
+  padding-top: 6px;
+}
+@media (min-width: 900px) {
+  .margin-note {
+    display: block;
+  }
+}
+.margin-note--row {
+  padding-top: 0;
+}
+
+.ledger section {
+  padding-block: var(--s6);
+  border-top: 1px solid var(--rule);
+}
+.ledger section:first-of-type {
+  border-top: 0;
+}
+
+/* --- type ---------------------------------------------------------------- */
+.ld-display {
+  font-family: var(--ld-display);
+  font-weight: 400;
+  font-size: clamp(2.75rem, 1.2rem + 7vw, 6.5rem);
+  line-height: 0.94;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--graphite);
+  text-wrap: balance;
+}
+.ld-display em {
+  font-style: italic;
+}
+.ld-h2 {
+  font-family: var(--ld-display);
+  font-weight: 400;
+  font-size: clamp(1.75rem, 1.2rem + 2vw, 2.75rem);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--s3);
+}
+.ld-h3 {
+  font-family: var(--ld-body);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 var(--s3);
+  color: var(--graphite);
+}
+.ld-lede {
+  font-size: 1.25rem;
+  line-height: 1.45;
+  max-width: 40ch;
+  margin: var(--s3) 0 0;
+  color: var(--graphite);
+}
+.ld-body {
+  max-width: var(--measure);
+  margin: var(--s3) 0 0;
+}
+.ld-pencil {
+  color: var(--pencil);
+}
+.num,
+code,
+kbd,
+.ld-mono {
+  font-family: var(--ld-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- buttons: two kinds, and only one of them is vermilion ---------------- */
+.ld-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 44px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--graphite);
+  font: inherit;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.ld-btn:hover {
+  background: color-mix(in srgb, var(--graphite) 7%, transparent);
+}
+.ld-btn--primary {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--paper);
+}
+.ld-btn--primary:hover {
+  background: color-mix(in srgb, var(--signal) 86%, var(--graphite));
+}
+.ld-btn--mono {
+  font-family: var(--ld-mono);
+  font-size: 13px;
+  min-height: 32px;
+  padding: 0 var(--s2);
+}
+
+/* --- header -------------------------------------------------------------- */
+.ld-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: saturate(1.1);
+  border-bottom: 1px solid var(--rule);
+}
+.ld-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  max-width: 1320px;
+  margin-inline: auto;
+  padding: var(--s2) var(--s3);
+}
+@media (min-width: 900px) {
+  .ld-header__inner {
+    padding: var(--s2) var(--s4);
+  }
+}
+.ld-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-family: var(--ld-display);
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: var(--graphite);
+  text-decoration: none;
+}
+/* The one logo device: the wordmark is set with a dotless i (U+0131) and a
+   vermilion dot dropped in above it, so the mark reads "CommitIt" and the dot
+   is the only part of the identity that is ever coloured. */
+.ld-wordmark span {
+  position: relative;
+}
+.ld-wordmark span::after {
+  content: "";
+  position: absolute;
+  left: 1.72em;
+  top: 0.3em;
+  width: 6px;
+  height: 6px;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: var(--signal);
+}
+.ld-nav {
+  display: none;
+  gap: var(--s3);
+  margin-left: auto;
+  font-family: var(--ld-mono);
+  font-size: 13px;
+}
+@media (min-width: 900px) {
+  .ld-nav {
+    display: flex;
+  }
+}
+.ld-nav a {
+  color: var(--graphite);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+}
+.ld-nav a:hover {
+  border-bottom-color: var(--rule-strong);
+}
+.ld-header__cta {
+  margin-left: auto;
+}
+@media (min-width: 900px) {
+  .ld-header__cta {
+    margin-left: 0;
+  }
+}
+/* The theme switch is styled as a ledger tab. */
+.ld-tab {
+  min-height: 32px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--rule-strong);
+  border-bottom-width: 0;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  color: var(--graphite);
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ld-tab:hover {
+  background: color-mix(in srgb, var(--graphite) 8%, transparent);
+}
+
+/* --- focus: 2px ink, offset, always visible ------------------------------ */
+.ledger :focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+/* --- the Goal Track ------------------------------------------------------ */
+.gt {
+  margin-top: var(--s5);
+}
+.gt__figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s4);
+}
+.gt__total {
+  font-family: var(--ld-display);
+  font-size: clamp(2.25rem, 1.4rem + 3vw, 3.75rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--graphite);
+  font-variant-numeric: tabular-nums;
+}
+.gt__total-sep {
+  color: var(--pencil);
+}
+.gt__total-unit {
+  font-family: var(--ld-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--pencil);
+  margin-left: var(--s2);
+}
+.gt__activity {
+  font-size: 13px;
+  color: var(--pencil);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+.gt__reopen-note {
+  color: var(--signal);
+}
+.gt__frame {
+  margin-top: var(--s3);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.gt__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: var(--s2) 0;
+}
+.gt-base {
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+}
+.gt-fill {
+  stroke: var(--signal);
+  stroke-width: 2;
+}
+.gt-dot {
+  cursor: pointer;
+  transition: stroke-width 140ms ease;
+}
+/* A finished node is the one saturated thing on the screen; an open node is
+   ink. Both read the theme, so the track follows day and night. */
+.gt-dot--done {
+  color: var(--signal);
+}
+.gt-dot--open {
+  color: var(--graphite);
+}
+.gt-dot:hover,
+.gt-dot:focus-visible {
+  stroke-width: 2.5;
+}
+.gt__readout {
+  font-size: 14px;
+  color: var(--pencil);
+  margin: var(--s2) 0 0;
+  min-height: 1.6em;
+}
+
+/* --- activity ticks: deliberately light, tabular -------------------------- */
+.ticks {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ticks li {
+  display: grid;
+  grid-template-columns: 5.5ch 1fr auto;
+  gap: var(--s2);
+  align-items: baseline;
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  color: var(--pencil);
+  border-bottom: 1px solid color-mix(in srgb, var(--pencil) 16%, transparent);
+  padding-bottom: 3px;
+}
+.ticks li b {
+  font-weight: 400;
+  color: var(--pencil);
+}
+.ticks li i {
+  font-style: normal;
+  color: var(--pencil);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ticks--heavy {
+  gap: 0;
+}
+.ticks--heavy li {
+  border-bottom: 0;
+  position: relative;
+  height: 15px;
+  grid-template-columns: 1fr;
+  opacity: 0.75;
+}
+/* An activity commit is a pencil tick, never an ink dot. */
+.ticks--heavy li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  height: 1px;
+  width: var(--w, 40%);
+  background: var(--pencil);
+}
+
+/* --- the weight key ------------------------------------------------------ */
+.wkey {
+  display: flex;
+  gap: var(--s5);
+  align-items: flex-end;
+  margin-top: var(--s3);
+}
+.wkey figure {
+  margin: 0;
+  text-align: center;
+}
+.wkey figcaption {
+  font-family: var(--ld-mono);
+  font-size: 11px;
+  color: var(--pencil);
+  margin-top: var(--s2);
+}
+.wkey--lg svg {
+  display: block;
+}
+
+/* --- the pipeline: a ledger line, not a flowchart ------------------------- */
+.lineup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: var(--s4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule-strong);
+}
+.lineup li {
+  position: relative;
+  padding: var(--s3) var(--s3) var(--s2) 0;
+  margin-right: var(--s3);
+  border-right: 1px solid var(--rule);
+  flex: 1 1 auto;
+}
+.lineup li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 9px;
+  height: 2px;
+  background: var(--graphite);
+}
+.lineup li[data-note]::after {
+  content: attr(data-note);
+  position: absolute;
+  top: -14px;
+  left: 0;
+  font-family: var(--ld-mono);
+  font-size: 10px;
+  color: var(--pencil);
+}
+.lineup button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-family: var(--ld-mono);
+  font-size: 13px;
+  color: var(--graphite);
+  cursor: pointer;
+  text-align: left;
+}
+.lineup button:hover {
+  color: var(--signal);
+}
+.lineup__say {
+  font-size: 14px;
+  color: var(--pencil);
+  margin: var(--s3) 0 0;
+  min-height: 3em;
+  max-width: 46ch;
+}
+
+/* --- the digest: paper bubble, not a copy of Telegram --------------------- */
+.bubble-l {
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--paper-2);
+  padding: var(--s3);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.bubble-l header {
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  color: var(--pencil);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: var(--s2);
+  margin-bottom: var(--s2);
+}
+.bubble-l p {
+  margin: 0 0 var(--s2);
+}
+.bubble-l dl {
+  margin: 0;
+  display: grid;
+  gap: var(--s2);
+}
+.bubble-l dt {
+  font-family: var(--ld-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+.bubble-l dd {
+  margin: 0 0 var(--s2);
+}
+
+/* The one rubber stamp in the entire site. */
+.stamp {
+  display: inline-block;
+  border: 2px solid var(--ok-stamp);
+  color: var(--ok-stamp);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  transform: rotate(-2deg);
+}
+
+/* --- ledger slips (alert variants) --------------------------------------- */
+.slips {
+  display: grid;
+  gap: var(--s3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-top: var(--s4);
+}
+/* Perforated edge, drawn as a repeating radial mask-free rule. */
+.slip {
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: var(--s3);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 15px,
+      color-mix(in srgb, var(--pencil) 30%, transparent) 15px 16px
+    )
+      0 0 / 100% 8px no-repeat,
+    var(--paper);
+  position: relative;
+}
+.slip::before {
+  content: "";
+  position: absolute;
+  inset: 8px 0 auto 0;
+  height: 8px;
+  background: var(--paper);
+  border-bottom: 1px dashed color-mix(in srgb, var(--pencil) 46%, transparent);
+}
+.slip h4 {
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 var(--s2);
+  color: var(--graphite);
+}
+.slip p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--graphite);
+}
+.slip code {
+  font-size: 13px;
+}
+
+/* --- safety specimen: a diff with the value redacted --------------------- */
+.diff {
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--paper-2);
+  font-family: var(--ld-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+  margin-top: var(--s3);
+}
+.diff div {
+  padding: 0 var(--s3);
+  white-space: pre;
+}
+.diff .h {
+  color: var(--pencil);
+  background: color-mix(in srgb, var(--pencil) 10%, transparent);
+}
+.diff .a {
+  color: var(--pencil);
+}
+/* A solid ink bar where the value was. No digits, no length, no hint. */
+.diff .redact {
+  display: inline-block;
+  width: 22ch;
+  height: 0.85em;
+  vertical-align: -0.1em;
+  background: var(--ink);
+}
+.diff .flag {
+  color: var(--signal);
+}
+
+/* --- noise control specimens -------------------------------------------- */
+.specimens {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: var(--s4);
+}
+.specimen {
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: var(--s3);
+}
+.specimen h4 {
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 var(--s3);
+}
+.qstrip {
+  position: relative;
+  height: 44px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--paper-2);
+  overflow: hidden;
+}
+.qstrip__window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 62%;
+  right: 6%;
+  background: color-mix(in srgb, var(--pencil) 26%, transparent);
+  border-left: 1px solid var(--rule-strong);
+  border-right: 1px solid var(--rule-strong);
+}
+.qstrip__tick {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--graphite);
+}
+.qstrip__axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--ld-mono);
+  font-size: 10px;
+  color: var(--pencil);
+  margin-top: var(--s1);
+}
+.prefgrid {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 2px var(--s2);
+  font-family: var(--ld-mono);
+  font-size: 12px;
+}
+.prefgrid .on {
+  background: var(--signal);
+  border-radius: 1px;
+  width: 14px;
+  height: 14px;
+}
+.prefgrid .off {
+  border: 1px solid var(--rule-strong);
+  border-radius: 1px;
+  width: 14px;
+  height: 14px;
+}
+
+/* --- two columns: ACTIVITY vs PROGRESS ----------------------------------- */
+.vs {
+  display: grid;
+  gap: var(--s5);
+  grid-template-columns: 1fr;
+  margin-top: var(--s4);
+}
+@media (min-width: 760px) {
+  .vs {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.vs__col {
+  border-top: 2px solid var(--graphite);
+  padding-top: var(--s2);
+}
+.vs__col h3 {
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  margin: 0 0 var(--s3);
+}
+.vs__col--activity h3 {
+  color: var(--pencil);
+}
+.vs__col--progress h3 {
+  color: var(--graphite);
+}
+.vs__big {
+  font-family: var(--ld-display);
+  font-size: 3.25rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.vs__note {
+  font-size: 14px;
+  color: var(--pencil);
+  margin: var(--s2) 0 0;
+  max-width: 40ch;
+}
+
+/* --- raw commit list that collapses ------------------------------------- */
+.rawlist {
+  max-height: 260px;
+  overflow: hidden;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: var(--s2) 0;
+}
+.rawlist li {
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  color: var(--pencil);
+  list-style: none;
+  padding: 2px 0;
+}
+.rawlist ul {
+  margin: 0;
+  padding: 0;
+}
+
+/* --- dashboard preview --------------------------------------------------- */
+.preview {
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--paper-2);
+  margin-top: var(--s4);
+  overflow: hidden;
+}
+.preview__bar {
+  display: flex;
+  gap: var(--s3);
+  align-items: center;
+  border-bottom: 1px solid var(--rule);
+  padding: var(--s2) var(--s3);
+  font-family: var(--ld-mono);
+  font-size: 12px;
+  color: var(--pencil);
+}
+.preview__body {
+  padding: var(--s3);
+}
+
+/* --- colophon ------------------------------------------------------------ */
+.colophon {
+  border-top: 1px solid var(--rule);
+  padding-block: var(--s5) var(--s6);
+  font-family: var(--ld-mono);
+  font-size: 12.5px;
+  color: var(--pencil);
+}
+.colophon a {
+  color: var(--graphite);
+}
+
+/* --- narrow: the margin column folds inline, the track wraps ------------- */
+@media (max-width: 899px) {
+  .ledger section {
+    padding-block: var(--s5);
+  }
+  .margin-note {
+    display: block;
+    margin-bottom: var(--s2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger *,
+  .ledger *::before,
+  .ledger *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+  .rawlist {
+    max-height: none;
+  }
+}
+
+/* --- odds and ends the sections rely on --------------------------------- */
+.ld-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--ink);
+  color: var(--paper);
+  padding: var(--s2) var(--s3);
+  font-family: var(--ld-mono);
+  z-index: 50;
+}
+.ld-skip:focus {
+  left: var(--s2);
+  top: var(--s2);
+}
+.ld-btnrow {
+  display: flex;
+  gap: var(--s1);
+  flex-wrap: wrap;
+}
+.ld-digestwrap {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: 1fr;
+  margin-top: var(--s4);
+}
+@media (min-width: 900px) {
+  .ld-digestwrap {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}

@@ -6,6 +6,7 @@ import { claimLinkToken } from "./linkTokens.js";
 import { isDigestMode } from "./notifyPrefs.js";
 import { formatRecent } from "./formatter.js";
 import { answerCallbackQuery, editMessageText, sendMessage } from "./telegram.js";
+import { chatNameOf } from "./chatTitle.js";
 import {
   digestKeyboard,
   digestView,
@@ -122,12 +123,24 @@ async function issueCode(chatId: string): Promise<{ code: string } | null> {
   }
 }
 
-async function ensureChat(chatId: string, chatType?: string): Promise<string | null> {
+async function ensureChat(
+  chatId: string,
+  chatType?: string,
+  chatTitle?: string,
+): Promise<string | null> {
   try {
+    const title = (chatTitle ?? "").trim() || null;
     const chat = await prisma.chat.upsert({
       where: { telegramChatId: chatId },
-      update: {},
-      create: { telegramChatId: chatId, type: chatType === "private" ? "dm" : "group" },
+      // The bot always carries the chat's name in the update, so a rename in
+      // Telegram is picked up on the next message. Never clobber a stored name
+      // with nothing.
+      update: title ? { title } : {},
+      create: {
+        telegramChatId: chatId,
+        type: chatType === "private" ? "dm" : "group",
+        title,
+      },
     });
     return chat.id;
   } catch {
@@ -203,7 +216,7 @@ async function cmdStart(chatId: string, sender?: Sender, arg?: string): Promise<
     return { ok: false, note: res.status === "invalid" ? "Link expired" : "Linking unavailable" };
   }
   if (res.repoFullName) {
-    const chatDbId = await ensureChat(chatId, sender?.chatType);
+    const chatDbId = await ensureChat(chatId, sender?.chatType, sender?.chatTitle);
     const ok = chatDbId ? await subscribeRepo(chatDbId, res.repoFullName) : false;
     await reply(
       chatId,
@@ -245,7 +258,7 @@ async function cmdRepos(chatId: string, sender?: Sender, messageId?: number): Pr
     await reply(chatId, "I can't tell who you are — message me in a DM first.");
     return { ok: false, note: "Message me in a DM first" };
   }
-  const chatDbId = await ensureChat(chatId, sender?.chatType);
+  const chatDbId = await ensureChat(chatId, sender?.chatType, sender?.chatTitle);
   const [repos, bound] = await Promise.all([
     accessibleRepos(telegramUserId),
     chatDbId ? boundRepos(chatDbId) : Promise.resolve(new Set<string>()),
@@ -386,7 +399,7 @@ async function cmdBind(chatId: string, sender: Sender | undefined, repoArg?: str
       note: check.reason === "group_needs_admin" ? "Admins only" : "Not allowed",
     };
   }
-  const chatDbId = await ensureChat(chatId, sender?.chatType);
+  const chatDbId = await ensureChat(chatId, sender?.chatType, sender?.chatTitle);
   const ok = chatDbId ? await subscribeRepo(chatDbId, repo) : false;
   await reply(
     chatId,
@@ -617,6 +630,7 @@ export async function handleCallback(query: CallbackQuery): Promise<void> {
   const sender: Sender = {
     telegramUserId: query.from?.id === undefined ? undefined : String(query.from.id),
     chatType: query.message?.chat?.type,
+    chatTitle: chatNameOf(query.message?.chat ?? {}),
   };
   const messageId = query.message?.message_id;
   const [action, ...rest] = (query.data ?? "").split(":");
@@ -673,6 +687,7 @@ export async function dispatchUpdate(update: InboundUpdate): Promise<void> {
   await handleMessage(String(chat), update.message?.text, {
     telegramUserId: fromId === undefined ? undefined : String(fromId),
     chatType: update.message?.chat?.type,
+    chatTitle: chatNameOf(update.message?.chat ?? {}),
   });
 }
 

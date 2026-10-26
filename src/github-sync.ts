@@ -11,6 +11,8 @@ export type SyncIssue = {
   state: "open" | "closed";
   sizeWeight: number;
   milestoneNumber?: number;
+  /** GitHub's `closed_at`; null while open. */
+  closedAt?: string | null;
 };
 
 function headers(): Record<string, string> {
@@ -64,6 +66,7 @@ export async function fetchIssues(
       number: number;
       title: string;
       state: string;
+      closed_at?: string | null;
       pull_request?: unknown;
       labels: { name: string }[];
       milestone?: { number: number; title: string } | null;
@@ -77,6 +80,7 @@ export async function fetchIssues(
         state: it.state === "closed" ? "closed" : "open",
         sizeWeight: weightFromLabels(it.labels ?? []),
         milestoneNumber: it.milestone?.number,
+        closedAt: it.closed_at ?? null,
       });
       if (it.milestone) milestones.set(it.milestone.number, it.milestone.title);
     }
@@ -118,9 +122,13 @@ export async function storeSyncedIssues(
     for (const i of data.issues) {
       const milestoneId =
         i.milestoneNumber !== undefined ? (milestoneIds.get(i.milestoneNumber) ?? null) : null;
+      // closedAt is the moment the task finished. Reopening clears it, so an
+      // open task never claims a close date. A closed issue GitHub dates
+      // unparseably still closed; "now" is the honest fallback.
+      const closedAt = i.state === "closed" ? (parseWhen(i.closedAt) ?? new Date()) : null;
       await prisma.issue.upsert({
         where: { repoId_number: { repoId: repoRow.id, number: i.number } },
-        update: { title: i.title, state: i.state, sizeWeight: i.sizeWeight, milestoneId },
+        update: { title: i.title, state: i.state, sizeWeight: i.sizeWeight, milestoneId, closedAt },
         create: {
           repoId: repoRow.id,
           number: i.number,
@@ -128,6 +136,7 @@ export async function storeSyncedIssues(
           state: i.state,
           sizeWeight: i.sizeWeight,
           milestoneId,
+          closedAt,
         },
       });
     }
@@ -151,4 +160,59 @@ export async function syncRepoIssues(
     return null;
   }
   return storeSyncedIssues(fullName, data);
+}
+
+/** GitHub timestamps are ISO strings; an unparsable one is unknown, not "now". */
+function parseWhen(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * The `issues` webhook is the only place a reopen is observable: GitHub's issue
+ * object carries no reopen timestamp, but the event's `issue.updated_at` is the
+ * moment the action happened. Closing also carries `closed_at`, which the API
+ * sync already stores; stamping it here keeps the two from disagreeing.
+ *
+ * Best-effort: the sync above is still the source of truth for state.
+ */
+export async function stampIssueTimestamps(
+  fullName: string,
+  event: {
+    action?: string;
+    issue?: {
+      number?: number;
+      state?: string;
+      closed_at?: string | null;
+      updated_at?: string;
+    };
+  },
+): Promise<void> {
+  const action = event.action ?? "";
+  const number = event.issue?.number;
+  if (number === undefined) return;
+  if (action !== "closed" && action !== "reopened") return;
+  try {
+    const repoRow = await prisma.repo.findFirst({
+      where: { fullName: { equals: fullName, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (!repoRow) return;
+    const when =
+      parseWhen(event.issue?.closed_at) ?? parseWhen(event.issue?.updated_at) ?? new Date();
+    if (action === "closed") {
+      await prisma.issue.updateMany({
+        where: { repoId: repoRow.id, number },
+        data: { closedAt: when },
+      });
+    } else {
+      await prisma.issue.updateMany({
+        where: { repoId: repoRow.id, number },
+        data: { closedAt: null, reopenedAt: when },
+      });
+    }
+  } catch {
+    // A missing timestamp must not fail the job.
+  }
 }

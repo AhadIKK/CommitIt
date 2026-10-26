@@ -21,6 +21,9 @@ export async function summarize(opts: {
   if (hit) return { text: hit, degraded: false };
   try {
     const provider = getProvider();
+    // No AI configured (the echo stub): a restatement of the subject is not a
+    // summary, so degrade to the raw message and store nothing (rule 7).
+    if (provider.name === "echo") return { text: opts.message, degraded: true };
     const timed = await withTimeout(
       provider.summarize({
         sha: opts.sha,

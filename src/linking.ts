@@ -5,6 +5,7 @@ import { isRateLimited } from "./rateLimit.js";
 import { TOKEN_RE, createLinkToken, isTokenClaimed, linkStatusByProof, unlinkByProof } from "./linkTokens.js";
 import { SESSION_COOKIE, getSessionUser, parseCookies } from "./session.js";
 import { isDigestMode, mySubscriptions, setMyDigestMode } from "./notifyPrefs.js";
+import { syncChatTitle } from "./chatTitle.js";
 
 // linking.ts — website side of Telegram chat linking (no website accounts;
 // the chat subscription IS the user). Pairs with src/telegramBot.ts:
@@ -94,6 +95,7 @@ export async function registerLinkingRoutes(app: FastifyInstance) {
           update: {},
           create: { telegramChatId: row.chatId, type: "dm" },
         });
+        await syncChatTitle(chat.id, row.chatId);
         await prisma.subscription.upsert({
           where: { chatId_repoId: { chatId: chat.id, repoId: repoRow.id } },
           update: {},

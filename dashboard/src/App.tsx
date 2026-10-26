@@ -1,425 +1,196 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  ActivitySnapshot,
-  DigestEntry,
-  IssueRow,
-  RepoProgress,
-} from "@src/dashboard.js";
-import { fetchDashboard } from "./api.js";
-import { claimInstallSetup } from "./authApi.js";
-import { AuthorBars, CommitList, DigestTimeline, Donut, IssuesTable, OverallBand } from "./components.js";
-import { Button } from "./components/ui/button.js";
-import { GitHubMark, TelegramMark } from "./brandIcons.js";
-import NotifyPrefs from "./NotifyPrefs.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card.js";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs.js";
-import { activityToCsv, downloadCsv, downloadDoc, exportFilename, issuesToCsv } from "./export.js";
-import Logo from "./Logo.js";
-import { buildWeeklySummary, digestToDoc, weekLabel } from "./report.js";
-import Review from "./Review.js";
-import Connect from "./Connect.js";
-import Auth from "./Auth.js";
-import Welcome from "./Welcome.js";
-import "./styles.css";
-import { ThemeSwitch, useTheme } from "./theme.js";
+/**
+ * The application frame and the routes.
+ *
+ * Route-level code splitting keeps the first paint small: Today is the landing
+ * screen for a signed-in person, so it loads first and the rest arrive on demand.
+ * Landing is public and does not use the frame at all — no rail, no tab bar, one
+ * column.
+ */
+import { lazy, Suspense, useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Link, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { AppShell as OldAppShell } from "./components/AppShell.js";
+import { Skeleton } from "./components/surfaces.js";
+import { useRepoRef, useRepos } from "./lib/queries.js";
+import { useLive } from "./lib/useLive.js";
+import { currentScenario, scenarioLabel } from "./lib/scenario.js";
+import { Today } from "./screens/Today.js";
+import { AppShell } from "./app/Shell.js";
+import { OpsProvider } from "./app/data.js";
+import { ToastHost } from "./components/kit.js";
 
-const DEFAULT_REPO = "nope/nothing-here";
+const Landing = lazy(() => import("./screens/Landing.js").then((m) => ({ default: m.Landing })));
+const LedgerSite = lazy(() =>
+  import("./site/LedgerSite.js").then((m) => ({ default: m.LedgerSite })),
+);
+// The new authenticated app (the ledger language). Aliased because the old
+// screens above still expose same-named routes for deep links.
+const OldOnboarding = lazy(() => import("./screens/Onboarding.js").then((m) => ({ default: m.Onboarding })));
+const Goals = lazy(() => import("./screens/Goals.js").then((m) => ({ default: m.Goals })));
+const Goal = lazy(() => import("./screens/Goal.js").then((m) => ({ default: m.Goal })));
+const People = lazy(() => import("./screens/People.js").then((m) => ({ default: m.People })));
+const Digests = lazy(() => import("./screens/Digests.js").then((m) => ({ default: m.Digests })));
+const Alerts = lazy(() => import("./screens/Alerts.js").then((m) => ({ default: m.Alerts })));
+const OldSettings = lazy(() => import("./screens/Settings.js").then((m) => ({ default: m.Settings })));
+const RepoSettings = lazy(() =>
+  import("./screens/RepoSettings.js").then((m) => ({ default: m.RepoSettings })),
+);
 
-// Deep-linkable repo: ?repo=owner/name wins (shareable links, fresh tabs).
-function initialRepo(): string {
-  if (typeof window === "undefined") return DEFAULT_REPO;
-  return new URLSearchParams(window.location.search).get("repo")?.trim() || DEFAULT_REPO;
+const AppOverview = lazy(() => import("./app/pages.js").then((m) => ({ default: m.Overview })));
+const AppRepoDetail = lazy(() => import("./app/pages.js").then((m) => ({ default: m.RepoDetail })));
+const AppTasks = lazy(() => import("./app/pages.js").then((m) => ({ default: m.TaskLedger })));
+const AppDigests = lazy(() => import("./app/pages.js").then((m) => ({ default: m.DigestLedger })));
+const AppAlerts = lazy(() => import("./app/pages.js").then((m) => ({ default: m.AlertFeed })));
+const AppChats = lazy(() => import("./app/pages.js").then((m) => ({ default: m.ChatLedger })));
+const AppPipeline = lazy(() => import("./app/pages.js").then((m) => ({ default: m.Pipeline })));
+const AppSecurity = lazy(() => import("./app/pages.js").then((m) => ({ default: m.Security })));
+const AppSettings = lazy(() => import("./app/Settings.js").then((m) => ({ default: m.Settings })));
+const DigestDetail = lazy(() => import("./app/details.js").then((m) => ({ default: m.DigestDetail })));
+const ChatDetail = lazy(() => import("./app/details.js").then((m) => ({ default: m.ChatDetail })));
+const Login = lazy(() => import("./app/Settings.js").then((m) => ({ default: m.Login })));
+const AppNotFound = lazy(() => import("./app/Settings.js").then((m) => ({ default: m.NotFound })));
+const OnboardingPublic = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Onboarding })));
+const Terms = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Terms })));
+const Privacy = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Privacy })));
+const Changelog = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Changelog })));
+const Docs = lazy(() => import("./app/Public.js").then((m) => ({ default: m.Docs })));
+const RouteErrorPage = lazy(() => import("./app/Public.js").then((m) => ({ default: m.RouteError })));
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false } },
+});
+
+/** The ?state= switch is a review tool; when it is on, say so plainly. */
+function ScenarioNote() {
+  const label = scenarioLabel(currentScenario());
+  if (!label) return null;
+  return (
+    <p className="live live--stale" role="status">
+      <span aria-hidden="true">◆</span>
+      <span>{label}</span>
+    </p>
+  );
 }
 
-// First load with nothing in the URL: let the server serve the account's first
-// repo instead of the placeholder, in the same request. Once a repo is in the
-// URL — shared link, typed, or "Load" — the choice is explicit, never overridden.
-function preferMine(r: string): boolean {
-  if (r !== DEFAULT_REPO) return false;
-  return !new URLSearchParams(window.location.search).get("repo");
+function RouteFallback() {
+  return (
+    <div className="screen" aria-busy="true">
+      <Skeleton variant="display" width="60%" />
+      <Skeleton variant="line" width="90%" />
+      <Skeleton variant="line-sm" width="45%" />
+      <span className="visually-hidden">Loading.</span>
+    </div>
+  );
 }
 
-type View = "dashboard" | "review" | "help";
-
-export default function App() {
-  const [repo, setRepo] = useState(initialRepo);
-  const [view, setView] = useState<View>("dashboard");
-  const [theme, toggleTheme] = useTheme();
-  const [input, setInput] = useState(repo);
-  const [progress, setProgress] = useState<RepoProgress | null>(null);
-  const [activity, setActivity] = useState<ActivitySnapshot | null>(null);
-  const [issues, setIssues] = useState<IssueRow[]>([]);
-  const [digests, setDigests] = useState<DigestEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [errorKind, setErrorKind] = useState<"auth_required" | "forbidden" | "other" | null>(null);
-  const [linked, setLinked] = useState(false);
-  const [loading, setLoading] = useState(false);
-  // The repo whose data is currently on screen. When the server picks a repo
-  // for us (`preferMine`), the setRepo below must not re-load what we just
-  // rendered — removing that second round trip is the point of `prefer`.
-  const shown = useRef("");
-
-  const load = useCallback(async (r: string, quiet = false) => {
-    if (!quiet) {
-      setLoading(true);
-      setError(null);
-      setErrorKind(null);
-    }
-    try {
-      const d = await fetchDashboard(r, preferMine(r));
-      // The account first: it decides which onboarding step Welcome shows,
-      // even when the repo itself is denied.
-      setLinked(!!d.me);
-      if (d.denied) throw new Error(d.denied.status === 401 ? "auth_required" : "forbidden");
-      setProgress(d.progress ?? null);
-      setActivity(d.activity ?? null);
-      setIssues(d.issues ?? []);
-      setDigests(d.digests ?? []);
-      if (d.repo && d.repo !== r) {
-        shown.current = d.repo;
-        setRepo(d.repo);
-        setInput(d.repo);
-      } else {
-        shown.current = r;
-      }
-      if (quiet) {
-        setError(null);
-        setErrorKind(null);
-      }
-    } catch (e) {
-      if (quiet) return; // keep stale data, no banner flash on background ticks
-      const msg = e instanceof Error ? e.message : "load failed";
-      setErrorKind(msg === "auth_required" || msg === "forbidden" ? msg : "other");
-      setError(
-        msg === "auth_required"
-          ? "Sign in with GitHub in the GitHub section below, then reload."
-          : msg === "forbidden"
-            ? "Your account can't access this repo (App not installed or access removed)."
-            : msg,
-      );
-    } finally {
-      if (!quiet) setLoading(false);
-    }
-  }, []);
-
-  // Live by default: quiet 30s polling while visible + reload on tab refocus.
-  // Polling (not push-triggered) is the mechanism — the client can't hear
-  // webhooks. Hidden tabs skip ticks entirely so idle tabs cost zero
-  // function execution; refocus triggers a single reload instead.
-  // Quiet ticks never flash banners or clobber data.
+function ScrollToTop() {
+  const { pathname } = useLocation();
   useEffect(() => {
-    const poll = () => {
-      if (!document.hidden) void load(repo, true);
-    };
-    const tick = setInterval(poll, 30_000);
-    const onFocus = () => {
-      if (!document.hidden) void load(repo, true);
-    };
-    document.addEventListener("visibilitychange", onFocus);
-    return () => {
-      clearInterval(tick);
-      document.removeEventListener("visibilitychange", onFocus);
-    };
-  }, [repo, load]);
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
-  // Soft landing: first-run states (logged out / repo not accessible) with
-  // no data get the Welcome steps instead of the red error wall.
-  const showWelcome =
-    (errorKind === "auth_required" || errorKind === "forbidden") && !progress && !activity;
-
-  useEffect(() => {
-    if (shown.current === repo) return; // already displaying this repo
-    void load(repo);
-  }, [repo, load]);
-
-  // GitHub App Setup-URL landing (?installation_id=): claim the install once,
-  // show the result, then strip the params. setup_claimed=1 comes from the
-  // OAuth-during-install bounce (claimed post-login in the callback).
-  const [setupNotice, setSetupNotice] = useState<string | null>(null);
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const installationId = params.get("installation_id");
-    if (params.get("setup_claimed") === "1") {
-      setSetupNotice("GitHub App installed — syncing repos.");
-      params.delete("setup_claimed");
-      params.delete("linked");
-      const query = params.toString();
-      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-      return;
-    }
-    if (!installationId) return;
-    claimInstallSetup(installationId)
-      .then((d) => {
-        setSetupNotice(
-          d.repos.length > 0
-            ? `App installed on: ${d.repos.join(", ")}.`
-            : "App installed. No repos synced yet.",
-        );
-      })
-      .catch(() => {
-        setSetupNotice("Install recorded, but claiming needs login — link GitHub first.");
-      })
-      .finally(() => {
-        params.delete("installation_id");
-        params.delete("setup_action");
-        const query = params.toString();
-        window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-      });
-  }, []);
+/** Everything behind the old rail and tab bar (deep links kept working). */
+function OldShell() {
+  const { ref, repoId, setRef } = useRepoRef();
+  const repos = useRepos();
+  const live = useLive(repoId);
 
   return (
-    <div className="app">
-      <div className="topbar">
-        <div className="topbar-inner">
-          <div className="brand">
-            <Logo />
-            <div className="brand-text">
-              <h1 className="brand-name">CommitIt</h1>
-              <span className="brand-tag">who did what, how close to done</span>
-            </div>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const next = input.trim() || DEFAULT_REPO;
-              setRepo(next);
-              const url = new URL(window.location.href);
-              url.searchParams.set("repo", next);
-              window.history.replaceState(null, "", url);
-            }}
-          >
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="owner/repo"
-              aria-label="Repository"
-            />
-            <Button type="submit">Load</Button>
-            <ThemeSwitch theme={theme} onToggle={toggleTheme} />
-          </form>
-        </div>
-      </div>
+    <OldAppShell
+      repoRef={ref}
+      repos={repos.data ?? []}
+      onRepoChange={setRef}
+      hasNew={Boolean(live.newActivity)}
+    >
+      <ScenarioNote />
+      <Suspense fallback={<RouteFallback />}>
+        <Outlet />
+      </Suspense>
+    </OldAppShell>
+  );
+}
 
-      {loading && <p className="muted">Loading…</p>}
-      {showWelcome ? <Welcome linked={linked} /> : error && <p className="error">Error: {error}</p>}
-      {setupNotice && <p className="notice">{setupNotice}</p>}
+/** The new authenticated shell, wrapped in the toast host. */
+function NewShell() {
+  return (
+    <OpsProvider>
+      <AppShell>
+        <Suspense fallback={<RouteFallback />}>
+          <Outlet />
+        </Suspense>
+      </AppShell>
+    </OpsProvider>
+  );
+}
 
-      <Tabs value={view} onValueChange={(v) => setView(v as View)}>
-        <TabsList aria-label="Views">
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="review">Review</TabsTrigger>
-          <TabsTrigger value="help">Help</TabsTrigger>
-        </TabsList>
+function Lazy({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
 
-        <TabsContent value="dashboard" forceMount className="tab-panel">
-        {!showWelcome && (
-          <>
-        <Card aria-label="Milestones">
-          <CardHeader>
-            <CardTitle>Milestones</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {progress?.overall && <OverallBand m={progress.overall} />}
-            {progress && progress.milestones.length === 0 && !progress.overall && (
-              <p className="muted">No milestones yet.</p>
-            )}
-            <div className="miles">
-              {progress?.milestones.map((m) => <Donut key={m.title} m={m} />)}
-            </div>
-          </CardContent>
-        </Card>
-
-      <section aria-label="Activity">
-        <div className="section-head">
-          <h2>
-            Activity (7d)
-            {activity && (
-              <span className="muted">
-                {" "}
-                · {activity.githubMainCommits ?? activity.totalCommitsAllTime}{" "}
-                {activity.githubMainCommits != null ? "commits on main" : "commits tracked"},{" "}
-                {activity.totalMergedPRsAllTime} merged PRs all-time
-              </span>
-            )}
-          </h2>
-          <div className="connect-row">
-            <Button type="button" variant="secondary" onClick={() => void load(repo)}>
-              Refresh
-            </Button>
-            {activity && activity.authors.length > 0 && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => downloadCsv(exportFilename(repo, "activity"), activityToCsv(activity.authors))}
-              >
-                Export CSV
-              </Button>
-            )}
-          </div>
-        </div>
-        {activity && <AuthorBars authors={activity.authors} />}
-      </section>
-
-      <section aria-label="Commits">
-        <div className="section-head">
-          <h2>
-            What each commit is about
-            {activity && activity.commits.length > 0 && (
-              <span className="muted"> · last {activity.commits.length} in range</span>
-            )}
-          </h2>
-        </div>
-        <CommitList commits={activity?.commits ?? []} repo={repo} />
-      </section>
-
-      <section aria-label="Issues">
-        <div className="section-head">
-          <h2>Issues</h2>
-          {issues.length > 0 && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => downloadCsv(exportFilename(repo, "issues"), issuesToCsv(issues))}
-            >
-              Export CSV
-            </Button>
-          )}
-        </div>
-        {issues.length === 0 ? (
-          <p className="muted">No issues synced.</p>
-        ) : (
-          <div className="table-wrap">
-            <IssuesTable issues={issues} />
-          </div>
-        )}
-      </section>
-
-      <section aria-label="Digests">
-        <div className="section-head">
-          <h2>Digests</h2>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() =>
-              downloadDoc(
-                exportFilename(repo, "digest").replace(/\.csv$/, ".doc"),
-                digestToDoc({
-                  repo,
-                  weekLabel: weekLabel(),
-                  summary: buildWeeklySummary(activity, progress, issues, digests),
-                  issues,
-                  digests,
-                }),
-              )
+export function App() {
+  return (
+    <QueryClientProvider client={queryClient}><ToastHost>
+      <BrowserRouter>
+        <ScrollToTop />
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <LedgerSite />
+              </Suspense>
             }
-          >
-            Export .doc
-          </Button>
-        </div>
-        <div className="summary-3p">
-          <p>
-            <strong>Progress:</strong> {buildWeeklySummary(activity, progress, issues, digests).progress}
-          </p>
-          <p>
-            <strong>Plans:</strong> {buildWeeklySummary(activity, progress, issues, digests).plans}
-          </p>
-          <p>
-            <strong>Problems:</strong> {buildWeeklySummary(activity, progress, issues, digests).problems}
-          </p>
-        </div>
-        <DigestTimeline digests={digests} />
-      </section>
-          </>
-        )}
-      <section aria-label="Telegram" id="section-telegram">
-        <div className="section-head">
-          <div className="section-title">
-            <TelegramMark />
-            <h2>Telegram</h2>
-          </div>
-        </div>
-        <Connect repo={repo} />
-        <NotifyPrefs repo={repo} />
-      </section>
-      <section aria-label="GitHub" id="section-github">
-        <div className="section-head">
-          <div className="section-title">
-            <GitHubMark />
-            <h2>GitHub</h2>
-          </div>
-        </div>
-        <Auth repo={repo} />
-      </section>
-        </TabsContent>
-
-        <TabsContent value="review" forceMount className="tab-panel">
-          <Review progress={progress} activity={activity} issues={issues} />
-        </TabsContent>
-
-        <TabsContent value="help" forceMount className="tab-panel">
-          <section aria-label="Help" className="help">
-          <h2>How to read this dashboard</h2>
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
-                "@context": "https://schema.org",
-                "@type": "FAQPage",
-                mainEntity: [
-                  {
-                    "@type": "Question",
-                    name: "What does the overall % mean?",
-                    acceptedAnswer: {
-                      "@type": "Answer",
-                      text: "The weighted share of closed issue points. Commits never count as progress.",
-                    },
-                  },
-                  {
-                    "@type": "Question",
-                    name: "What are S, M, L?",
-                    acceptedAnswer: {
-                      "@type": "Answer",
-                      text: "Issue size weights worth 1, 3, and 5 points. Unweighted issues count as 1 point.",
-                    },
-                  },
-                  {
-                    "@type": "Question",
-                    name: "How do I export?",
-                    acceptedAnswer: {
-                      "@type": "Answer",
-                      text: "CSV buttons export issues and activity, Export .doc saves the weekly digest for Word, and printing saves a PDF.",
-                    },
-                  },
-                ],
-              }),
-            }}
           />
-          <dl>
-            <dt>What does the overall % mean?</dt>
-            <dd>
-              The weighted share of closed issue points across milestones.
-              Commits never count as progress — only closed issues move the number.
-            </dd>
-            <dt>What are S, M, L?</dt>
-            <dd>
-              Issue size weights worth 1, 3, and 5 points. Issues without an
-              estimate count as 1 point and are flagged as unestimated.
-            </dd>
-            <dt>What does a suggested link mean?</dt>
-            <dd>
-              A heuristic guess linking a commit to an issue. Suggestions are
-              never auto-applied — confirm them with /link in Telegram.
-            </dd>
-            <dt>How do I export?</dt>
-            <dd>
-              The CSV buttons download issues and activity for Excel. Export
-              .doc saves the weekly digest for Word. Printing this page saves
-              a PDF via your browser.
-            </dd>
-          </dl>
-        </section>
-        </TabsContent>
-      </Tabs>
-    </div>
+          {/* The previous product-first landing, kept reachable for comparison. */}
+          <Route
+            path="/welcome"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <Landing />
+              </Suspense>
+            }
+          />
+          {/* Public legal/docs — no shell. */}
+          <Route path="/terms" element={<Lazy><Terms /></Lazy>} />
+          <Route path="/privacy" element={<Lazy><Privacy /></Lazy>} />
+          <Route path="/changelog" element={<Lazy><Changelog /></Lazy>} />
+          <Route path="/docs" element={<Lazy><Docs /></Lazy>} />
+          <Route path="/login" element={<Lazy><Login /></Lazy>} />
+          <Route path="/onboarding" element={<Lazy><OnboardingPublic /></Lazy>} />
+
+          {/* The new authenticated app. */}
+          <Route path="/app" element={<NewShell />}>
+            <Route index element={<Lazy><AppOverview /></Lazy>} />
+            <Route path="repos/:repoId" element={<Lazy><AppRepoDetail /></Lazy>} />
+            <Route path="tasks" element={<Lazy><AppTasks /></Lazy>} />
+            <Route path="digests" element={<Lazy><AppDigests /></Lazy>} />
+            <Route path="digests/:digestId" element={<Lazy><DigestDetail /></Lazy>} />
+            <Route path="alerts" element={<Lazy><AppAlerts /></Lazy>} />
+            <Route path="chats" element={<Lazy><AppChats /></Lazy>} />
+            <Route path="chats/:chatId" element={<Lazy><ChatDetail /></Lazy>} />
+            <Route path="system" element={<Lazy><AppPipeline /></Lazy>} />
+            <Route path="security" element={<Lazy><AppSecurity /></Lazy>} />
+            <Route path="settings" element={<Lazy><AppSettings /></Lazy>} />
+          </Route>
+
+          {/* The previous dashboard, kept reachable so old bookmarks and Telegram
+              links to single sections keep resolving. */}
+          <Route element={<OldShell />}>
+            <Route path="/today" element={<Today />} />
+            <Route path="/goals" element={<Goals />} />
+            <Route path="/goals/:id" element={<Goal />} />
+            <Route path="/settings" element={<OldSettings />} />
+            <Route path="/people" element={<People />} />
+            <Route path="/digests" element={<Digests />} />
+            <Route path="/alerts" element={<Alerts />} />
+            <Route path="/repos" element={<RepoSettings />} />
+            <Route path="/connect/:step" element={<OldOnboarding />} />
+          </Route>
+          <Route path="*" element={<Lazy><AppNotFound /></Lazy>} />
+        </Routes>
+      </BrowserRouter>
+    </ToastHost></QueryClientProvider>
   );
 }
