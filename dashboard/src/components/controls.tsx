@@ -3,7 +3,7 @@
  * name, a 44px touch target on coarse pointers, pressed feedback that does not
  * shift layout, and a focus ring that is never removed.
  */
-import { useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 /* ---------------------------------------------------------------- button */
 
@@ -194,6 +194,8 @@ export function SegmentedControl<T extends string>({
   className?: string;
 }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const hintId = useId();
+  const chosen = options.find((option) => option.value === value);
 
   const move = (from: number, delta: number) => {
     const next = (from + delta + options.length) % options.length;
@@ -218,6 +220,7 @@ export function SegmentedControl<T extends string>({
           aria-checked={value === option.value}
           tabIndex={value === option.value ? 0 : -1}
           className="segmented__option"
+          aria-describedby={option.hint && value === option.value ? hintId : undefined}
           onClick={() => onChange(option.value)}
           onKeyDown={(e) => {
             if (e.key === "ArrowRight" || e.key === "ArrowDown") {
@@ -230,13 +233,16 @@ export function SegmentedControl<T extends string>({
           }}
         >
           <span className="segmented__label">{option.label}</span>
-          {/* Only the chosen option explains itself. Rendering all three hints
-              ran them together on one line and made the control unreadable. */}
-          {option.hint && value === option.value ? (
-            <span className="segmented__hint">{option.hint}</span>
-          ) : null}
         </button>
       ))}
+      {/* Only the chosen option explains itself, and it explains itself on its
+          own line: inside the option the hint widened that column and pushed
+          the next label away. */}
+      {chosen?.hint ? (
+        <p className="segmented__hint" id={hintId}>
+          {chosen.hint}
+        </p>
+      ) : null}
     </div>
   );
 }

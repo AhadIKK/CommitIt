@@ -282,8 +282,11 @@
 .segmented__option[aria-checked="true"] .segmented__label::after {
   background: var(--ink);
 }
-/* the hint never inherits the selected option's ink or weight */
-.segmented__option .segmented__hint {
+/* The chosen option's explanation sits on its own line under the row, so a
+   long hint never widens its option and pushes the next label away. */
+.segmented__hint {
+  flex-basis: 100%;
+  margin: 0;
   font-size: var(--type-small);
   font-weight: 500;
   color: var(--muted);
@@ -372,10 +375,10 @@
   font-weight: 600;
 }
 
-/* --- segmented: the switcher that replaced four rail destinations ---------- */
-.segmented {
-  display: flex;
-  flex-wrap: wrap;
+/* --- segmented: the boxed switcher (Settings sections) --------------------- */
+/* A modifier, not a second `.segmented`: the two rules used to collide and the
+   mode picker inherited this padding and 4px gap, which crushed it. */
+.segmented--boxed {
   gap: var(--space-1);
   padding: var(--space-1);
   border: var(--hairline) solid var(--line);

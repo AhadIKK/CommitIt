@@ -12,7 +12,6 @@ import { api } from "../api/index.js";
 import { Banner, Bubble, Skeleton, StatePanel } from "../components/surfaces.js";
 import { Button, ErrorSummary, Field, SegmentedControl, Switch } from "../components/controls.js";
 import { screenState, useDigests, usePeople, useRepoRef } from "../lib/queries.js";
-import { DIGEST_MODE_LABEL } from "../lib/digest.js";
 import { clockTime } from "../lib/format.js";
 
 type EventKind = "commits" | "pull_requests" | "issues";
@@ -24,7 +23,7 @@ const EVENT_LABELS: Record<EventKind, string> = {
 };
 
 const MODE_OPTIONS: Array<{ value: DigestMode; label: string; hint: string }> = [
-  { value: "instant", label: DIGEST_MODE_LABEL.instant, hint: "every push, at once" },
+  { value: "instant", label: "Instant", hint: "every push, at once" },
   { value: "hourly", label: "Hourly", hint: "one message an hour" },
   { value: "daily", label: "Daily", hint: "one message a day" },
   { value: "weekly", label: "Weekly", hint: "one message a week" },

@@ -604,6 +604,7 @@
 }
 .ledger-seg {
   display: inline-flex;
+  gap: 0;
   border-bottom: 1px solid var(--edge);
 }
 .ledger-seg__tab {

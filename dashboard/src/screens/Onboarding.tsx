@@ -11,7 +11,6 @@ import { api } from "../api/index.js";
 import { Banner, Skeleton, StatePanel } from "../components/surfaces.js";
 import { Button, SegmentedControl } from "../components/controls.js";
 import { useMe, useRepoRef } from "../lib/queries.js";
-import { DIGEST_MODE_LABEL } from "../lib/digest.js";
 
 const ORDER: ConnectStep[] = ["github", "repo", "telegram", "digest", "test"];
 const POSITION: Record<ConnectStep, number> = { github: 1, repo: 2, telegram: 3, digest: 4, test: 5 };
@@ -40,7 +39,7 @@ const COPY: Record<ConnectStep, { title: string; body: string }> = {
 };
 
 const MODE_OPTIONS: Array<{ value: DigestMode; label: string; hint: string }> = [
-  { value: "instant", label: DIGEST_MODE_LABEL.instant, hint: "every push, at once" },
+  { value: "instant", label: "Instant", hint: "every push, at once" },
   { value: "hourly", label: "Hourly", hint: "one message an hour" },
   { value: "daily", label: "Daily", hint: "one message a day" },
   { value: "weekly", label: "Weekly", hint: "one message a week" },

@@ -33,7 +33,7 @@ export function Settings() {
         <p className="screen__lede">How this repository reports to you, and who it thinks you are.</p>
       </div>
 
-      <div className="segmented" role="tablist" aria-label="Settings sections">
+      <div className="segmented segmented--boxed" role="tablist" aria-label="Settings sections">
         {SECTIONS.map((s) => (
           <button
             key={s.id}
