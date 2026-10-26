@@ -60,6 +60,10 @@
     {
       "source": "/api/digests",
       "destination": "/api/data/digests"
+    },
+    {
+      "source": "/((?!api/|assets/).*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
