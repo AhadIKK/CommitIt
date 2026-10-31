@@ -55,6 +55,7 @@ export default async function handler(
     query: url.searchParams,
     body: hasBody ? await readBody(req) : {},
     cookies: parseCookies(req.headers.cookie),
+    headers: req.headers as Record<string, string | undefined>,
     ip: ipOf(req),
   });
 

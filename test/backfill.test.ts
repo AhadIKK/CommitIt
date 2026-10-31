@@ -296,6 +296,86 @@ describe("backfillInstallation", () => {
     };
     const out = await backfillInstallation(99, keys, { fetchFn });
     expect(out.repos).toBe(1);
+    // Nothing left over: no continuation is enqueued for a finished install.
+    expect(out).toMatchObject({ totalRepos: 1, resumeAt: null });
+  });
+
+  it("stops between repos when the deadline is gone, and resumes where it stopped", async () => {
+    const { prisma } = await import("../src/db.js");
+    const origFindMany = prisma.repo.findMany;
+    (prisma.repo as unknown as { findMany: unknown }).findMany = async () => [
+      { fullName: "o/one" },
+      { fullName: "o/two" },
+      { fullName: "o/three" },
+    ];
+    const touched: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      if (target.endsWith("/access_tokens")) {
+        return json(
+          { token: "inst-tok", expires_at: new Date(Date.now() + 3600_000).toISOString() },
+        );
+      }
+      if (target.includes("/repositories?")) return json({ repositories: [] }); // DB-known repos only
+      const repo = /repos\/([^/]+\/[^/]+)\//.exec(target)?.[1];
+      if (repo) touched.push(repo);
+      if (target.includes("/issues?") || target.includes("/pulls?")) return json([]);
+      if (target.includes("/commits?")) return json([]);
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    const keys = {
+      appId: "42",
+      privateKeyPem: crypto
+        .generateKeyPairSync("rsa", { modulusLength: 2048 })
+        .privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    };
+    try {
+      // Already out of time: still finish the repo it starts, then hand back
+      // the cursor. Progress must be guaranteed or the chain never ends.
+      const first = await backfillInstallation(99, keys, { fetchFn, deadline: 0 });
+      expect(first).toMatchObject({ repos: 1, totalRepos: 3, resumeAt: 1 });
+      expect([...new Set(touched)]).toEqual(["o/one"]);
+
+      touched.length = 0;
+      const second = await backfillInstallation(99, keys, { fetchFn, startAt: 1, deadline: 0 });
+      expect(second).toMatchObject({ repos: 1, totalRepos: 3, resumeAt: 2 });
+      expect([...new Set(touched)]).toEqual(["o/two"]);
+
+      touched.length = 0;
+      const last = await backfillInstallation(99, keys, { fetchFn, startAt: 2 });
+      expect(last).toMatchObject({ repos: 1, totalRepos: 3, resumeAt: null });
+      expect([...new Set(touched)]).toEqual(["o/three"]);
+    } finally {
+      (prisma.repo as unknown as { findMany: unknown }).findMany = origFindMany;
+    }
+  });
+
+  it("ignores a cursor past the end instead of looping", async () => {
+    const { prisma } = await import("../src/db.js");
+    const origFindMany = prisma.repo.findMany;
+    (prisma.repo as unknown as { findMany: unknown }).findMany = async () => [{ fullName: "o/one" }];
+    const fetchFn = (async (url: string | URL | Request) => {
+      const target = url.toString();
+      if (target.endsWith("/access_tokens")) {
+        return json(
+          { token: "inst-tok", expires_at: new Date(Date.now() + 3600_000).toISOString() },
+        );
+      }
+      if (target.includes("/repositories?")) return json({ repositories: [] });
+      throw new Error(`unexpected ${target}`);
+    }) as typeof fetch;
+    const keys = {
+      appId: "42",
+      privateKeyPem: crypto
+        .generateKeyPairSync("rsa", { modulusLength: 2048 })
+        .privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    };
+    try {
+      const out = await backfillInstallation(99, keys, { fetchFn, startAt: 9 });
+      expect(out).toMatchObject({ repos: 0, totalRepos: 1, resumeAt: null });
+    } finally {
+      (prisma.repo as unknown as { findMany: unknown }).findMany = origFindMany;
+    }
   });
 
   it("heals DB-known repos even when the API lists none", async () => {

@@ -20,6 +20,30 @@ export type BackfillDeps = {
   fetchFn?: typeof fetch;
   perPage?: number;
   maxPages?: number;
+  /** Index into the installation's repo list to resume at (see resumeAt). */
+  startAt?: number;
+  /**
+   * Epoch ms after which no further repo is started. A request-driven host
+   * kills the function at a hard cap and stores nothing for the repo it was
+   * in, so stopping between repos is the only safe place to stop.
+   */
+  deadline?: number;
+};
+
+export type BackfillTotals = {
+  repos: number;
+  issues: number;
+  milestones: number;
+  prs: number;
+  commits: number;
+  authorsRepaired: number;
+};
+
+export type BackfillResult = BackfillTotals & {
+  /** How many repos the installation has in total. */
+  totalRepos: number;
+  /** Index to resume from, or null when every repo was covered. */
+  resumeAt: number | null;
 };
 
 const ReposResponse = z.object({
@@ -469,7 +493,7 @@ export async function backfillInstallation(
   installationId: bigint | number | string,
   keys: KeyMaterial,
   deps: BackfillDeps = {},
-): Promise<{ repos: number; issues: number; milestones: number; prs: number; commits: number; authorsRepaired: number }> {
+): Promise<BackfillResult> {
   const fetchFn = deps.fetchFn ?? fetch;
   const token = await getInstallationToken(installationId, keys, { fetchFn });
   const totals = { repos: 0, issues: 0, milestones: 0, prs: 0, commits: 0, authorsRepaired: 0 };
@@ -513,7 +537,16 @@ export async function backfillInstallation(
       allNames.push(n);
     }
   }
-  for (const fullName of allNames) {
+  const startAt = Math.min(Math.max(deps.startAt ?? 0, 0), allNames.length);
+  let resumeAt: number | null = null;
+  for (let i = startAt; i < allNames.length; i++) {
+    // Always finish the repo we start — a half-synced repo stores nothing
+    // useful — but never start one the caller's remaining budget cannot hold.
+    if (deps.deadline !== undefined && i > startAt && Date.now() >= deps.deadline) {
+      resumeAt = i;
+      break;
+    }
+    const fullName = allNames[i]!;
     const out = await backfillRepoIssues(fullName, token, deps);
     totals.repos += 1;
     if (out && !out.skipped) {
@@ -535,5 +568,5 @@ export async function backfillInstallation(
     }));
     totals.authorsRepaired += fixed.repaired;
   }
-  return totals;
+  return { ...totals, totalRepos: allNames.length, resumeAt };
 }

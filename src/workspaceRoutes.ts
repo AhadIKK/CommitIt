@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { canAccessRepo, isAuthEnforced } from "./access.js";
 import { syncUserInstalls } from "./installations.js";
@@ -27,6 +28,7 @@ import {
   startTelegramLink,
   todayOf,
 } from "./workspace.js";
+import { runWorkerTick } from "./workerTick.js";
 
 // workspaceRoutes.ts — the HTTP surface for the signed-in product.
 //
@@ -45,6 +47,8 @@ export type WorkspaceRequest = {
   query: URLSearchParams;
   body: unknown;
   cookies: Record<string, string>;
+  /** Lower-cased request headers, for the one route that authenticates by key. */
+  headers?: Record<string, string | undefined>;
   ip: string;
 };
 
@@ -70,6 +74,29 @@ function fail(status: number, error: string): WorkspaceResponse {
 }
 
 const WRITE_LIMIT = { max: 30 };
+
+/** Constant-time compare, so the tick key cannot be guessed byte by byte. */
+function sameSecret(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/** The tick runs on a serverless host, where console output is the log. */
+function tickLog() {
+  const line = (level: "info" | "error", detail: object, message: string) => {
+    const err = (detail as { err?: unknown }).err;
+    const rest = JSON.stringify({ ...detail, err: undefined });
+    const text = `[worker-tick] ${message}${err instanceof Error ? ` ${err.message}` : ""} ${rest}`;
+    if (level === "error") console.error(text);
+    else console.info(text);
+  };
+  return {
+    info: (detail: object, message: string) => line("info", detail, message),
+    error: (detail: object, message: string) => line("error", detail, message),
+  };
+}
 
 const LinkBody = z.object({ issueNumber: z.number().int().positive() });
 const AiBody = z.object({ enabled: z.boolean() });
@@ -139,6 +166,20 @@ async function route(req: WorkspaceRequest): Promise<WorkspaceResponse | null> {
   if (method === "GET" && path === "/repos") {
     const me = await meDto(await sessionOf(req));
     return json(200, me.repos);
+  }
+  // --- worker tick ---------------------------------------------------------
+  // The queue used to be drained by a long-lived process on a host that slept
+  // between visits. Supabase pg_cron calls this once a minute instead
+  // (prisma/sql/worker-tick-cron.sql). There is no session on a cron call, so
+  // the shared key is the whole gate: an open drain endpoint could be used to
+  // make us claim jobs and send digests.
+  if (method === "POST" && path === "/worker/tick") {
+    const expected = (process.env.WORKER_TICK_SECRET ?? "").trim();
+    if (!expected) return fail(503, "worker_tick_not_configured");
+    const provided = (req.headers?.["x-worker-key"] ?? "").trim();
+    if (!sameSecret(provided, expected)) return fail(401, "unauthorized");
+    const result = await runWorkerTick(tickLog());
+    return json(200, result);
   }
   // The operator ledger. Same data as the product screens, one payload: the
   // /app pages are tables, and eight round-trips to draw eight tables is how a
@@ -291,6 +332,7 @@ function toWorkspaceRequest(req: FastifyRequest): WorkspaceRequest {
     query: url.searchParams,
     body: req.body ?? {},
     cookies: parseCookies(req.headers.cookie),
+    headers: req.headers as Record<string, string | undefined>,
     ip: req.ip ?? req.headers["x-forwarded-for"]?.toString() ?? "unknown",
   };
 }
@@ -320,6 +362,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance) {
     "/api/link/telegram",
     "/api/link/telegram/*",
     "/api/onboarding/mode",
+    "/api/worker/tick",
   ]) {
     app.route({ method: ["GET", "POST", "PUT", "DELETE"], url: path, handler });
   }
@@ -338,6 +381,7 @@ export function isWorkspacePath(path: string): boolean {
     p.startsWith("/repos/") ||
     p.startsWith("/auth/github/") ||
     p.startsWith("/link/telegram") ||
-    p === "/onboarding/mode"
+    p === "/onboarding/mode" ||
+    p === "/worker/tick"
   );
 }

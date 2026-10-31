@@ -18,7 +18,7 @@ import {
 } from "./formatter.js";
 import { linkCommit } from "./linker.js";
 import { syncRepoIssues, stampIssueTimestamps } from "./github-sync.js";
-import { claimNextJob, completeJob, failJob, JOB_MAX_ATTEMPTS, reclaimStuckJobs, abandonJob } from "./queue.js";
+import { claimNextJob, completeJob, enqueueJob, failJob, JOB_MAX_ATTEMPTS, reclaimStuckJobs, abandonJob } from "./queue.js";
 import { jobFailureAction, PermanentJobError } from "./jobErrors.js";
 import { findStaleBranches } from "./stale.js";
 import { deliver, dispatchDueNotifications } from "./delivery.js";
@@ -449,7 +449,17 @@ async function processStaleCheck(
   await completeJob(job.id);
 }
 
-export async function processJob(job: JobRow): Promise<void> {
+export type JobRunOptions = {
+  /**
+   * Epoch ms after which a job must stop starting new work. Request-driven
+   * hosts kill the function at a hard cap; a job that stops between units can
+   * save a cursor and continue in a fresh call, while one that is killed
+   * mid-flight loses the work it had not written yet.
+   */
+  deadline?: number;
+};
+
+export async function processJob(job: JobRow, opts: JobRunOptions = {}): Promise<void> {
   switch (job.type) {
     case "push":
       await processPush(job, job.payload as PushPayload);
@@ -522,8 +532,11 @@ export async function processJob(job: JobRow): Promise<void> {
     case "backfill": {
       // One-shot per-install sync. RateLimitedError propagates to failJob()
       // backoff; missing App config completes (retry would never help).
-      const installationId = (job.payload as { installationId?: string | number })
-        .installationId;
+      const payload = job.payload as {
+        installationId?: string | number;
+        resumeAt?: number | string;
+      };
+      const installationId = payload.installationId;
       if (installationId === undefined) {
         await completeJob(job.id);
         return;
@@ -535,8 +548,12 @@ export async function processJob(job: JobRow): Promise<void> {
         await completeJob(job.id);
         return;
       }
+      const resumeAt = Number(payload.resumeAt ?? 0) || 0;
       try {
-        const totals = await backfillInstallation(installationId, keys);
+        const totals = await backfillInstallation(installationId, keys, {
+          startAt: resumeAt,
+          deadline: opts.deadline,
+        });
         console.log(
           JSON.stringify({
             msg: "backfill_done",
@@ -545,6 +562,16 @@ export async function processJob(job: JobRow): Promise<void> {
             totals,
           }),
         );
+        if (totals.resumeAt !== null) {
+          // A big install cannot be covered inside one function call, so the
+          // rest continues as its own job: the cursor travels in the payload
+          // and the delivery id keeps the `sync-<id>-` prefix that
+          // cancelQueuedBackfills() matches on uninstall.
+          await enqueueJob("backfill", `${job.deliveryId}:r${totals.resumeAt}`, {
+            installationId,
+            resumeAt: totals.resumeAt,
+          });
+        }
       } catch (err) {
         console.warn(
           JSON.stringify({
@@ -564,12 +591,56 @@ export async function processJob(job: JobRow): Promise<void> {
   }
 }
 
-export function startWorker(
-  log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void },
-  intervalMs = 5000,
-): NodeJS.Timeout {
+export type WorkerLog = {
+  info: (o: object, m: string) => void;
+  error: (o: object, m: string) => void;
+};
+
+/**
+ * Run one claimed job under the queue's failure policy. Never throws.
+ *
+ * Per-job catch: a throwing job must go back to the queue with backoff
+ * (failJob), not be left in `processing`. Without this the outer catch only
+ * logged, so every failure became an orphan — including the 429s that are
+ * explicitly not to be dropped.
+ */
+export async function runClaimedJob(
+  job: JobRow,
+  log: WorkerLog,
+  opts: JobRunOptions = {},
+): Promise<void> {
+  try {
+    await processJob(job, opts);
+  } catch (err) {
+    // PermanentJobError (e.g. a deleted installation) can never succeed:
+    // abandon on the first failure. Everything else retries with backoff, up
+    // to JOB_MAX_ATTEMPTS, so a poison payload still stops eventually.
+    const action = jobFailureAction(err, job.attempts, JOB_MAX_ATTEMPTS);
+    const permanent = err instanceof PermanentJobError;
+    log.error(
+      {
+        err,
+        jobId: job.id,
+        type: job.type,
+        attempts: job.attempts,
+        action,
+        permanent,
+      },
+      permanent ? "job_abandoned_permanent" : action === "abandon" ? "job_abandoned" : "job_failed",
+    );
+    if (action === "abandon") await abandonJob(job.id);
+    else await failJob(job.id, job.attempts);
+  }
+}
+
+/**
+ * The long-lived poller, for a host that keeps a process alive (local dev,
+ * `npm start`). The deployed worker is request-driven instead — see
+ * src/workerTick.ts — so this is not required for production.
+ */
+export function startWorker(log: WorkerLog, intervalMs = 5000): NodeJS.Timeout {
   // Self-heal on boot: this process is fresh, so anything still `processing`
-  // was orphaned by the previous instance dying (Render free sleep/deploy).
+  // was orphaned by the previous instance dying.
   void reclaimStuckJobs()
     .then((n) => {
       if (n > 0) log.info({ count: n }, "jobs_reclaimed_stale");
@@ -582,38 +653,7 @@ export function startWorker(
   const timer = setInterval(async () => {
     try {
       const job = await claimNextJob();
-      if (job) {
-        // Per-job catch: a throwing job must go back to the queue with
-        // backoff (failJob), not be left in `processing`. Without this the
-        // outer catch only logged, so every failure became an orphan —
-        // including the 429s that are explicitly not to be dropped.
-        try {
-          await processJob(job);
-        } catch (err) {
-          // PermanentJobError (e.g. a deleted installation) can never succeed:
-          // abandon on the first failure. Everything else retries with backoff,
-          // up to JOB_MAX_ATTEMPTS, so a poison payload still stops eventually.
-          const action = jobFailureAction(err, job.attempts, JOB_MAX_ATTEMPTS);
-          const permanent = err instanceof PermanentJobError;
-          log.error(
-            {
-              err,
-              jobId: job.id,
-              type: job.type,
-              attempts: job.attempts,
-              action,
-              permanent,
-            },
-            permanent
-              ? "job_abandoned_permanent"
-              : action === "abandon"
-                ? "job_abandoned"
-                : "job_failed",
-          );
-          if (action === "abandon") await abandonJob(job.id);
-          else await failJob(job.id, job.attempts);
-        }
-      }
+      if (job) await runClaimedJob(job, log);
       await dispatchDueNotifications();
       if (++ticks % reclaimEveryTicks === 0) {
         const n = await reclaimStuckJobs();
@@ -625,15 +665,4 @@ export function startWorker(
   }, intervalMs);
   timer.unref?.();
   return timer;
-}
-
-export async function drainOnce(): Promise<boolean> {
-  const job = await claimNextJob();
-  if (!job) return false;
-  try {
-    await processJob(job);
-  } catch {
-    await failJob(job.id, job.attempts);
-  }
-  return true;
 }

@@ -120,11 +120,11 @@ export async function abandonJob(id: string): Promise<void> {
 }
 
 // A job left in `processing` when the instance dies (Render free sleep,
-// deploy, crash) is never re-claimed — claimNextJob() only selects `queued`
-// rows, so it would sit there forever and its event is silently lost.
-// Lease-timeout reclaim: any `processing` row untouched for JOB_STALE_MS is
-// handed back to the queue (attempts already counted at claim time, so
-// repeated failures still back off).
+// deploy, crash, a host killing the function at its cap) is never re-claimed —
+// claimNextJob() only selects `queued` rows, so it would sit there forever and
+// its event is silently lost. Lease-timeout reclaim: any `processing` row
+// untouched for JOB_STALE_MS is handed back to the queue (attempts already
+// counted at claim time, so repeated failures still back off).
 export const JOB_STALE_MS = Number(process.env.JOB_STALE_MS ?? 10 * 60 * 1000);
 
 export async function reclaimStuckJobs(
@@ -133,6 +133,19 @@ export async function reclaimStuckJobs(
 ): Promise<number> {
   const cutoff = new Date(now.getTime() - staleMs);
   try {
+    // A job that keeps getting killed (work longer than the host's function
+    // cap) would otherwise be reclaimed and re-claimed forever: claiming bumps
+    // `attempts`, but reclaiming never gave up on it. Poison-pill it instead,
+    // loudly, so the queue cannot churn on work that can never finish.
+    const dead = await prisma.job.updateMany({
+      where: { status: "processing", updatedAt: { lt: cutoff }, attempts: { gte: JOB_MAX_ATTEMPTS } },
+      data: { status: "failed" },
+    });
+    if (dead.count > 0) {
+      console.warn(
+        JSON.stringify({ msg: "jobs_abandoned_stale", count: dead.count, staleMs }),
+      );
+    }
     const res = await prisma.job.updateMany({
       where: { status: "processing", updatedAt: { lt: cutoff } },
       data: { status: "queued", nextRetryAt: null },
@@ -142,9 +155,9 @@ export async function reclaimStuckJobs(
     let n = 0;
     for (const job of memoryFallback) {
       if (job.status === "processing") {
-        job.status = "queued";
+        job.status = job.attempts >= JOB_MAX_ATTEMPTS ? "failed" : "queued";
         job.nextRetryAt = null;
-        n += 1;
+        if (job.status === "queued") n += 1;
       }
     }
     return n;

@@ -26,26 +26,42 @@ beforeEach(() => {
 
 describe("reclaimStuckJobs", () => {
   it("requeues only processing rows past the lease, clearing nextRetryAt", async () => {
-    updateMany.mockResolvedValue({ count: 3 });
+    updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 3 });
     const now = new Date("2026-10-17T12:00:00.000Z");
 
     await expect(reclaimStuckJobs(JOB_STALE_MS, now)).resolves.toBe(3);
 
-    expect(updateMany).toHaveBeenCalledTimes(1);
-    const arg = updateMany.mock.calls[0]![0] as {
+    // Two passes: abandon the ones that burned through their attempts, then
+    // requeue the rest.
+    expect(updateMany).toHaveBeenCalledTimes(2);
+    const requeue = updateMany.mock.calls[1]![0] as {
       where: { status: string; updatedAt: { lt: Date } };
       data: { status: string; nextRetryAt: null };
     };
-    expect(arg.where.status).toBe("processing");
-    expect(arg.data).toEqual({ status: "queued", nextRetryAt: null });
+    expect(requeue.where.status).toBe("processing");
+    expect(requeue.data).toEqual({ status: "queued", nextRetryAt: null });
     // cutoff is exactly now - staleMs
-    expect(arg.where.updatedAt.lt.getTime()).toBe(now.getTime() - JOB_STALE_MS);
+    expect(requeue.where.updatedAt.lt.getTime()).toBe(now.getTime() - JOB_STALE_MS);
+  });
+
+  it("abandons a job that has already burned its attempts instead of looping", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await reclaimStuckJobs();
+
+    const abandon = updateMany.mock.calls[0]![0] as {
+      where: { status: string; attempts: { gte: number } };
+      data: { status: string };
+    };
+    expect(abandon.where.status).toBe("processing");
+    expect(abandon.where.attempts.gte).toBe(JOB_MAX_ATTEMPTS);
+    expect(abandon.data).toEqual({ status: "failed" });
   });
 
   it("never touches queued or done rows (status filter is exact)", async () => {
     updateMany.mockResolvedValue({ count: 0 });
     await reclaimStuckJobs();
-    const arg = updateMany.mock.calls[0]![0] as { where: { status: string } };
+    const arg = updateMany.mock.calls[1]![0] as { where: { status: string } };
     expect(arg.where.status).toBe("processing");
   });
 

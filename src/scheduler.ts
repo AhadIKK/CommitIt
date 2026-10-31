@@ -60,36 +60,42 @@ export function parseStaleRepos(raw: string | undefined): string[] {
     .filter((s) => REPO_RE.test(s));
 }
 
-// Enqueues one `stale_check` job per configured repo, keyed by day so
-// re-runs are idempotent (enqueueJob upserts on delivery_id). Ticks hourly
-// so restarts self-correct. Returns null when unconfigured.
+export type SchedulerLog = {
+  info: (o: object, m: string) => void;
+  error: (o: object, m: string) => void;
+};
+
+// Enqueues one `stale_check` job per configured repo, keyed by day so re-runs
+// are idempotent (enqueueJob upserts on delivery_id). Safe to call on every
+// worker tick: the second call in a day is a no-op.
+export async function enqueueStaleChecks(log: SchedulerLog): Promise<void> {
+  const repos = parseStaleRepos(process.env.STALE_CHECK_REPOS);
+  if (repos.length === 0) return;
+  const days = Number(process.env.STALE_DAYS ?? 6) || 6;
+  const day = new Date().toISOString().slice(0, 10);
+  for (const repo of repos) {
+    try {
+      await enqueueJob("stale_check", `stale-check:${repo}:${day}`, {
+        repo,
+        thresholdDays: days,
+      });
+    } catch (err) {
+      log.error({ err, repo }, "stale enqueue failed");
+    }
+  }
+}
+
 export function startStaleScheduler(
-  log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void },
+  log: SchedulerLog,
   intervalMs = 3_600_000,
 ): NodeJS.Timeout | null {
-  const repos = parseStaleRepos(process.env.STALE_CHECK_REPOS);
-  if (repos.length === 0) {
+  if (parseStaleRepos(process.env.STALE_CHECK_REPOS).length === 0) {
     log.info({}, "STALE_CHECK_REPOS empty — stale scheduler disabled");
     return null;
   }
-  const days = Number(process.env.STALE_DAYS ?? 6) || 6;
-  const tick = async () => {
-    const day = new Date().toISOString().slice(0, 10);
-    for (const repo of repos) {
-      try {
-        await enqueueJob("stale_check", `stale-check:${repo}:${day}`, {
-          repo,
-          thresholdDays: days,
-        });
-      } catch (err) {
-        log.error({ err, repo }, "stale enqueue failed");
-      }
-    }
-  };
-  void tick();
-  const timer = setInterval(() => {
-    void tick().catch((err) => log.error({ err }, "stale tick failed"));
-  }, intervalMs);
+  const tick = () => void enqueueStaleChecks(log).catch((err) => log.error({ err }, "stale tick failed"));
+  tick();
+  const timer = setInterval(tick, intervalMs);
   timer.unref?.();
   return timer;
 }
@@ -108,17 +114,54 @@ export function syncIntervalHours(raw?: string): number {
 /**
  * Automatic history re-sync. The install backfill is one-shot, so without
  * this a repo only ever shows pushes made after install. Every interval
- * bucket this enqueues one `backfill` job per known installation (idempotent
- * via the delivery id, so restarts and overlapping ticks never pile up). The
- * job re-runs issues + merged PRs + commit history for that install's repos.
+ * bucket this enqueues one `backfill` job per installation that actually has
+ * a repository (idempotent via the delivery id, so restarts and overlapping
+ * ticks never pile up). The job re-runs issues + merged PRs + commit history
+ * for that install's repos.
  *
- * Runs inside the worker process (index.ts), so the same poller picks the
- * job up immediately — no wake ping needed. `sync-<id>-auto-<bucket>` also
- * matches the `sync-<id>-` prefix cancelQueuedBackfills() uses on uninstall.
- * Returns null when disabled (`SYNC_INTERVAL_HOURS=0`).
+ * Installations with no repo are skipped: they would fail on the first page
+ * every night (the empty `embedclubpace` install did exactly that, one
+ * abandoned job per day) and they have nothing to sync.
+ *
+ * `sync-<id>-auto-<bucket>` also matches the `sync-<id>-` prefix
+ * cancelQueuedBackfills() uses on uninstall. Safe to call on every worker
+ * tick: the bucket in the delivery id makes repeats a no-op.
  */
+export async function enqueueAutoSync(log: SchedulerLog): Promise<void> {
+  const hours = syncIntervalHours(process.env.SYNC_INTERVAL_HOURS);
+  if (hours <= 0) return;
+  const bucketMs = hours * 3_600_000;
+
+  let ids: bigint[] = [];
+  try {
+    const { prisma } = await import("./db.js");
+    const [installs, repos] = await Promise.all([
+      prisma.installation.findMany({ where: { suspendedAt: null }, select: { id: true } }),
+      prisma.repo.findMany({ select: { installationId: true } }),
+    ]);
+    const withRepos = new Set(
+      repos
+        .map((r) => r.installationId?.toString())
+        .filter((id): id is string => Boolean(id)),
+    );
+    ids = installs.map((r) => r.id).filter((id) => withRepos.has(id.toString()));
+  } catch {
+    return; // DB down: retry on the next tick
+  }
+
+  const bucket = Math.floor(Date.now() / bucketMs);
+  for (const id of ids) {
+    const sid = id.toString();
+    try {
+      await enqueueJob("backfill", `sync-${sid}-auto-${bucket}`, { installationId: sid });
+    } catch (err) {
+      log.error({ err, installationId: sid }, "auto-sync enqueue failed");
+    }
+  }
+}
+
 export function startAutoSyncScheduler(
-  log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void },
+  log: SchedulerLog,
   tickMs = 3_600_000,
 ): NodeJS.Timeout | null {
   const hours = syncIntervalHours(process.env.SYNC_INTERVAL_HOURS);
@@ -126,30 +169,7 @@ export function startAutoSyncScheduler(
     log.info({}, "SYNC_INTERVAL_HOURS=0 — auto sync disabled");
     return null;
   }
-  const bucketMs = hours * 3_600_000;
-  const tick = async () => {
-    let ids: bigint[] = [];
-    try {
-      const { prisma } = await import("./db.js");
-      const rows = await prisma.installation.findMany({
-        where: { suspendedAt: null },
-        select: { id: true },
-      });
-      ids = rows.map((r) => r.id);
-    } catch {
-      return; // DB down: retry on the next tick
-    }
-    const bucket = Math.floor(Date.now() / bucketMs);
-    for (const id of ids) {
-      const sid = id.toString();
-      try {
-        await enqueueJob("backfill", `sync-${sid}-auto-${bucket}`, { installationId: sid });
-      } catch (err) {
-        log.error({ err, installationId: sid }, "auto-sync enqueue failed");
-      }
-    }
-  };
-  const run = () => void tick().catch((err) => log.error({ err }, "auto-sync tick failed"));
+  const run = () => void enqueueAutoSync(log).catch((err) => log.error({ err }, "auto-sync tick failed"));
   run();
   const timer = setInterval(run, tickMs);
   timer.unref?.();

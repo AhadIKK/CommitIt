@@ -1,5 +1,16 @@
 # Changes
 
+## 2026-10-31 — The worker moved into a cron tick; Render is gone
+- Render's free plan was running out, and it was only hosting the queue worker (`npm start` = Fastify + a 5 s poller + two schedulers). The database was never on Render — it has been Supabase since 12 Oct — so nothing needed migrating.
+- New `POST /api/worker/tick` (`src/workerTick.ts`, routed through `src/workspaceRoutes.ts`) runs one bounded pass: reclaim orphaned jobs → send due digests → run both schedulers (no-ops unless their day/bucket is new) → claim and run up to 10 jobs, all inside a 30 s budget. Supabase `pg_cron` calls it every minute through `pg_net` (`prisma/sql/worker-tick-cron.sql`), keyed by `WORKER_TICK_SECRET` — constant-time compare, and an unset key answers 503 rather than leaving an open drain.
+- The function is capped at 45 s and the schedule fires every 60 s, so two ticks can never overlap. That matters because `dispatchDueNotifications` is not atomic, and overlapping ticks could send the same digest twice.
+- Digests go out **before** the drain, so a long job cannot push them past their slot.
+- Long jobs stop instead of being killed: every job gets the tick's deadline, and `backfillInstallation` stops between repos and continues as a fresh job carrying its cursor (`<deliveryId>:r<index>`, which still matches the `sync-<id>-` prefix uninstall cancellation uses).
+- `reclaimStuckJobs` now abandons a job that has burned `JOB_MAX_ATTEMPTS` claims instead of requeueing it forever — work that is longer than the host's cap would otherwise churn indefinitely.
+- Auto-sync no longer queues a nightly backfill for an installation with zero repos (`embedclubpace` had 16 abandoned jobs, one per day).
+- Deleted `render.yaml` and `.github/workflows/keep-warm.yaml`; the workflow existed only to keep the free instance awake. `npm run dev` / `npm start` still run the in-process poller for local work.
+- Tests: worker tick (7), tick route (4), auto-sync (4), backfill resume (3), backfill continuation (1), reclaim attempts cap (1).
+
 ## 2026-10-18 — Bot: `/recent`, see the latest commits without leaving Telegram
 - New command: **`/recent [owner/repo]`** lists the newest commits as one line each — short SHA, category, subject, author, age:
   `<code>a1b2c3d</code> <b>feat</b> add /recent command → #7 — octocat, 2h ago`.

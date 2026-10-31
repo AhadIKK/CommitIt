@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const jobs: { type: string; deliveryId: string }[] = [];
+let installIds: bigint[] = [77n, 88n];
+let repoNames: bigint[] = [77n, 88n];
 
 vi.mock("../src/db.js", () => ({
   prisma: {
     installation: {
-      findMany: async () => [{ id: 77n }, { id: 88n }],
+      findMany: async () => installIds.map((id) => ({ id })),
+    },
+    repo: {
+      findMany: async () => repoNames.map((installationId) => ({ installationId })),
     },
     job: {
       upsert: async (args: { create: { type: string; deliveryId: string } }) => {
@@ -16,7 +21,7 @@ vi.mock("../src/db.js", () => ({
   },
 }));
 
-import { startAutoSyncScheduler, syncIntervalHours } from "../src/scheduler.js";
+import { enqueueAutoSync, startAutoSyncScheduler, syncIntervalHours } from "../src/scheduler.js";
 
 const log = { info: () => {}, error: () => {} };
 
@@ -36,6 +41,8 @@ describe("startAutoSyncScheduler", () => {
   afterEach(() => {
     delete process.env.SYNC_INTERVAL_HOURS;
     jobs.length = 0;
+    installIds = [77n, 88n];
+    repoNames = [77n, 88n];
   });
 
   it("stays off when SYNC_INTERVAL_HOURS=0", () => {
@@ -53,5 +60,17 @@ describe("startAutoSyncScheduler", () => {
     // delivery id matches the sync-<id>- prefix uninstall cancellation uses
     expect(jobs[0]?.deliveryId).toMatch(/^sync-77-auto-\d+$/);
     expect(jobs[1]?.deliveryId).toMatch(/^sync-88-auto-\d+$/);
+  });
+
+  it("skips an installation that has no repository", async () => {
+    process.env.SYNC_INTERVAL_HOURS = "24";
+    installIds = [77n, 88n, 99n];
+
+    await enqueueAutoSync(log);
+
+    expect(jobs.map((j) => j.deliveryId)).toEqual([
+      expect.stringMatching(/^sync-77-auto-\d+$/),
+      expect.stringMatching(/^sync-88-auto-\d+$/),
+    ]);
   });
 });

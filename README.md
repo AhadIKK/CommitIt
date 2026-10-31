@@ -26,10 +26,12 @@ See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message sty
 4. **Install + link** — open the dashboard, Install the App on chosen repos,
    Link GitHub account (first login creates it), Connect Telegram via the Join
    link, `/bind owner/repo` in the chat (groups: admins only).
-5. **Queue note** — webhook ingestion + dashboard reads run on Vercel, but job
-   processing (`enqueueJob` → worker: digests, alerts) needs a long-lived host
-   (`npm start` on Render/local runs the poller). Vercel-only deploys store
-   events without draining jobs.
+5. **Queue note** — webhook ingestion + dashboard reads run on Vercel, and so
+   does job processing: Supabase pg_cron calls `POST /api/worker/tick` every
+   minute (keyed by `WORKER_TICK_SECRET`), which drains `jobs` (digests, alerts,
+   backfills) and sends whatever digest is due. No second host, nothing to keep
+   awake. Schedule lives in `prisma/sql/worker-tick-cron.sql`. Locally,
+   `npm run dev` runs the poller in-process instead.
 
 ## Local dev (ngrok fallback, unsupported in prod)
 
