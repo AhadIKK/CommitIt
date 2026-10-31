@@ -56,13 +56,17 @@ describe("parseUnifiedDiff", () => {
 });
 
 describe("buildExcerpt", () => {
+  // Built at runtime on purpose: written literally, this fixture would itself
+  // trip scan() and fire a false secret alert on any push touching this file.
+  const FAKE_AWS_KEY = "AKIA" + "IOSFODNN7EXAMPLE";
+
   it("excludes files that tripped the secret scan, keeping the path out of the payload", () => {
     const files = parseUnifiedDiff(
       [
         "diff --git a/.env b/.env",
         "--- a/.env",
         "+++ b/.env",
-        "+AWS_KEY=AKIAIOSFODNN7EXAMPLE",
+        `+AWS_KEY=${FAKE_AWS_KEY}`,
         "diff --git a/src/ok.ts b/src/ok.ts",
         "--- a/src/ok.ts",
         "+++ b/src/ok.ts",
@@ -77,7 +81,7 @@ describe("buildExcerpt", () => {
     const excerpt = buildExcerpt(files, new Set(secretPaths(hits.hits)));
     expect(excerpt).toContain("src/ok.ts");
     expect(excerpt).not.toContain(".env");
-    expect(excerpt).not.toContain("AKIAIOSFODNN7EXAMPLE");
+    expect(excerpt).not.toContain(FAKE_AWS_KEY);
   });
 
   it("caps the whole payload at 8 KB even with many files", () => {
