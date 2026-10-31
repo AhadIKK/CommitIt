@@ -116,20 +116,21 @@ export function LedgerSite() {
             <a href="#safety">Safety</a>
             <a href="#demo">Live demo</a>
           </nav>
-          <button
-            type="button"
-            className="ld-tab"
-            onClick={() =>
-              setScheme(scheme === "dark" ? "light" : scheme === "light" ? "auto" : "dark")
-            }
-          >
-            {scheme === "auto" ? "auto" : scheme}
-          </button>
-          <span className="ld-header__cta">
-            <Link className="ld-btn ld-btn--primary" to="/connect/github">
+          <div className="ld-header__actions">
+            <button
+              type="button"
+              className="ld-tab"
+              onClick={() =>
+                setScheme(scheme === "dark" ? "light" : scheme === "light" ? "auto" : "dark")
+              }
+              aria-label={`Theme: ${scheme}`}
+            >
+              {scheme === "auto" ? "auto" : scheme}
+            </button>
+            <Link className="ld-btn ld-btn--primary ld-header__cta-btn" to="/connect/github">
               Connect a repo
             </Link>
-          </span>
+          </div>
         </div>
       </header>
 
@@ -139,7 +140,6 @@ export function LedgerSite() {
         <div className="ledger__main" id="main">
           {/* 1 — HERO ------------------------------------------------------ */}
           <section>
-            <p className="margin-note">fig. 1</p>
             <h1 className="ld-display">
               Commits are not{" "}
               <br />
@@ -165,7 +165,6 @@ export function LedgerSite() {
 
           {/* 2 — THE ARGUMENT --------------------------------------------- */}
           <section id="argument">
-            <p className="margin-note">§ 1</p>
             <h2 className="ld-h2">Two numbers, and they disagree.</h2>
             <p className="ld-body">
               Activity and progress are different quantities, and a commit count is an activity
@@ -202,29 +201,42 @@ export function LedgerSite() {
 
           {/* 3 — HOW IT WORKS --------------------------------------------- */}
           <section id="how">
-            <p className="margin-note">§ 3</p>
             <h2 className="ld-h2">Eleven stations, in order, every time.</h2>
-            <ol className="lineup">
-              {PIPELINE.map((p) => (
-                <li key={p.label} data-note={p.note}>
-                  <button
-                    type="button"
-                    aria-current={station === p.label}
-                    onMouseEnter={() => setStation(p.label)}
-                    onFocus={() => setStation(p.label)}
-                    onClick={() => setStation(p.label)}
-                  >
-                    {p.label}
-                  </button>
-                </li>
-              ))}
-            </ol>
-            <p className="lineup__say">{STATION_COPY[station]}</p>
+            <div className="pipeline-board">
+              <ol className="lineup">
+                {PIPELINE.map((p, idx) => {
+                  const isSelected = station === p.label;
+                  return (
+                    <li key={p.label}>
+                      <button
+                        type="button"
+                        className={isSelected ? "is-active" : ""}
+                        aria-current={isSelected}
+                        onMouseEnter={() => setStation(p.label)}
+                        onFocus={() => setStation(p.label)}
+                        onClick={() => setStation(p.label)}
+                      >
+                        <span className="station-num">{String(idx + 1).padStart(2, "0")}</span>
+                        <span className="station-name">{p.label}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+              <div className="station-card">
+                <div className="station-card__header">
+                  <span className="station-card__badge">
+                    Station {String(PIPELINE.findIndex((p) => p.label === station) + 1).padStart(2, "0")} of 11
+                  </span>
+                  <strong className="station-card__title">{station}</strong>
+                </div>
+                <p className="station-card__desc">{STATION_COPY[station]}</p>
+              </div>
+            </div>
           </section>
 
           {/* 4 — THE DIGEST ------------------------------------------------ */}
           <section id="digest">
-            <p className="margin-note">§ 4</p>
             <h2 className="ld-h2">Forty lines become three.</h2>
             <p className="ld-body">
               A day of raw commits, and the one message they collapse into. Scroll, or read it: the
@@ -279,7 +291,6 @@ export function LedgerSite() {
 
           {/* 5 — NOISE CONTROL --------------------------------------------- */}
           <section id="noise">
-            <p className="margin-note">§ 5</p>
             <h2 className="ld-h2">Loud by default is a choice, not a setting.</h2>
 
             <div className="specimens">
@@ -343,7 +354,6 @@ export function LedgerSite() {
 
           {/* 6 — SAFETY ---------------------------------------------------- */}
           <section id="safety">
-            <p className="margin-note">§ 7</p>
             <h2 className="ld-h2">The file is named. The value is not shown.</h2>
             <p className="ld-body">
               Every commit is scanned for credentials before any summary is written. A file that
@@ -373,7 +383,6 @@ export function LedgerSite() {
 
           {/* 7 — LIVE DEMO -------------------------------------------------- */}
           <section id="demo">
-            <p className="margin-note">§ 8</p>
             <h2 className="ld-h2">The same screen your team will actually use.</h2>
             <p className="ld-body">
               The track is the only saturated element on the screen. Everything else — the ledger,

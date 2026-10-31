@@ -234,20 +234,23 @@ kbd,
   top: 0;
   z-index: 20;
   background: color-mix(in srgb, var(--paper) 92%, transparent);
-  backdrop-filter: saturate(1.1);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
   border-bottom: 1px solid var(--rule);
 }
 .ld-header__inner {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--s4);
   max-width: 1320px;
   margin-inline: auto;
-  padding: var(--s2) var(--s3);
+  padding: 12px var(--s3);
+  min-height: 64px;
 }
 @media (min-width: 900px) {
   .ld-header__inner {
-    padding: var(--s2) var(--s4);
+    padding: 12px var(--s4);
   }
 }
 .ld-wordmark {
@@ -259,6 +262,7 @@ kbd,
   letter-spacing: -0.01em;
   color: var(--graphite);
   text-decoration: none;
+  flex-shrink: 0;
 }
 /* The one logo device: the wordmark is set with a dotless i (U+0131) and a
    vermilion dot dropped in above it, so the mark reads "CommitIt" and the dot
@@ -279,8 +283,9 @@ kbd,
 }
 .ld-nav {
   display: none;
-  gap: var(--s3);
-  margin-left: auto;
+  align-items: center;
+  gap: clamp(16px, 2.5vw, 32px);
+  margin-inline: auto;
   font-family: var(--ld-mono);
   font-size: 13px;
 }
@@ -294,33 +299,43 @@ kbd,
   text-decoration: none;
   border-bottom: 1px solid transparent;
   padding-bottom: 2px;
+  transition: color 140ms ease, border-color 140ms ease;
 }
 .ld-nav a:hover {
-  border-bottom-color: var(--rule-strong);
+  color: var(--signal);
+  border-bottom-color: var(--signal);
 }
-.ld-header__cta {
-  margin-left: auto;
+.ld-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-shrink: 0;
 }
-@media (min-width: 900px) {
-  .ld-header__cta {
-    margin-left: 0;
-  }
-}
-/* The theme switch is styled as a ledger tab. */
 .ld-tab {
-  min-height: 32px;
-  padding: 0 var(--s2);
+  min-height: 36px;
+  height: 36px;
+  padding: 0 var(--s3);
   border: 1px solid var(--rule-strong);
-  border-bottom-width: 0;
-  border-radius: 2px 2px 0 0;
+  border-radius: 3px;
   background: transparent;
   color: var(--graphite);
   font-family: var(--ld-mono);
   font-size: 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 .ld-tab:hover {
   background: color-mix(in srgb, var(--graphite) 8%, transparent);
+  border-color: var(--graphite);
+}
+.ld-header__cta-btn {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 var(--s3);
+  font-size: 14px;
 }
 
 /* --- focus: 2px ink, offset, always visible ------------------------------ */
@@ -485,61 +500,132 @@ kbd,
   display: block;
 }
 
-/* --- the pipeline: a ledger line, not a flowchart ------------------------- */
+/* --- the pipeline -------------------------------------------------------- */
+.pipeline-board {
+  margin-top: var(--s4);
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--paper-2);
+  overflow: hidden;
+}
 .lineup {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin: var(--s4) 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+}
+@media (min-width: 1200px) {
+  .lineup {
+    grid-template-columns: repeat(11, 1fr);
+  }
 }
 .lineup li {
   position: relative;
-  padding: var(--s3) var(--s3) var(--s2) 0;
-  margin-right: var(--s3);
   border-right: 1px solid var(--rule);
-  flex: 1 1 auto;
+  border-bottom: 1px solid var(--rule);
 }
-.lineup li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: -1px;
-  width: 9px;
-  height: 2px;
-  background: var(--graphite);
-}
-.lineup li[data-note]::after {
-  content: attr(data-note);
-  position: absolute;
-  top: -14px;
-  left: 0;
-  font-family: var(--ld-mono);
-  font-size: 10px;
-  color: var(--pencil);
+@media (min-width: 1200px) {
+  .lineup li {
+    border-bottom: 0;
+  }
+  .lineup li:last-child {
+    border-right: 0;
+  }
 }
 .lineup button {
-  background: none;
+  width: 100%;
+  height: 100%;
+  min-height: 56px;
+  background: transparent;
   border: 0;
-  padding: 0;
+  padding: 10px 10px;
   font: inherit;
   font-family: var(--ld-mono);
-  font-size: 13px;
   color: var(--graphite);
   cursor: pointer;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+  position: relative;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.lineup button .station-num {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--pencil);
+}
+.lineup button .station-name {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--graphite);
+  word-break: break-word;
 }
 .lineup button:hover {
+  background: color-mix(in srgb, var(--graphite) 6%, transparent);
+}
+.lineup button:hover .station-name {
   color: var(--signal);
 }
-.lineup__say {
+.lineup button.is-active,
+.lineup button[aria-current="true"] {
+  background: color-mix(in srgb, var(--signal) 12%, var(--paper));
+}
+.lineup button.is-active::before,
+.lineup button[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: var(--signal);
+}
+.lineup button.is-active .station-num {
+  color: var(--signal);
+  font-weight: 600;
+}
+.lineup button.is-active .station-name {
+  color: var(--signal);
+  font-weight: 600;
+}
+.station-card {
+  padding: var(--s4);
+  background: var(--paper-2);
+}
+.station-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s2);
+}
+.station-card__badge {
+  font-family: var(--ld-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--signal) 15%, transparent);
+  color: var(--signal);
+  font-weight: 600;
+}
+.station-card__title {
+  font-family: var(--ld-mono);
   font-size: 14px;
-  color: var(--pencil);
-  margin: var(--s3) 0 0;
-  min-height: 3em;
-  max-width: 46ch;
+  color: var(--graphite);
+}
+.station-card__desc {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--graphite);
+  max-width: 65ch;
 }
 
 /* --- the digest: paper bubble, not a copy of Telegram --------------------- */

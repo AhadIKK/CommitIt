@@ -162,11 +162,11 @@ export const RAW_COMMITS: string[] = [
 /** The eleven pipeline stations, drawn as one ledger line rather than a flowchart. */
 export const PIPELINE: { label: string; note?: string }[] = [
   { label: "webhook" },
-  { label: "hmac verify", note: "§ 3" },
+  { label: "hmac verify" },
   { label: "rate limit" },
   { label: "idempotent enqueue" },
   { label: "worker" },
-  { label: "scan", note: "§ 7" },
+  { label: "scan" },
   { label: "trim" },
   { label: "classify" },
   { label: "summarize" },
