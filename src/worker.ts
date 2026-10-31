@@ -1,7 +1,7 @@
 import { classify } from "./brain/classify.js";
+import { buildExcerpt, fetchCommitDiff, parseUnifiedDiff, secretPaths } from "./brain/diff.js";
 import { scan } from "./brain/scan.js";
 import { summarize } from "./brain/summarize.js";
-import { trim } from "./brain/trim.js";
 import { backfillInstallation } from "./backfill.js";
 import { prisma } from "./db.js";
 import { appKeys } from "./githubAuth.js";
@@ -103,6 +103,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
   // unreachable — formatting + notification still run below.
   let repoId: string | null = null;
   let aiEnabled = true;
+  let installationId: bigint | null = null;
   const issueByNumber = new Map<number, string>();
   const openIssues: { number: number; title: string }[] = [];
   try {
@@ -113,6 +114,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
     });
     repoId = repoRow.id;
     aiEnabled = repoRow.aiEnabled;
+    installationId = repoRow.installationId;
     const rows = await prisma.issue.findMany({
       where: { repoId: repoRow.id },
       select: { id: true, number: true, title: true, state: true },
@@ -127,19 +129,44 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
 
   const formatted: FormatCommit[] = [];
   let directToMain = false;
-  for (const c of commits.slice(0, 20)) {
-    const files = [...(c.added ?? []), ...(c.modified ?? [])].map((p) => ({
-      path: p,
-      content: "",
-    }));
-    // NOTE: webhook payloads carry messages, not diffs. Scan runs on the
-    // message here; full diff content is scanned in Phase 6 when fetched.
-    const scanned = scan([{ path: "<message>", content: c.message }]);
-    const secretFlag = scanned.hasSecret;
-    void files;
-    void trim;
+  // Diffs are not in the webhook payload, so they are fetched. Bound the work:
+  // a 20-commit push still has to fit inside the function cap, and past this
+  // many commits the previous message-only path runs unchanged.
+  const MAX_DIFF_COMMITS = 10;
+  // Per-fetch there is a 4s timeout, so ten fetches could spend 40s of the
+  // function's 45s budget before a single summary is written. A total budget
+  // turns that cliff into a slope: whatever is not fetched in time simply
+  // keeps the old message-only behaviour.
+  const DIFF_BUDGET_MS = 6000;
+  const diffDeadline = Date.now() + DIFF_BUDGET_MS;
+  let keys: ReturnType<typeof appKeys> | null = null;
+  try {
+    keys = appKeys();
+  } catch {
+    // No App key material (local dev): stay message-only rather than fail.
+  }
+  for (const [index, c] of commits.slice(0, 20).entries()) {
     const category = classify(c.message);
     const isMerge = category === "merge";
+    let diffFiles: ReturnType<typeof parseUnifiedDiff> = [];
+    if (
+      keys &&
+      installationId !== null &&
+      !isMerge &&
+      index < MAX_DIFF_COMMITS &&
+      Date.now() < diffDeadline
+    ) {
+      const raw = await fetchCommitDiff({ installationId, keys, repo, sha: c.id });
+      diffFiles = parseUnifiedDiff(raw);
+    }
+    // Rule 6: scan the code before it can reach the LLM. Falls back to the
+    // message when no diff is available (merges, fetch failures, DB-less dev).
+    const scanned = diffFiles.length
+      ? scan(diffFiles)
+      : scan([{ path: "<message>", content: c.message }]);
+    const secretFlag = scanned.hasSecret;
+    const secretFiles = new Set(secretPaths(scanned.hits));
+    const diffExcerpt = buildExcerpt(diffFiles, secretFiles);
     // Real links only: strong (closes #N) or weak (#N / branch). A heuristic
     // suggestion is deliberately NOT persisted — it stays "Unlinked work"
     // (rule 11: never auto-assign a suggestion).
@@ -178,7 +205,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           repo,
           branch,
           sha: c.id,
-          file: "(commit message)",
+          file: scanned.hits[0]?.file ?? "(commit message)",
           author,
         }),
         { priority: true },
@@ -190,7 +217,7 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
       const s = await summarize({
         sha: c.id,
         message: c.message,
-        diffExcerpt: "",
+        diffExcerpt,
         aiEnabled,
       });
       aiSummary = s.text;

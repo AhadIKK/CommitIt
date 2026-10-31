@@ -1,5 +1,14 @@
 # Changes
 
+## 2026-11-01 — Diffs, so the scan sees code and the summary sees work
+- `worker.ts:135` said the quiet part out loud: *"webhook payloads carry messages, not diffs… full diff content is scanned in Phase 6"*. Phase 6 never happened, which meant two things were false in production. **Rule 6's secret scan ran on the commit message**, so a key committed in a source file was never detected — the one thing this product claims to catch. And **the summariser got `diffExcerpt: ""`**, so a "summary" could only ever paraphrase the subject line.
+- `src/brain/diff.ts` closes both: `fetchCommitDiff()` asks GitHub for `application/vnd.github.v3.diff` as the installation, `parseUnifiedDiff()` splits it per file (keeping the `---` name for deleted files, whose `+++` is `/dev/null`), and `buildExcerpt()` assembles the payload the model sees.
+- The order is preserved: **parse → scan → exclude → trim → cap → summarise**. Files that trip the scan are dropped from the payload entirely, not just redacted, so no fragment of a secret can reach a third-party model. `trim()`'s skip-list still applies per file, and the whole excerpt is capped at 8 KB — char-count is the source of truth, not a token estimate (rule 7).
+- Everything degrades rather than throws. No App key material (local dev), no installation id, a merge commit, a 404, a dead network, or a blown budget all produce exactly the old message-only behaviour. A push must not fail because a diff could not be fetched.
+- Latency is bounded twice: at most 10 commits per push get a diff, and a **6 s total budget** for all of them. The per-fetch timeout is 4 s, so ten fetches could otherwise spend 40 s of the function's 45 s `maxDuration` before the first summary is written.
+- Alert quality: the secret notification now names the **file that actually matched**, not the literal string `(commit message)`. Path only — never the value, never the surrounding code.
+- Tests: `test/diff.test.ts` (9) covers per-file splitting, prefix stripping, deleted-file naming, exclusion of flagged files from the excerpt, the 8 KB ceiling, the skip-list, and that a 404 or a thrown network error returns `""` instead of propagating. 468 total.
+
 ## 2026-11-01 — The lock got scopes, because parallel work is the whole point
 - The exclusive lock shipped yesterday would have blocked the very thing it exists for: the user runs OpenCode on the backend and Antigravity on the dashboard **at the same time**. An exclusive repo-wide lock means the second agent gets `REFUSED` and the frontend work stops.
 - Holders now declare paths (`--files "src/**,test/**"`), and acquisition is refused **only on overlap** — same path, or one containing the other. Backend and frontend run concurrently; two agents in `src/formatter.ts` do not.
