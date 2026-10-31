@@ -15,6 +15,7 @@ for (const k of [
   "AI_INPUT_PRICE",
   "AI_OUTPUT_PRICE",
   "AI_MONTHLY_CAP_USD",
+  "AI_REASONING_EFFORT",
 ]) {
   savedEnv[k] = process.env[k];
 }
@@ -64,6 +65,22 @@ describe("openai-compatible provider", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://gw.example.com/v1/chat/completions");
     expect(JSON.parse(init.body as string).model).toBe("other-model");
+  });
+
+  it("keeps a completion budget reasoning models can't eat, and sends reasoning_effort only when set", async () => {
+    setEnv({ AI_API_KEY: "k" });
+    const fetchMock = vi.fn(async () => okResponse("hi"));
+    vi.stubGlobal("fetch", fetchMock);
+    await openaiCompatibleProvider.summarize({ sha: "a", message: "m", diffExcerpt: "d" });
+    const first = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
+    // gpt-oss bills reasoning against max_tokens: 120 came back empty in practice.
+    expect(first.max_tokens).toBeGreaterThanOrEqual(300);
+    expect(first.reasoning_effort).toBeUndefined();
+
+    setEnv({ AI_API_KEY: "k", AI_REASONING_EFFORT: "LOW" });
+    await openaiCompatibleProvider.summarize({ sha: "b", message: "m", diffExcerpt: "d" });
+    const second = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string);
+    expect(second.reasoning_effort).toBe("low");
   });
 
   it("throws without an API key (caller degrades)", async () => {

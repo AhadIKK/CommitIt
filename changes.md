@@ -1,5 +1,14 @@
 # Changes
 
+## 2026-10-31 — AI summaries back on, free, and no longer silently empty
+- Production had no `AI_*` env at all, so `summarize()` was running the `echo` stub and every commit stored its raw message. `aiAvailable()` (`src/workspace.ts:908`) needs a real provider *and* a key, which is why the dashboard toggle was hidden rather than broken.
+- Now on Groq's free plan: no payment method on the account, so the ceiling is 1,000 requests/day instead of a bill. `AI_BASE_URL=https://api.groq.com/openai/v1`, `AI_MODEL=openai/gpt-oss-120b`.
+- **Bug found while testing the key:** `max_tokens: 120` is too small for a reasoning model. `gpt-oss-120b` bills its thinking against the completion budget and answers `finish_reason: "stop"` with `content: ""` when the reasoning fills it — measured, not theorised: one call came back empty, the next returned 150 chars at the same setting. That is indistinguishable from a real failure, so `summarize()` degraded to the raw message and the feature would have looked broken with no error logged anywhere.
+- Fixed by raising the cap to 300 and adding `AI_REASONING_EFFORT`, sent **only when set** so gateways that don't know the field are untouched. At `low`, reasoning drops from ~330-570 chars to 26 and the summary is one clean sentence in ~40 output tokens.
+- The monthly cap stays advisory: `AI_MONTHLY_CAP_USD` is an in-memory ledger and every cold Vercel instance starts at zero, so it cannot be a hard global brake. The real brake is the free tier — no card means nothing to charge.
+- Model ids rotate (Llama left the free tier on 16 Aug, `qwen3.6-27b` → `qwen3.8-27b` on 14 Sep). If `openai/gpt-oss-120b` is retired, summaries fall back to raw messages with no error; the fix is `AI_MODEL` + redeploy. Written down in README step 6 so the next person doesn't have to rediscover it.
+- Tests: `test/aiProvider.test.ts` now pins the ≥300 budget and that `reasoning_effort` is absent unless configured (451 total).
+
 ## 2026-10-31 — The worker moved into a cron tick; Render is gone
 - Render's free plan was running out, and it was only hosting the queue worker (`npm start` = Fastify + a 5 s poller + two schedulers). The database was never on Render — it has been Supabase since 12 Oct — so nothing needed migrating.
 - New `POST /api/worker/tick` (`src/workerTick.ts`, routed through `src/workspaceRoutes.ts`) runs one bounded pass: reclaim orphaned jobs → send due digests → run both schedulers (no-ops unless their day/bucket is new) → claim and run up to 10 jobs, all inside a 30 s budget. Supabase `pg_cron` calls it every minute through `pg_net` (`prisma/sql/worker-tick-cron.sql`), keyed by `WORKER_TICK_SECRET` — constant-time compare, and an unset key answers 503 rather than leaving an open drain.

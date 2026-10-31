@@ -35,6 +35,16 @@ See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message sty
    awake. Schedule lives in `prisma/sql/worker-tick-cron.sql` — apply it once
    with the same secret, or nothing is processed. Locally,
    `npm run dev` runs the poller in-process instead.
+6. **AI summaries (optional)** — off unless `AI_PROVIDER` is a real provider and
+   `AI_API_KEY` is set; the dashboard hides the toggle otherwise. Any
+   OpenAI-compatible endpoint works via `AI_BASE_URL`. Free and card-free:
+   `AI_BASE_URL=https://api.groq.com/openai/v1`,
+   `AI_MODEL=openai/gpt-oss-120b`, `AI_REASONING_EFFORT=low`.
+   That last one matters — gpt-oss bills its reasoning against the completion
+   budget, and without it a summary can come back as an empty string, which the
+   caller cannot tell apart from a failure, so it silently falls back to the raw
+   commit message. Model ids get retired every few months; if summaries stop,
+   check `console.groq.com/docs/deprecations` and change `AI_MODEL`.
 
 ## Local dev (ngrok fallback, unsupported in prod)
 

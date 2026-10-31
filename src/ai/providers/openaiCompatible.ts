@@ -67,24 +67,36 @@ export const openaiCompatibleProvider: AiProvider = {
     if (cap > 0 && monthlySpend() >= cap) throw new Error("ai_cap_exceeded");
     const model = process.env.AI_MODEL?.trim() || DEFAULT_MODEL;
     const baseUrl = (process.env.AI_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/$/, "");
+    // Reasoning models (Groq's gpt-oss, o-series) bill their thinking against
+    // the completion budget, so a tight cap can return empty content with
+    // finish_reason "stop" — indistinguishable from a real failure, and the
+    // summary silently degrades. 300 leaves room for a short answer after the
+    // reasoning; the cap is a ceiling, not a cost.
+    const payload: Record<string, unknown> = {
+      model,
+      temperature: 0.2,
+      max_tokens: 300,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Commit message:\n${input.message}\n\nDiff excerpt:\n${input.diffExcerpt}`,
+        },
+      ],
+    };
+    // Only sent when configured, so gateways that reject the field are
+    // unaffected. On Groq's free tier it is the difference between a summary
+    // and an empty string (see above).
+    const effort = process.env.AI_REASONING_EFFORT?.trim().toLowerCase();
+    if (effort) payload.reasoning_effort = effort;
+
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        max_tokens: 120,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Commit message:\n${input.message}\n\nDiff excerpt:\n${input.diffExcerpt}`,
-          },
-        ],
-      }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(`ai_http_${res.status}`);
     const body = (await res.json()) as {
