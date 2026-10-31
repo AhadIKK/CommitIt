@@ -10,6 +10,7 @@
 - Auto-sync no longer queues a nightly backfill for an installation with zero repos (`embedclubpace` had 16 abandoned jobs, one per day).
 - Deleted `render.yaml` and `.github/workflows/keep-warm.yaml`; the workflow existed only to keep the free instance awake. `npm run dev` / `npm start` still run the in-process poller for local work.
 - Tests: worker tick (7), tick route (4), auto-sync (4), backfill resume (3), backfill continuation (1), reclaim attempts cap (1).
+- **Cutover verified after deleting the Render service:** a real `backfill` enqueued with Render gone went `queued → processing → done` in 46 s, and the tick that claimed it reported `{"jobs":1}` in `net._http_response`. `https://commitit-brqq.onrender.com` now answers 404. No row was left `processing`, so nothing was lost mid-job.
 
 ## 2026-10-18 — Bot: `/recent`, see the latest commits without leaving Telegram
 - New command: **`/recent [owner/repo]`** lists the newest commits as one line each — short SHA, category, subject, author, age:
