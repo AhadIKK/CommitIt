@@ -1,5 +1,13 @@
 # Changes
 
+## 2026-10-31 — Two agents, one repo: an atomic lock instead of a markdown table
+- Antigravity and OpenCode now run at the same time, so `AGENT_SYNC.md` was meant to stop us editing the same file. The mechanism could not work: reading a table cell and then writing it is a check-then-act race, and two agents that both read `IDLE` both write `LOCKED` — the loser never finds out, and both proceed. Worse, the message board lived in the same file as the lock, so posting a note from a stale copy silently erased the other agent's lock.
+- The lock is now the **`.agent-lock/` directory**, created with `mkdir`, which is atomic on Windows and POSIX (`EEXIST` on the loser — verified on this machine before relying on it). `AGENT_SYNC.md` keeps only the board and the log, so notes can no longer clobber a lock.
+- `scripts/agent-lock.mjs` owns the mechanics — `status`, `acquire`, `heartbeat`, `release`, `note` — so neither agent hand-writes timestamps. A lock with no heartbeat for 20 minutes is reclaimed automatically, otherwise one crashed agent (or a closed window) would block the other forever.
+- `npm test` is treated as a mutating action: 32 test files import the Prisma singleton in `src/db.ts` and `.env` points at the Supabase pooler, so the suite writes to the **production database**. Two agents running it at once produce flaky failures that look like real bugs.
+- Tests: `test/agentLock.test.ts` (5) covers acquire/release, refusing a second agent without touching the holder, stale reclaim, owner-only heartbeat/release, and newest-first notes. 456 total.
+- `.agent-lock/` is gitignored; `npm run lock` is the shorthand.
+
 ## 2026-10-31 — AI summaries back on, free, and no longer silently empty
 - Production had no `AI_*` env at all, so `summarize()` was running the `echo` stub and every commit stored its raw message. `aiAvailable()` (`src/workspace.ts:908`) needs a real provider *and* a key, which is why the dashboard toggle was hidden rather than broken.
 - Now on Groq's free plan: no payment method on the account, so the ceiling is 1,000 requests/day instead of a bill. `AI_BASE_URL=https://api.groq.com/openai/v1`, `AI_MODEL=openai/gpt-oss-120b`.

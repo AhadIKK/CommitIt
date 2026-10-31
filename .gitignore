@@ -8,3 +8,6 @@ dist/
 test-results/
 playwright-report/
 blob-report/
+
+# Cross-agent lock (scripts/agent-lock.mjs) — transient, never committed.
+.agent-lock/
