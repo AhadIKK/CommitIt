@@ -1,5 +1,14 @@
 # Changes
 
+## 2026-11-01 — The lock got scopes, because parallel work is the whole point
+- The exclusive lock shipped yesterday would have blocked the very thing it exists for: the user runs OpenCode on the backend and Antigravity on the dashboard **at the same time**. An exclusive repo-wide lock means the second agent gets `REFUSED` and the frontend work stops.
+- Holders now declare paths (`--files "src/**,test/**"`), and acquisition is refused **only on overlap** — same path, or one containing the other. Backend and frontend run concurrently; two agents in `src/formatter.ts` do not.
+- State moved to `.agent-lock/state.json`, and every mutation runs inside a `.agent-lock/.mutex/` directory critical section. Reading a markdown cell and writing it back was a check-then-act race; serialising the whole read-modify-write removes the window instead of narrowing it. A mutex older than 10 s is considered abandoned and broken, so a crash inside the critical section cannot deadlock both agents.
+- `acquire` now requires `--files`: an unscoped lock cannot be checked against anything, so it is refused rather than silently treated as "everything".
+- Tests grew to 8: disjoint scopes both acquired, overlap refused without disturbing the holder, parent directory overlaps its children, stale holder dropped, owner-only heartbeat/release.
+- **`scripts/resummarize.ts`** backfills `aiSummary` for commits that never got one. It exists because two things combine: `worker.ts:239` deliberately stores nothing for a degraded summary (so a row never duplicates its own subject), and the `upsert`'s `update` branch never writes `aiSummary` — so a commit ingested while AI was off stays NULL forever. No re-push or re-delivery repairs it.
+- Scope check: **265 commits** have no summary, but only **3** are from the AI era (`4c435bc`, `22e160b`, `968399d`, all from yesterday's cutover). The rest predate the AI layer. `--days` bounds a run to the gap worth filling, because summarising history nobody scrolls to burns free-tier throughput for no reader.
+
 ## 2026-10-31 — Two agents, one repo: an atomic lock instead of a markdown table
 - Antigravity and OpenCode now run at the same time, so `AGENT_SYNC.md` was meant to stop us editing the same file. The mechanism could not work: reading a table cell and then writing it is a check-then-act race, and two agents that both read `IDLE` both write `LOCKED` — the loser never finds out, and both proceed. Worse, the message board lived in the same file as the lock, so posting a note from a stale copy silently erased the other agent's lock.
 - The lock is now the **`.agent-lock/` directory**, created with `mkdir`, which is atomic on Windows and POSIX (`EEXIST` on the loser — verified on this machine before relying on it). `AGENT_SYNC.md` keeps only the board and the log, so notes can no longer clobber a lock.

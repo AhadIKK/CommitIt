@@ -49,9 +49,10 @@ prisma/schema.prisma test/fixtures/ .env.example
 
 ## Multi-agent collaboration (Antigravity & OpenCode)
 - **Coordination files:** `AGENT_SYNC.md` is the shared board (message board + handoff log). The **lock itself is the `.agent-lock/` directory**, because `mkdir` is atomic and a table cell is not — two agents that read "IDLE" and then write "LOCKED" both believe they won.
-- **Before modifying files:** run `node scripts/agent-lock.mjs status`. If another agent holds it, do not interrupt, overwrite, or edit the locked files — tell the user and stop.
-- **When starting work:** `node scripts/agent-lock.mjs acquire --agent <name> --task "<objective>" --files "<paths>"`. Long tasks: `heartbeat` so it isn't reclaimed as stale.
+- **Scoped, so parallel work is possible:** holders declare the paths they touch. Disjoint scopes (backend `src/**`, frontend `dashboard/**`) run at the same time; overlapping scopes are refused. State lives in `.agent-lock/state.json` and every write goes through a directory mutex, so two agents cannot corrupt it.
+- **Before modifying files:** run `node scripts/agent-lock.mjs status`. If someone holds a path you need, do not interrupt, overwrite, or edit it — pick disjoint paths or tell the user and stop.
+- **When starting work:** `node scripts/agent-lock.mjs acquire --agent <name> --task "<objective>" --files "<paths>"`. Declare generously; an undeclared path is one the other agent believes is free. Long tasks: `heartbeat` so the lock isn't dropped as stale.
 - **When finishing work:** run `npm test`, commit, then `node scripts/agent-lock.mjs release`, and add a handoff entry to `AGENT_SYNC.md`.
 - **Message Board:** `node scripts/agent-lock.mjs note --agent <name> --text "<context>"` — appends, never rewrites, so it cannot clobber the other agent's work.
-- **Stale locks:** 20 minutes without a heartbeat is reclaimable; the script reports `reclaimed`. Never leave a lock held.
-- **Mutating is wider than editing:** `npm test` writes to the shared Supabase database, and `git push` / `vercel deploy` change what the other agent sees. All of it sits behind the lock.
+- **Stale locks:** 20 minutes without a heartbeat is dropped automatically. Never leave a lock held.
+- **Mutating is wider than editing:** `npm test` writes to the shared Supabase database, and `git push` / `vercel deploy` change what the other agent sees. If your scopes both need one of those, coordinate first.
