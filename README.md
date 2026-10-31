@@ -17,12 +17,14 @@ See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message sty
    - Events: push, pull_request, check_run, issues, milestone, installation,
      installation_repositories, github_app_authorization, repository
    - Note the App ID, slug, Client ID; generate a Client secret + private key.
-3. **Vercel env vars** (Production): `COMMITIT_DATABASE_URL` (pooled 6543 URL —
+3. **Vercel env vars** (Production): `DATABASE_URL` (pooled 6543 URL —
    do NOT use the Supabase integration's managed vars, it reverts them),
-   `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY_BASE64` (or
-   `GITHUB_APP_PRIVATE_KEY` with `\n` escapes), `GITHUB_APP_WEBHOOK_SECRET`,
-   `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`,
-   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_DEFAULT_CHAT_ID`. Redeploy after changes.
+   `DIRECT_URL`, `GITHUB_APP_ID`, `GITHUB_APP_SLUG`,
+   `GITHUB_APP_PRIVATE_KEY_BASE64` (or `GITHUB_APP_PRIVATE_KEY` with `\n`
+   escapes), `GITHUB_APP_WEBHOOK_SECRET`, `GITHUB_CLIENT_ID`,
+   `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`, `TELEGRAM_BOT_TOKEN`,
+   `TELEGRAM_DEFAULT_CHAT_ID`, `WORKER_TICK_SECRET` (see step 5). Redeploy
+   after changes.
 4. **Install + link** — open the dashboard, Install the App on chosen repos,
    Link GitHub account (first login creates it), Connect Telegram via the Join
    link, `/bind owner/repo` in the chat (groups: admins only).
@@ -30,7 +32,8 @@ See `plan.md` (build phases), `AGENTS.md` (agent rules), `theme.md` (message sty
    does job processing: Supabase pg_cron calls `POST /api/worker/tick` every
    minute (keyed by `WORKER_TICK_SECRET`), which drains `jobs` (digests, alerts,
    backfills) and sends whatever digest is due. No second host, nothing to keep
-   awake. Schedule lives in `prisma/sql/worker-tick-cron.sql`. Locally,
+   awake. Schedule lives in `prisma/sql/worker-tick-cron.sql` — apply it once
+   with the same secret, or nothing is processed. Locally,
    `npm run dev` runs the poller in-process instead.
 
 ## Local dev (ngrok fallback, unsupported in prod)
