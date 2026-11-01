@@ -277,6 +277,15 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = resolve(args.root || process.cwd());
   const agent = args.agent || process.env.AGENT_NAME || "unknown-agent";
 
+  // Identity is not optional: without it every command would happily report
+  // "you do not hold a lock" for a holder who does, which reads like a bug in
+  // the lock rather than a missing flag.
+  const needsIdentity = cmd === "acquire" || cmd === "heartbeat" || cmd === "release";
+  if (needsIdentity && agent === "unknown-agent") {
+    console.log("REFUSED — I do not know who you are. Pass --agent <name> or set AGENT_NAME.");
+    process.exit(2);
+  }
+
   switch (cmd) {
     case "status": {
       const s = status(root);

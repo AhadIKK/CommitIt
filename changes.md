@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-11-01 — The gap is closed, without the key leaving Vercel
+- Ran the backfill through the queue twice: `--days 1` (the row whose flag the scan bug had set) and `--days 2` (the three cutover commits). Both jobs `done` on the first tick.
+- All four summaries are demonstrably diff-derived, not subject-line paraphrases. `4c435bc` now says the backfill "completed in 46 seconds", that "the Render endpoint now returns 404" and that "no processing rows remained" — none of which is in its message, all of which is in the `changes.md` hunk. `22e160b` names `DATABASE_URL` and `WORKER_TICK_SECRET`; `968399d` names `POST /api/worker/tick`, `pg_cron` and overlap protection. `6e14dd4` describes the runtime-generated fake key, which the message only gestures at.
+- `2033c33` is still NULL, deliberately: it added the key-shaped fixture, so the scan flags it and rule 6 keeps it away from the provider. The correct outcome, not a gap.
+- The one flag that was wrong — set on `6e14dd4` by the removed-lines bug — was cleared before the run, because that commit only removed the literal. `2033c33`'s flag is left alone; under both the old and new rule it is a true positive.
+- 265 older commits remain unsummarised by choice. They predate the AI layer; summarising them would spend free-tier requests on history nobody scrolls to.
+
 ## 2026-11-01 — The backfill runs where the key already is
 - The AI-era backfill was blocked on a secret that only exists in Vercel, and Vercel secrets are explicitly not readable — so the choice was between handing the key to a laptop and never filling those rows. Neither was necessary: the worker already runs in the deployment.
 - New job type `summaries`. `enqueueJob("summaries", …)` puts a row in the ordinary queue, the tick claims it, and the summarising happens next to the environment variable. No admin endpoint, no key in transit, no new credential surface.

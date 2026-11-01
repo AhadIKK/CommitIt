@@ -111,6 +111,14 @@ describe("agent-lock", () => {
     expect(got.out).toContain("--files");
   });
 
+  it("says who it is when an identity is missing, instead of blaming the lock", () => {
+    run("acquire", "--agent", "OpenCode", "--task", "mine", "--files", "src/**");
+    const anon = run("heartbeat");
+    expect(anon.code).toBe(2);
+    expect(anon.out).toContain("--agent");
+    expect(anon.out).not.toContain("you do not hold a lock");
+  });
+
   it("lets only the holder heartbeat or release", () => {
     run("acquire", "--agent", "OpenCode", "--task", "mine", "--files", "src/**");
 

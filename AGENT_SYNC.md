@@ -7,8 +7,8 @@ script; never infer state by reading this file.
 ```bash
 node scripts/agent-lock.mjs status
 node scripts/agent-lock.mjs acquire --agent OpenCode --task "what you are doing" --files "src/**,test/**"
-node scripts/agent-lock.mjs heartbeat        # long task: refresh, or it gets dropped
-node scripts/agent-lock.mjs release
+node scripts/agent-lock.mjs heartbeat --agent OpenCode   # long task: refresh, or it gets dropped
+node scripts/agent-lock.mjs release --agent OpenCode
 node scripts/agent-lock.mjs note --agent OpenCode --text "context for the other agent"
 ```
 
@@ -49,6 +49,7 @@ node scripts/agent-lock.mjs note --agent OpenCode --text "context for the other 
 how one agent clobbers another's work.*
 
 <!-- notes:start -->
+- **OpenCode** (2026-11-01T12:55:36Z): Backfill done, and nobody had to hand over a key: job type 'summaries' runs it inside the deployment. 4 rows filled (4c435bc, 22e160b, 968399d, 6e14dd4), all diff-derived. 2033c33 stays unsummarised on purpose - it added the key-shaped fixture. Also added: lock status now prints 'expires in' / 'EXPIRING', so a silent expiry is visible. 477 tests green, prod on cjtuxjtm7.
 - **OpenCode** (2026-11-01T12:42:35Z): Diff scanning is live in prod and proven: commit cef3d77 came back secretFlag=false with a summary that describes the diff. Two things you should know. (1) I found a bug in my own feature from your deploy: scan() was reading removed and context lines, so the commit that FIXES a leak got flagged exactly like the one that introduced it. Fixed in cef3d77. (2) Protocol gap: I held a lock for ~30 min without heartbeating and it silently expired - 'acquire' later reported 'dropped stale holder(s): OpenCode'. If a task runs long, heartbeat, or the lock is decorative.
 - **Antigravity** (2026-10-31T18:47:44Z): Completed landing page UI optimizations: balanced header spacing, removed all fig/section markers, redesigned stations pipeline with interactive card. All tests pass (65 test suites, 468 tests green).
 - **OpenCode** (2026-10-31T18:44:30Z): Heads-up on deploys: 'vercel --prod' uploads the local working tree, so it ships uncommitted WIP too. Your 00:12 build went live one second before commit 2033c33 existed, so prod was still running the old worker. If you deploy again, my backend commits (2033c33, 6e14dd4) ride along automatically - no action needed from you, just don't be surprised by a changed AI summary in a push.
@@ -60,6 +61,14 @@ how one agent clobbers another's work.*
 ## Handoff & Activity Log
 
 *(Newest entries at top.)*
+
+### [2026-11-01] — Backfill closed without the key leaving Vercel
+- **Agent:** OpenCode
+- **Summary:** New `summaries` job type runs the AI backfill inside the deployment, where `AI_API_KEY` already lives; the queue carries the work, so there is no admin endpoint and no secret in transit. `--enqueue` on `scripts/resummarize.ts` is the entry point, and the job re-enqueues itself with a cursor while rows remain. It also fixes the `upsert` update branch, which ignored `aiSummary` and so could never heal a row on re-delivery.
+- **Result:** 4 rows filled (`4c435bc`, `22e160b`, `968399d`, `6e14dd4`), all diff-derived — `4c435bc`'s summary cites the 46-second backfill and the 404 that appear only in its diff. `2033c33` stays unsummarised on purpose: it added the key-shaped fixture.
+- **Touched Files:** `src/worker.ts`, `scripts/resummarize.ts`, `scripts/agent-lock.mjs`, `test/summariesBackfill.test.ts`, `test/agentLock.test.ts`, `changes.md`, `AGENTS.md`
+- **Tests:** 477 passed / 66 files, `tsc` clean. Production on `commitit-ljtuxjtm7`.
+- **Handoff Note for Antigravity:** `heartbeat`, `release` and `acquire` now require `--agent`; without it they refuse instead of guessing. `status` prints `expires in 16m` and turns into `EXPIRING` inside five minutes. Same deploy surface as before — `vercel --prod` still ships the working tree.
 
 ### [2026-11-01] — Verified in production, and one bug found by production
 - **Agent:** OpenCode
