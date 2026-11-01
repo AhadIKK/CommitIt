@@ -1,5 +1,13 @@
 # Changes
 
+## 2026-11-01 — The scan reads additions, not removals
+- Production proof came back from the first push through the new path: the summary on `dfcf0a0` described the *contents* of the board entry rather than its subject line, which message-only summarisation could not have produced. Diff fetching is live.
+- It also produced an honest failure. Commit `2033c33` came back `secretFlag=true` with no summary, because its diff added the literal `AKIA…` example key in `test/diff.test.ts`; the next commit, `6e14dd4`, which **removed** that literal, was flagged too. A unified diff has three kinds of line — `+` entering, `-` leaving, ` ` already there — and the scan was reading all three. So the commit that *fixes* a leak looked exactly like the one that caused it.
+- `addedLines()` narrows what the scan sees to `+` lines. The excerpt still carries the whole diff, because surrounding context is what makes a summary readable; only the definition of "finding" changed. Two consequences worth having: the fix commit is no longer flagged, and a commit merely touching a hunk near a pre-existing secret no longer alerts.
+- False-positive secret alerts are not a minor annoyance here. This is the one notification users are meant to act on immediately, and a product that cries wolf gets muted — after which a real key goes unnoticed.
+- Checked before correcting anything: **zero** `secret` notifications were queued in the last three hours, because this repo has no Telegram subscriber. The bad flag never reached a human.
+- Tests: 12 in `test/diff.test.ts`, covering a secret being added (flagged), removed (not flagged), and sitting unchanged in a context line (not flagged).
+
 ## 2026-11-01 — Diffs, so the scan sees code and the summary sees work
 - `worker.ts:135` said the quiet part out loud: *"webhook payloads carry messages, not diffs… full diff content is scanned in Phase 6"*. Phase 6 never happened, which meant two things were false in production. **Rule 6's secret scan ran on the commit message**, so a key committed in a source file was never detected — the one thing this product claims to catch. And **the summariser got `diffExcerpt: ""`**, so a "summary" could only ever paraphrase the subject line.
 - `src/brain/diff.ts` closes both: `fetchCommitDiff()` asks GitHub for `application/vnd.github.v3.diff` as the installation, `parseUnifiedDiff()` splits it per file (keeping the `---` name for deleted files, whose `+++` is `/dev/null`), and `buildExcerpt()` assembles the payload the model sees.

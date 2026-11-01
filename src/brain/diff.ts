@@ -91,6 +91,31 @@ export function secretPaths(files: { file: string }[]): string[] {
 }
 
 /**
+ * Pure: keep only the lines that are entering the repo.
+ *
+ * A unified diff carries three kinds of line, and only one of them is an
+ * event: `+` is entering, `-` is leaving, ` ` is already there. Scanning all
+ * three means the commit that *fixes* a leak gets flagged as if it caused one
+ * (its removed line still matches), and any commit that happens to touch a
+ * hunk near a pre-existing secret gets flagged too. Both are false alarms on
+ * the one alert that has to be believed, so the scan sees only additions.
+ *
+ * The excerpt still gets the whole diff — context is what makes a summary
+ * readable; this only narrows what counts as a finding.
+ */
+export function addedLines(files: DiffFile[]): DiffFile[] {
+  return files.map((f) => ({
+    path: f.path,
+    // Headers are already stripped by parseUnifiedDiff; the +++ guard keeps
+    // hand-built inputs from being treated as an addition.
+    content: f.content
+      .split("\n")
+      .filter((l) => l.startsWith("+") && !l.startsWith("+++"))
+      .join("\n"),
+  }));
+}
+
+/**
  * Fetch a commit diff as the installation. Returns "" on any failure — the
  * caller then behaves exactly as it did before diffs were fetched.
  */

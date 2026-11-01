@@ -1,5 +1,5 @@
 import { classify } from "./brain/classify.js";
-import { buildExcerpt, fetchCommitDiff, parseUnifiedDiff, secretPaths } from "./brain/diff.js";
+import { addedLines, buildExcerpt, fetchCommitDiff, parseUnifiedDiff, secretPaths } from "./brain/diff.js";
 import { scan } from "./brain/scan.js";
 import { summarize } from "./brain/summarize.js";
 import { backfillInstallation } from "./backfill.js";
@@ -159,10 +159,11 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
       const raw = await fetchCommitDiff({ installationId, keys, repo, sha: c.id });
       diffFiles = parseUnifiedDiff(raw);
     }
-    // Rule 6: scan the code before it can reach the LLM. Falls back to the
+    // Rule 6: scan the code before it can reach the LLM. Only additions count
+    // — a removed line is the leak leaving, not arriving. Falls back to the
     // message when no diff is available (merges, fetch failures, DB-less dev).
     const scanned = diffFiles.length
-      ? scan(diffFiles)
+      ? scan(addedLines(diffFiles))
       : scan([{ path: "<message>", content: c.message }]);
     const secretFlag = scanned.hasSecret;
     const secretFiles = new Set(secretPaths(scanned.hits));

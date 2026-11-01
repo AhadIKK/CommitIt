@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildExcerpt, fetchCommitDiff, parseUnifiedDiff, secretPaths } from "../src/brain/diff.js";
+import { addedLines, buildExcerpt, fetchCommitDiff, parseUnifiedDiff, secretPaths } from "../src/brain/diff.js";
 import { scan } from "../src/brain/scan.js";
 
 vi.mock("../src/githubAuth.js", () => ({
@@ -55,9 +55,58 @@ describe("parseUnifiedDiff", () => {
   });
 });
 
-describe("buildExcerpt", () => {
+describe("addedLines", () => {
   // Built at runtime on purpose: written literally, this fixture would itself
   // trip scan() and fire a false secret alert on any push touching this file.
+  const FAKE_AWS_KEY = "AKIA" + "IOSFODNN7EXAMPLE";
+
+  it("flags a secret that is being added", () => {
+    const files = parseUnifiedDiff(
+      [
+        "diff --git a/src/config.ts b/src/config.ts",
+        "--- a/src/config.ts",
+        "+++ b/src/config.ts",
+        "@@ -1 +1,2 @@",
+        "+const key = 'AKIA" + "IOSFODNN7EXAMPLE';",
+      ].join("\n"),
+    );
+    expect(scan(addedLines(files)).hasSecret).toBe(true);
+  });
+
+  it("does not flag the commit that removes a secret", () => {
+    // This is the shape of 6e14dd4: the fix that deletes the literal. The
+    // removed line still matches the pattern, but nothing is entering the repo.
+    const files = parseUnifiedDiff(
+      [
+        "diff --git a/src/config.ts b/src/config.ts",
+        "--- a/src/config.ts",
+        "+++ b/src/config.ts",
+        "@@ -1 +1 @@",
+        "-const key = 'AKIA" + "IOSFODNN7EXAMPLE';",
+        "+const key = process.env.KEY;",
+      ].join("\n"),
+    );
+    expect(scan(files).hasSecret).toBe(true); // old behaviour: flagged
+    expect(scan(addedLines(files)).hasSecret).toBe(false); // new: not an event
+  });
+
+  it("does not flag an unchanged context line that already held a secret", () => {
+    const files = parseUnifiedDiff(
+      [
+        "diff --git a/src/config.ts b/src/config.ts",
+        "--- a/src/config.ts",
+        "+++ b/src/config.ts",
+        "@@ -1,3 +1,3 @@",
+        " const key = 'AKIA" + "IOSFODNN7EXAMPLE';",
+        "-const debug = false;",
+        "+const debug = true;",
+      ].join("\n"),
+    );
+    expect(scan(addedLines(files)).hasSecret).toBe(false);
+  });
+});
+
+describe("buildExcerpt", () => {
   const FAKE_AWS_KEY = "AKIA" + "IOSFODNN7EXAMPLE";
 
   it("excludes files that tripped the secret scan, keeping the path out of the payload", () => {
