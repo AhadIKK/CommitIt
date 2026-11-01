@@ -22,6 +22,54 @@ describe("formatPush", () => {
     expect(html).toContain("+5 more");
   });
 
+  it("marks a summary as a summary, so it cannot be mistaken for the subject", () => {
+    const html = formatPush({
+      repo: "r",
+      branch: "main",
+      commits: [
+        {
+          sha: "abc1234",
+          message: "feat: add the thing",
+          author: "Ahad",
+          category: "feat",
+          aiSummary: "Added the thing and wired it to the endpoint.",
+        },
+      ],
+    });
+    expect(html).toContain("🤖 Added the thing and wired it to the endpoint.");
+    // The subject is replaced by the summary, not printed alongside it.
+    expect(html).not.toContain("feat: add the thing");
+  });
+
+  it("shows the subject unmarked when there is no summary", () => {
+    const html = formatPush({
+      repo: "r",
+      branch: "main",
+      commits: [{ sha: "abc1234", message: "feat: add the thing", author: "Ahad", category: "feat" }],
+    });
+    expect(html).toContain("feat: add the thing");
+    expect(html).not.toContain("🤖");
+  });
+
+  it("ignores a degraded summary, which is only the message repeated", () => {
+    const html = formatPush({
+      repo: "r",
+      branch: "main",
+      commits: [
+        {
+          sha: "abc1234",
+          message: "feat: add the thing",
+          author: "Ahad",
+          category: "feat",
+          aiSummary: "feat: add the thing",
+          degraded: true,
+        },
+      ],
+    });
+    expect(html).toContain("feat: add the thing");
+    expect(html).not.toContain("🤖");
+  });
+
   it("escapes HTML in user content", () => {
     const html = formatPush({
       repo: "r",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deliver, routeRecipient } from "../src/delivery.js";
+import { deliver, isPermanentSendFailure, routeRecipient } from "../src/delivery.js";
 import { quietEndsAt } from "../src/scheduler.js";
 
 const awake = { digestMode: "instant", quietHoursStart: "22", quietHoursEnd: "7" };
@@ -23,6 +23,25 @@ describe("routeRecipient", () => {
     expect(
       routeRecipient({ digestMode: "weekly", quietHoursStart: null, quietHoursEnd: null }, true, noon),
     ).toBe("send");
+  });
+});
+
+describe("isPermanentSendFailure", () => {
+  // The whole point of the distinction: a dead chat retried every minute is a
+  // queue that grows quietly while every row still looks delivered, which is
+  // exactly how a placeholder chat stayed subscribed for weeks.
+  it("recognises failures that no retry can fix", () => {
+    expect(isPermanentSendFailure("Bad Request: chat not found")).toBe(true);
+    expect(isPermanentSendFailure("Forbidden: bot was blocked by the user")).toBe(true);
+    expect(isPermanentSendFailure("Forbidden: user is deactivated")).toBe(true);
+    expect(isPermanentSendFailure("Bad Request: PEER_ID_INVALID")).toBe(true);
+    expect(isPermanentSendFailure("Bad Request: chat_id is empty")).toBe(true);
+  });
+
+  it("leaves a transient failure retryable", () => {
+    expect(isPermanentSendFailure("")).toBe(false);
+    expect(isPermanentSendFailure("Too Many Requests: retry after 5")).toBe(false);
+    expect(isPermanentSendFailure("Internal Server Error")).toBe(false);
   });
 });
 

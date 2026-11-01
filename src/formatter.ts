@@ -75,7 +75,9 @@ export function formatPush(opts: {
         } else if (c.isMerge && c.prNumber) {
           lines.push(`  <code>${short}</code> merge (PR #${c.prNumber})`);
         } else if (c.aiSummary && !c.degraded) {
-          lines.push(`  <code>${short}</code> ${escapeHtml(c.aiSummary)}`);
+          // A summary is not the commit message, and readers were being shown
+          // one where the other used to be with no way to tell. One marker.
+          lines.push(`  <code>${short}</code> 🤖 ${escapeHtml(c.aiSummary)}`);
         } else {
           lines.push(`  <code>${short}</code> ${msg}`);
         }

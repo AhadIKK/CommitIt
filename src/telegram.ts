@@ -13,7 +13,10 @@
 
 import { CALLBACK_TOAST_MAX, type InlineKeyboard } from "./telegramUi.js";
 
-export type TelegramResult = { ok: boolean; placeholder: boolean };
+// `detail` carries Telegram's own description ("chat not found", "bot was
+// blocked by the user"). It is only ever a status string, never the token or
+// the message body — delivery.ts needs it to tell a dead chat from a blip.
+export type TelegramResult = { ok: boolean; placeholder: boolean; detail?: string };
 
 type Logger = {
   info?: (o: object, m: string) => void;
@@ -83,7 +86,13 @@ export async function sendMessage(
   };
   if (opts.replyMarkup) payload.reply_markup = opts.replyMarkup;
   const out = await callTelegram("sendMessage", payload, opts.log);
-  return { ok: out.ok, placeholder: out.missingToken };
+  // `detail` is additive: omitted when Telegram said nothing extra, so callers
+  // that compare the result shape keep working.
+  return {
+    ok: out.ok,
+    placeholder: out.missingToken,
+    ...(out.detail ? { detail: out.detail } : {}),
+  };
 }
 
 /** Rewrites a message in place — how a tapped button refreshes itself. */

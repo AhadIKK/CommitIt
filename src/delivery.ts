@@ -129,6 +129,21 @@ export function renderDigestBodies(bodies: string[]): string {
   return body.slice(0, 3780) + "\n… truncated";
 }
 
+/**
+ * Telegram's own description decides whether a retry can ever help. A chat
+ * that no longer exists, or a user who blocked the bot, will fail identically
+ * forever — retrying it every minute hides the problem behind a growing queue.
+ */
+export function isPermanentSendFailure(detail: string): boolean {
+  return /chat not found|bot was blocked|user is deactivated|chat_id is empty|peer_id_invalid/i.test(
+    detail,
+  );
+}
+
+/** Keep retrying a transient failure for an hour, then stop and say so. */
+export const RETRY_WINDOW_MS = 60 * 60 * 1000;
+export const RETRY_DELAY_MS = 2 * 60 * 1000;
+
 // Sends due queued notifications, one digest per subscription (grouped,
 // capped at Telegram's 3800 chars). Quiet hours reschedule, not drop.
 export async function dispatchDueNotifications(now: Date = new Date()): Promise<number> {
@@ -183,7 +198,31 @@ export async function dispatchDueNotifications(now: Date = new Date()): Promise<
         continue;
       }
       const body = renderDigestBodies(notes.map((n) => n.body));
-      await sendMessage(sub.chat.telegramChatId, body);
+      const out = await sendMessage(sub.chat.telegramChatId, body);
+      if (!out.ok) {
+        // Marking this "sent" was the old behaviour, and it turned a dead chat
+        // into a subscription that looked healthy forever: every digest failed,
+        // every row said delivered. Never record a send that did not happen.
+        const permanent = isPermanentSendFailure(out.detail ?? "");
+        const ageMs = now.getTime() - notes[0]!.createdAt.getTime();
+        const giveUp = permanent || ageMs > RETRY_WINDOW_MS;
+        console.warn(
+          JSON.stringify({
+            msg: "digest_send_failed",
+            chat: sub.chat.telegramChatId,
+            permanent,
+            giveUp,
+            detail: out.detail,
+          }),
+        );
+        await prisma.notification.updateMany({
+          where: { id: { in: notes.map((n) => n.id) } },
+          data: giveUp
+            ? { status: "failed" }
+            : { status: "queued", scheduledFor: new Date(now.getTime() + RETRY_DELAY_MS) },
+        });
+        continue;
+      }
       await prisma.notification.updateMany({
         where: { id: { in: notes.map((n) => n.id) } },
         data: { status: "sent" },

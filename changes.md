@@ -1,5 +1,11 @@
 # Changes
 
+## 2026-11-01 — A failed send is no longer recorded as delivered
+- `dispatchDueNotifications` called `sendMessage` and marked the notification `sent` regardless of the result. A chat that no longer exists therefore looked permanently healthy: every digest failed, every row said delivered, and nothing anywhere recorded a problem. The placeholder chat `999999999` had been doing exactly that since it was created.
+- The result is now read. Telegram's own description decides the outcome: `chat not found`, `bot was blocked`, `user is deactivated`, `chat_id is empty` and `PEER_ID_INVALID` are permanent, so the rows go to `failed` instead of being retried forever. Anything else (429, 5xx, network) is transient and retried in two minutes, with a one-hour window so a genuinely broken send eventually stops instead of growing the queue. `isPermanentSendFailure()` is pure and tested; failures log the chat id and Telegram's description, never the body or the token.
+- Removed the placeholder chat `999999999` and its daily subscription to `AhadIKK/CommitIt`, with its 12 orphaned notifications. Three real chats remain. This is data, not a migration: the row was created by hand and no code referenced it.
+- Telegram now marks a generated sentence with 🤖. It appears in the same place the commit subject used to, so without a marker a summary was indistinguishable from a verbose subject line. Degraded summaries (the message repeated) still print as plain text, and pushes above ten commits still collapse per-commit lines, so no summary is shown there at all.
+
 ## 2026-11-01 — The gap is closed, without the key leaving Vercel
 - Ran the backfill through the queue twice: `--days 1` (the row whose flag the scan bug had set) and `--days 2` (the three cutover commits). Both jobs `done` on the first tick.
 - All four summaries are demonstrably diff-derived, not subject-line paraphrases. `4c435bc` now says the backfill "completed in 46 seconds", that "the Render endpoint now returns 404" and that "no processing rows remained" — none of which is in its message, all of which is in the `changes.md` hunk. `22e160b` names `DATABASE_URL` and `WORKER_TICK_SECRET`; `968399d` names `POST /api/worker/tick`, `pg_cron` and overlap protection. `6e14dd4` describes the runtime-generated fake key, which the message only gestures at.

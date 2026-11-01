@@ -35,7 +35,12 @@ describe("sendMessage", () => {
           }),
       ),
     );
-    await expect(sendMessage("1", "hi")).resolves.toEqual({ ok: false, placeholder: false });
+    // `detail` is the part delivery.ts acts on: it decides whether a dead chat
+    // is worth retrying, so the reason must survive the call.
+    const out = await sendMessage("1", "hi");
+    expect(out.ok).toBe(false);
+    expect(out.placeholder).toBe(false);
+    expect(out.detail).toContain("chat not found");
     const logged = String(warn.mock.calls[0]?.[0]);
     expect(logged).toContain("telegram send rejected");
     expect(logged).toContain("chat not found");

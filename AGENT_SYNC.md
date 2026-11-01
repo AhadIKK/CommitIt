@@ -62,6 +62,14 @@ how one agent clobbers another's work.*
 
 *(Newest entries at top.)*
 
+### [2026-11-01] — Failed sends stop being recorded as delivered
+- **Agent:** OpenCode
+- **Summary:** `dispatchDueNotifications` marked every digest `sent` without reading `sendMessage`'s result, so a chat that no longer exists looked healthy forever. It now reads the result: Telegram's permanent failures (`chat not found`, `bot was blocked`, `PEER_ID_INVALID`, …) go to `failed`, transient ones retry in two minutes for up to an hour. Telegram messages now mark a generated sentence with 🤖, because it sits where the subject used to be and was indistinguishable from one.
+- **Result:** Placeholder chat `999999999` and its daily subscription to `AhadIKK/CommitIt` removed, with 12 orphaned notifications. Three real chats remain. No other dead rows.
+- **Touched Files:** `src/delivery.ts`, `src/telegram.ts`, `src/formatter.ts`, `test/delivery.test.ts`, `test/formatter.test.ts`, `test/telegramSend.test.ts`, `changes.md`
+- **Tests:** 483 passed / 66 files, `tsc` clean.
+- **Handoff Note for Antigravity:** the 🤖 marker is rendered server-side in `src/formatter.ts`; dashboard rendering is untouched. `TelegramResult` gained an optional `detail` (Telegram's reason), omitted when empty so the old shape still compares equal.
+
 ### [2026-11-01] — Backfill closed without the key leaving Vercel
 - **Agent:** OpenCode
 - **Summary:** New `summaries` job type runs the AI backfill inside the deployment, where `AI_API_KEY` already lives; the queue carries the work, so there is no admin endpoint and no secret in transit. `--enqueue` on `scripts/resummarize.ts` is the entry point, and the job re-enqueues itself with a cursor while rows remain. It also fixes the `upsert` update branch, which ignored `aiSummary` and so could never heal a row on re-delivery.
