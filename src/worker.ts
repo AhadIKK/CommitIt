@@ -253,6 +253,11 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           ...(committedAt ? { committedAt } : {}),
           ...(authorId ? { authorId } : {}),
           ...(linkedIssueId ? { issueId: linkedIssueId } : {}),
+          // Same guard as `create`: a degraded summary is the message itself,
+          // so it must never overwrite the row. But a real one may: without
+          // this, a re-delivery of a commit ingested while AI was off updated
+          // everything except the field that was actually missing.
+          ...(degraded || !aiSummary ? {} : { aiSummary: aiSummary.slice(0, 2000) }),
         },
         create: {
           repoId,
@@ -487,6 +492,140 @@ export type JobRunOptions = {
   deadline?: number;
 };
 
+/**
+ * Pure: should this batch hand the rest to a fresh job?
+ *
+ * A backfill re-enqueues only when it both made progress and ran out of room.
+ * Re-enqueueing without progress would spin forever on rows the provider
+ * refuses to summarise (a 429, or a repo with AI disabled), and the free tier
+ * has a request budget worth not burning.
+ */
+export function backfillContinuation(input: {
+  rowCount: number;
+  limit: number;
+  filled: number;
+  stoppedForTime: boolean;
+  lastId?: string | null;
+}): string | null {
+  const { rowCount, limit, filled, stoppedForTime, lastId } = input;
+  if (!lastId) return null;
+  if (filled <= 0) return null;
+  const ranOut = rowCount === limit || stoppedForTime;
+  return ranOut ? lastId : null;
+}
+
+/**
+ * Backfill `aiSummary` from inside the deployment.
+ *
+ * The key that can call the provider exists only in Vercel, and Vercel secrets
+ * are not readable, so a backfill either runs here or does not run. This goes
+ * through the ordinary job queue — no admin endpoint, no secret leaving the
+ * environment it already lives in — and it summarises the way the live path
+ * does: fetch the diff, scan what the commit *adds*, and only then summarise.
+ * A row that turns out to have introduced a secret is flagged and left
+ * unsummarised (rule 6), which also repairs commits ingested before diffs were
+ * scanned at all.
+ */
+async function processSummariesBackfill(
+  job: JobRow,
+  payload: { since?: string; limit?: number; cursor?: string },
+  opts: JobRunOptions,
+): Promise<void> {
+  const provider = (process.env.AI_PROVIDER ?? "echo").toLowerCase();
+  if (provider === "echo" || !(process.env.AI_API_KEY ?? "").trim()) {
+    // Completing rather than throwing: a missing key is configuration, not a
+    // transient failure, and retrying it twenty times helps nobody.
+    console.log(JSON.stringify({ msg: "summaries_skipped_no_ai", jobId: job.id, provider }));
+    await completeJob(job.id);
+    return;
+  }
+
+  const limit = Math.min(20, Math.max(1, Number(payload.limit ?? 5) || 5));
+  const parsedSince = payload.since ? new Date(payload.since) : null;
+  const since = parsedSince && !Number.isNaN(parsedSince.getTime()) ? parsedSince : null;
+  const cursor = payload.cursor ?? null;
+
+  const rows = await prisma.commit.findMany({
+    where: {
+      aiSummary: null,
+      isMerge: false,
+      secretFlag: false,
+      message: { not: "" },
+      repo: { aiEnabled: true },
+      ...(since ? { createdAt: { gte: since } } : {}),
+      ...(cursor ? { id: { gt: cursor } } : {}),
+    },
+    // Ids are cuids, so ascending is stable and roughly chronological; the
+    // cursor is a unique key rather than a timestamp that two rows can share.
+    orderBy: { id: "asc" },
+    take: limit,
+    select: {
+      id: true,
+      sha: true,
+      message: true,
+      repo: { select: { fullName: true, installationId: true } },
+    },
+  });
+
+  let keys: ReturnType<typeof appKeys> | null = null;
+  try {
+    keys = appKeys();
+  } catch {
+    // No App key material: summarise from the message alone, as before.
+  }
+
+  let filled = 0;
+  let lastId: string | null = cursor;
+  let stoppedForTime = false;
+
+  for (const row of rows) {
+    if (opts.deadline && Date.now() > opts.deadline) {
+      stoppedForTime = true;
+      break;
+    }
+    lastId = row.id;
+
+    let excerpt = "";
+    const installationId = row.repo.installationId;
+    if (keys && installationId !== null) {
+      const raw = await fetchCommitDiff({
+        installationId,
+        keys,
+        repo: row.repo.fullName,
+        sha: row.sha,
+      });
+      const files = parseUnifiedDiff(raw);
+      if (files.length) {
+        const scanned = scan(addedLines(files));
+        if (scanned.hasSecret) {
+          await prisma.commit.update({ where: { id: row.id }, data: { secretFlag: true } });
+          console.log(JSON.stringify({ msg: "summary_secret_found", sha: row.sha, file: scanned.hits[0]?.file }));
+          continue;
+        }
+        excerpt = buildExcerpt(files, new Set(secretPaths(scanned.hits)));
+      }
+    }
+
+    const s = await summarize({ sha: row.sha, message: row.message, diffExcerpt: excerpt, aiEnabled: true });
+    if (s.degraded) continue;
+    await prisma.commit.update({
+      where: { id: row.id },
+      data: { aiSummary: s.text.slice(0, 2000) },
+    });
+    filled += 1;
+  }
+
+  console.log(
+    JSON.stringify({ msg: "summaries_batch", jobId: job.id, rows: rows.length, filled, stoppedForTime }),
+  );
+
+  const next = backfillContinuation({ rowCount: rows.length, limit, filled, stoppedForTime, lastId });
+  if (next) {
+    await enqueueJob("summaries", `${job.deliveryId}:c${next}`, { ...payload, cursor: next });
+  }
+  await completeJob(job.id);
+}
+
 export async function processJob(job: JobRow, opts: JobRunOptions = {}): Promise<void> {
   switch (job.type) {
     case "push":
@@ -556,6 +695,14 @@ export async function processJob(job: JobRow, opts: JobRunOptions = {}): Promise
     }
     case "stale_check":
       await processStaleCheck(job, job.payload as { repo?: string; thresholdDays?: number });
+      return;
+    case "summaries":
+      // Backfill of missing aiSummary values, run where the AI key already is.
+      await processSummariesBackfill(
+        job,
+        job.payload as { since?: string; limit?: number; cursor?: string },
+        opts,
+      );
       return;
     case "backfill": {
       // One-shot per-install sync. RateLimitedError propagates to failJob()

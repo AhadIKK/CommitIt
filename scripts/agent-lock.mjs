@@ -145,13 +145,19 @@ function overlaps(a, b) {
 export function status(root = process.cwd()) {
   const state = readState(root);
   const dropped = prune(state);
-  const holders = Object.entries(state.holders).map(([agent, h]) => ({
-    agent,
-    task: h.task,
-    files: h.files ?? [],
-    started: h.started,
-    ageMs: ageOf(h.heartbeat ?? h.started),
-  }));
+  const holders = Object.entries(state.holders).map(([agent, h]) => {
+    const ageMs = ageOf(h.heartbeat ?? h.started);
+    return {
+      agent,
+      task: h.task,
+      files: h.files ?? [],
+      started: h.started,
+      ageMs,
+      // Surfaced because an expired lock is silent for its owner: it just
+      // stops protecting them while they are still working.
+      expiresInMs: Math.max(0, STALE_MS - ageMs),
+    };
+  });
   return { state: holders.length ? "LOCKED" : "IDLE", holders, dropped };
 }
 
@@ -168,7 +174,12 @@ export function acquire(root, { agent, task, files }) {
       if (name === agent) continue;
       const conflict = mine.find((m) => (holder.files ?? []).some((f) => overlaps(m, f)));
       if (conflict) {
-        return { ok: false, holder: { ...holder, agent: name }, conflict };
+        const age = ageOf(holder.heartbeat ?? holder.started);
+        return {
+          ok: false,
+          holder: { ...holder, agent: name, expiresInMs: Math.max(0, STALE_MS - age) },
+          conflict,
+        };
       }
     }
 
@@ -249,6 +260,16 @@ function humanAge(ms) {
   return m < 1 ? `${Math.round(ms / 1000)}s` : `${m}m`;
 }
 
+/** Heartbeat warning threshold: a lock this close to expiring is about to fail. */
+const EXPIRING_MS = 5 * 60 * 1000;
+
+function expiry(holder) {
+  if (holder.expiresInMs <= EXPIRING_MS) {
+    return `  EXPIRING in ${humanAge(holder.expiresInMs)} — heartbeat now or it is dropped`;
+  }
+  return `  expires in ${humanAge(holder.expiresInMs)} unless heartbeat`;
+}
+
 // pathToFileURL, not string concat: on Windows import.meta.url is file:///C:/…
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = parseArgs(process.argv.slice(2));
@@ -267,6 +288,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       for (const h of s.holders) {
         console.log(`  ${h.agent} (${humanAge(h.ageMs)})  files: ${h.files.join(", ") || "?"}`);
         console.log(`    task: ${h.task ?? "?"}  since ${h.started ?? "?"}`);
+        console.log(expiry(h));
       }
       process.exit(0);
       break;
@@ -280,6 +302,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
           console.log(`REFUSED — ${r.holder?.agent ?? "another agent"} holds ${r.conflict}.`);
           console.log(`  task:  ${r.holder?.task ?? "?"}`);
           console.log(`  files: ${(r.holder?.files ?? []).join(", ")}`);
+          if (typeof r.holder?.expiresInMs === "number") {
+            console.log(`  drops in ${humanAge(r.holder.expiresInMs)} if they stop heartbeating`);
+          }
           console.log("Pick paths that do not overlap, or stop and tell the user.");
         }
         process.exit(1);
@@ -287,6 +312,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       if (r.dropped?.length) console.log(`ACQUIRED — dropped stale holder(s): ${r.dropped.join(", ")}.`);
       else console.log("ACQUIRED — you hold your declared paths.");
       if (r.others?.length) console.log(`  also working: ${r.others.join(", ")} (disjoint paths)`);
+      console.log("  Heartbeat every ~15m: after 20m the lock drops itself, silently.");
       process.exit(0);
       break;
     }

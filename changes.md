@@ -1,5 +1,18 @@
 # Changes
 
+## 2026-11-01 — The backfill runs where the key already is
+- The AI-era backfill was blocked on a secret that only exists in Vercel, and Vercel secrets are explicitly not readable — so the choice was between handing the key to a laptop and never filling those rows. Neither was necessary: the worker already runs in the deployment.
+- New job type `summaries`. `enqueueJob("summaries", …)` puts a row in the ordinary queue, the tick claims it, and the summarising happens next to the environment variable. No admin endpoint, no key in transit, no new credential surface.
+- It summarises the way the live path does: fetch the diff, `scan(addedLines(...))`, and only then call the provider. A row whose commit turns out to have introduced a secret is flagged and left unsummarised — so the backfill also repairs commits that were ingested before diffs were scanned at all.
+- Resumable like `backfill`: `limit` rows per run, and it re-enqueues itself with a cursor while there is more to do. `backfillContinuation()` decides that as a pure function, because the failure mode of getting it wrong is silent — re-enqueue on zero progress and it spins on rows the provider refuses, burning a free-tier budget against a queue that looks healthy.
+- Stops rather than retries when the provider is not configured: a missing key is configuration, not a transient failure, and twenty backoff retries help nobody.
+- Also fixed in the same pass: the push `upsert`'s `update` branch ignored `aiSummary`, so a re-delivery updated message, category, branch and author but not the one field that was missing. It now writes a real summary under the same degraded guard as `create`.
+
+## 2026-11-01 — A lock that is about to expire now says so
+- My own lock silently expired mid-task yesterday and `acquire` later reported `dropped stale holder(s): OpenCode`. The mechanism worked; the *warning* did not exist. For the holder, an expired lock is indistinguishable from a held one — it just stops protecting them, and another agent is free to take the same paths.
+- `status` now prints time remaining (`expires in 12m`), and turns it into `EXPIRING in 2m — heartbeat now or it is dropped` inside the last five minutes. A refusal shows how long the blocker has left, so "wait" becomes a decision with a number attached.
+- `acquire` prints the heartbeat expectation once, where it will be read.
+
 ## 2026-11-01 — The scan reads additions, not removals
 - Production proof came back from the first push through the new path: the summary on `dfcf0a0` described the *contents* of the board entry rather than its subject line, which message-only summarisation could not have produced. Diff fetching is live.
 - It also produced an honest failure. Commit `2033c33` came back `secretFlag=true` with no summary, because its diff added the literal `AKIA…` example key in `test/diff.test.ts`; the next commit, `6e14dd4`, which **removed** that literal, was flagged too. A unified diff has three kinds of line — `+` entering, `-` leaving, ` ` already there — and the scan was reading all three. So the commit that *fixes* a leak looked exactly like the one that caused it.

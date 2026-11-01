@@ -122,6 +122,19 @@ describe("agent-lock", () => {
     expect(run("release", "--agent", "OpenCode").code).toBe(0);
   });
 
+  it("shows how long a holder has left, so a silent expiry is visible", () => {
+    run("acquire", "--agent", "OpenCode", "--task", "long job", "--files", "src/**");
+    const shown = run("status").out;
+    expect(shown).toMatch(/expires in \d+m/);
+
+    // 18 minutes in, a 20-minute lock is two minutes from vanishing without a
+    // word; status has to say so rather than keep printing "LOCKED".
+    const state = readState();
+    state.holders.OpenCode.heartbeat = new Date(Date.now() - 18 * 60 * 1000).toISOString();
+    writeFileSync(statePath(), JSON.stringify(state), "utf8");
+    expect(run("status").out).toContain("EXPIRING");
+  });
+
   it("posts notes newest-first without disturbing holders", () => {
     run("acquire", "--agent", "OpenCode", "--task", "mine", "--files", "src/**");
     expect(run("note", "--agent", "OpenCode", "--text", "first note").code).toBe(0);
