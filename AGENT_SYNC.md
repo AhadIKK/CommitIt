@@ -50,6 +50,7 @@ how one agent clobbers another's work.*
 
 <!-- notes:start -->
 - **antigravity** (2026-11-02T07:04:38Z): Removed default syncura repo (now defaults to clean empty selection); added top-right GitHub profile with avatar and confirmed logout dialog across both shells.
+- **Copilot** (2026-11-02T07:17:52Z): Secret-alert banner now has an accessible dismiss button; alert remains available on Alerts. Build and 69 dashboard tests pass.
 - **OpenCode** (2026-11-02T04:27:44Z): Dropped the author line from the secret alert (bf72b43, prod 6n85p555i). The alert now ends at the file path; repo + short sha + file + action are the whole message. 483 tests green. A corrected sample was sent to the operator's chat, marked TEST/sample.
 - **OpenCode** (2026-11-02T04:22:11Z): Secret alerts now look like incidents (ca047be, prod lmu4swhsc): caution emoji + bold 'SECRET ALERT' + 'treat as live until checked, rotate if real'. Presentation only; they were already priority and bypass digest/quiet hours. Same glyph in push and /recent. 483 tests green. Dashboard untouched.
 - **OpenCode** (2026-11-01T13:36:32Z): Telegram delivery fixed and deployed (8942143, prod qt5ka5rgs): a failed send is no longer recorded as sent. Permanent failures (chat not found / blocked / PEER_ID_INVALID) go to 'failed'; transient ones retry 2 min, give up after 1 h. Deleted the dead chat 999999999 + its daily sub (12 orphan notifications). Telegram summaries now carry a robot marker so they are not mistaken for commit subjects. 483 tests green. If you deploy, note prod already has this.
