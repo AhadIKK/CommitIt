@@ -3,8 +3,10 @@
  * cards and no drop shadows anywhere in the product.
  */
 import type { ReactNode } from "react";
+import { X } from "lucide-react";
 import { initials, relativeTime } from "../lib/format.js";
 import type { LiveStatus } from "../api/client.js";
+import { IconButton } from "./controls.js";
 import { AlertGlyph } from "./glyphs.js";
 
 /* ---------------------------------------------------------------- banner */
@@ -15,6 +17,7 @@ export function Banner({
   detail,
   urgent = false,
   actions,
+  onDismiss,
 }: {
   severity?: "danger" | "warn" | "info";
   title: string;
@@ -22,6 +25,7 @@ export function Banner({
   /** Only the leaked-secret alert and hard failures interrupt. */
   urgent?: boolean;
   actions?: ReactNode;
+  onDismiss?: () => void;
 }) {
   return (
     <section
@@ -38,6 +42,11 @@ export function Banner({
         {detail ? <p className="banner__detail">{detail}</p> : null}
       </div>
       {actions ? <div className="banner__actions">{actions}</div> : null}
+      {onDismiss ? (
+        <IconButton className="banner__dismiss" label="Dismiss alert" onClick={onDismiss}>
+          <X size={18} aria-hidden="true" />
+        </IconButton>
+      ) : null}
     </section>
   );
 }

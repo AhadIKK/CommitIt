@@ -7,7 +7,7 @@
  * API and is never derived from commits; then the Goal Track; then the activity
  * since the last digest, which is quieter and carries no progress device at all.
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import type { Alert, AuthorGroup as AuthorGroupModel, Issue, TodaySnapshot } from "../api/types.js";
@@ -30,13 +30,22 @@ function repoSuffix(ref: string): string {
 }
 
 /** The one alert that interrupts. Never a secret value — the file path only. */
-function SecretBanner({ alert, repoQuery }: { alert: Alert; repoQuery: string }) {
+function SecretBanner({
+  alert,
+  repoQuery,
+  onDismiss,
+}: {
+  alert: Alert;
+  repoQuery: string;
+  onDismiss: () => void;
+}) {
   return (
     <Banner
       severity="danger"
       urgent
       title={alert.title}
       detail={`${alert.detail} The file was skipped, so no line of it reached the AI. ${alert.advice ?? ""}`.trim()}
+      onDismiss={onDismiss}
       actions={
         <>
           <Link className="btn btn--quiet" to={`/alerts${repoQuery}`}>
@@ -104,6 +113,7 @@ function unlinkedCount(groups: AuthorGroupModel[]): number {
 
 export function Today() {
   const { ref, repoId } = useRepoRef();
+  const [dismissedSecretId, setDismissedSecretId] = useState<string | null>(null);
   const query = useToday(repoId);
   const live = useLive(repoId);
   const wide = useMediaQuery(TRACK_QUERY);
@@ -218,7 +228,13 @@ export function Today() {
 
   return (
     <div className="screen today">
-      {secret ? <SecretBanner alert={secret} repoQuery={repoQuery} /> : null}
+      {secret && secret.id !== dismissedSecretId ? (
+        <SecretBanner
+          alert={secret}
+          repoQuery={repoQuery}
+          onDismiss={() => setDismissedSecretId(secret.id)}
+        />
+      ) : null}
 
       <LiveBar status={live.status} lastUpdated={live.lastUpdated} newActivity={live.newActivity} />
 

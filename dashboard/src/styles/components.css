@@ -333,6 +333,10 @@
   gap: var(--space-3);
   align-items: center;
 }
+.banner__dismiss {
+  flex: none;
+  margin-left: auto;
+}
 
 /* --- severity mark: glyph + word, never colour alone -------------------- */
 .mark {
