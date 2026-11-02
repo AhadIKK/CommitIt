@@ -59,7 +59,7 @@ describe("formatRecent", () => {
       commits: [commit({ secretFlag: true, message: "AWS_KEY=AKIAIOSFODNN7EXAMPLE" })],
       now: NOW,
     });
-    expect(out).toContain("🔑 possible secret — subject withheld");
+    expect(out).toContain("⚠️ possible secret — subject withheld");
     expect(out).not.toContain("AKIAIOSFODNN7EXAMPLE");
   });
 

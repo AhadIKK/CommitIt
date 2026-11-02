@@ -71,7 +71,7 @@ export function formatPush(opts: {
         const short = escapeHtml(c.sha.slice(0, 7));
         const msg = escapeHtml(c.message.split("\n")[0]?.slice(0, 80) ?? "");
         if (c.secretFlag) {
-          lines.push(`  🔑 <code>${short}</code> possible secret — file withheld`);
+          lines.push(`  ⚠️ <code>${short}</code> possible secret — file withheld`);
         } else if (c.isMerge && c.prNumber) {
           lines.push(`  <code>${short}</code> merge (PR #${c.prNumber})`);
         } else if (c.aiSummary && !c.degraded) {
@@ -159,7 +159,8 @@ export function formatSecretAlert(opts: {
   author?: string;
 }): string {
   return cap(
-    `🔑 Possible secret in <b>${escapeHtml(opts.repo)}</b> — <code>${escapeHtml(opts.sha.slice(0, 7))}</code>\n` +
+    `⚠️ <b>SECRET ALERT</b> — <b>${escapeHtml(opts.repo)}</b> — <code>${escapeHtml(opts.sha.slice(0, 7))}</code>\n` +
+      `Treat this as a live credential until you have checked it — rotate it if real.\n` +
       `File: <code>${escapeHtml(opts.file)}</code> (value withheld)` +
       (opts.author ? `\nBy: ${escapeHtml(opts.author)}` : ""),
   );
@@ -246,7 +247,7 @@ export function formatRecent(opts: {
     const where = multi ? `<code>${escapeHtml(c.repo)}</code> ` : "";
     const sha = `<code>${escapeHtml(c.sha.slice(0, 7))}</code>`;
     const cat = c.category ? ` <b>${escapeHtml(c.category)}</b>` : "";
-    if (c.secretFlag) return `${where}${sha}${cat} 🔑 possible secret — subject withheld`;
+    if (c.secretFlag) return `${where}${sha}${cat} ⚠️ possible secret — subject withheld`;
     const merge = c.isMerge ? " (merge)" : "";
     const issue = c.issueNumber ? ` → #${c.issueNumber}` : "";
     const when = c.at ? `, ${timeAgo(c.at, now)}` : "";

@@ -63,6 +63,14 @@ how one agent clobbers another's work.*
 
 *(Newest entries at top.)*
 
+### [2026-11-02] — Secret alerts look like incidents
+- **Agent:** OpenCode
+- **Summary:** `formatSecretAlert` used a key glyph and the phrase "Possible secret", which read like a normal note. It now leads with ⚠️ and bold `SECRET ALERT`, and carries the action: treat it as live until checked, rotate if real. The collapsed push line and `/recent` use the same caution glyph for consistency. Alerts were already `priority: true`, so this is presentation only.
+- **Why:** the alert the user received (`2033c33`) was a false positive — a key-shaped test fixture — but it was indistinguishable from a real leak. The wording now says to check rather than asserting a leak, without softening the urgency.
+- **Touched Files:** `src/formatter.ts`, `test/extras.test.ts`, `test/formatRecent.test.ts`, `changes.md`
+- **Tests:** `tsc` clean; formatter, recent and extras suites green.
+- **Handoff Note for Antigravity:** dashboard `secretFlag` rendering is unchanged; this is server-side Telegram copy only.
+
 ### [2026-11-01] — Failed sends stop being recorded as delivered
 - **Agent:** OpenCode
 - **Summary:** `dispatchDueNotifications` marked every digest `sent` without reading `sendMessage`'s result, so a chat that no longer exists looked healthy forever. It now reads the result: Telegram's permanent failures (`chat not found`, `bot was blocked`, `PEER_ID_INVALID`, …) go to `failed`, transient ones retry in two minutes for up to an hour. Telegram messages now mark a generated sentence with 🤖, because it sits where the subject used to be and was indistinguishable from one.

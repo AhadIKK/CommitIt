@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-11-02 — A secret alert now reads like an incident
+- The alert that arrived on Telegram was a key glyph and the words "Possible secret" — accurate, but it read like a commit note. It is the one message in the product that should stop someone mid-scroll.
+- It now opens with ⚠️ and a bold `SECRET ALERT`, names the repo and short SHA, and says what to do: *"Treat this as a live credential until you have checked it — rotate it if real."* The file path is still the only detail included; the value is never in the message, the database, or the logs.
+- The other two places a secret can appear — the collapsed push line and `/recent` — use the same caution glyph instead of the key, so the warning is consistent wherever it surfaces.
+- The false positive that prompted this (`2033c33`, a test fixture) is exactly why the wording says *check it* rather than *your key is leaked*. A heuristic alert cannot tell a fixture from a live key; it can only make the check impossible to postpone.
+- Secret alerts were already `priority: true`, so they bypass digest batching and quiet hours. That part was correct and is unchanged.
+
 ## 2026-11-01 — A failed send is no longer recorded as delivered
 - `dispatchDueNotifications` called `sendMessage` and marked the notification `sent` regardless of the result. A chat that no longer exists therefore looked permanently healthy: every digest failed, every row said delivered, and nothing anywhere recorded a problem. The placeholder chat `999999999` had been doing exactly that since it was created.
 - The result is now read. Telegram's own description decides the outcome: `chat not found`, `bot was blocked`, `user is deactivated`, `chat_id is empty` and `PEER_ID_INVALID` are permanent, so the rows go to `failed` instead of being retried forever. Anything else (429, 5xx, network) is transient and retried in two minutes, with a one-hour window so a genuinely broken send eventually stops instead of growing the queue. `isPermanentSendFailure()` is pure and tested; failures log the chat id and Telegram's description, never the body or the token.
