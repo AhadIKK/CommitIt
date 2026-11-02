@@ -1,4 +1,31 @@
+# Environments & secrets
 .env
+.env.*
 .env.local
+!.env.example
+
+# Build artifacts & packages
 dist
 node_modules
+.turbo
+.cache
+
+# Tests, mocks, fixtures, and reports
+test
+test-results
+e2e
+playwright-report
+*.test.ts
+*.spec.ts
+
+# Large docs, markdown & screenshots (3.7MB+)
+docs
+brand
+assets
+*.md
+
+# Developer tooling, lockfiles & scripts
+scripts
+.agent-lock
+.system_generated
+render.yaml

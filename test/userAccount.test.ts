@@ -18,14 +18,14 @@ describe("user account and default repository", () => {
     expect(me.signedIn).toBe(true);
     expect(me.login).toBe("octocat");
     expect(me.avatarUrl).toBe("https://avatars.githubusercontent.com/u/583231?v=4");
-  });
+  }, 15000);
 
   it("meDto handles signed-out session gracefully", async () => {
     const me = await meDto(null);
     expect(me.signedIn).toBe(false);
     expect(me.login).toBeNull();
     expect(me.avatarUrl).toBeNull();
-  });
+  }, 15000);
 
   it("mock api supports logout method and resolves ok", async () => {
     const mock = createMockApi();

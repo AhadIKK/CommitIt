@@ -71,6 +71,9 @@
     }
   ],
   "functions": {
+    "api/**/*.ts": {
+      "excludeFiles": "{docs/**,test/**,e2e/**,scripts/**,brand/**,assets/**,*.md,dashboard/**,public/**}"
+    },
     "api/product/**/*.ts": {
       "maxDuration": 45
     }
