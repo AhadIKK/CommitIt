@@ -134,6 +134,11 @@
 }
 .field__select {
   cursor: pointer;
+  box-sizing: border-box;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .field__hint {
   font-size: var(--type-small);
@@ -955,8 +960,10 @@
 .user-menu {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin-left: auto;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .user-menu__profile {
@@ -981,10 +988,21 @@
   font-size: var(--type-small);
   font-weight: 500;
   color: var(--ink);
-  max-width: 120px;
+  max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.user-menu__logout-text {
+  display: none;
+}
+@media (min-width: 48rem) {
+  .user-menu__login {
+    max-width: 130px;
+  }
+  .user-menu__logout-text {
+    display: inline;
+  }
 }
 @media (min-width: 60rem) {
   .user-menu__login {

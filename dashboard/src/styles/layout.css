@@ -41,6 +41,9 @@
   padding-top: env(safe-area-inset-top);
   background: var(--ground);
   border-bottom: var(--hairline) solid var(--line);
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
 }
 .strip__brand {
   display: flex;
@@ -61,14 +64,20 @@
    wordmark is never overlapped by the select at 360px. */
 .strip__switcher {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 11rem;
 }
 .field__select--strip {
   width: 100%;
-  max-width: 11rem;
+  max-width: 100%;
+  min-width: 0;
   min-height: 2.25rem;
+  height: 2.25rem;
   font-size: var(--type-small);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* --- the rail (desktop) ------------------------------------------------- */
