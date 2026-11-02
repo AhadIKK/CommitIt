@@ -72,10 +72,8 @@
   ],
   "functions": {
     "api/**/*.ts": {
+      "maxDuration": 45,
       "excludeFiles": "{docs/**,test/**,e2e/**,scripts/**,brand/**,assets/**,*.md,dashboard/**,public/**}"
-    },
-    "api/product/**/*.ts": {
-      "maxDuration": 45
     }
   },
   "headers": [
