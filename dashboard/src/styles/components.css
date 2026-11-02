@@ -986,6 +986,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+@media (min-width: 60rem) {
+  .user-menu__login {
+    max-width: 200px;
+  }
+}
+
 
 .user-menu__signin {
   font-size: var(--type-small);

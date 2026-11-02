@@ -90,6 +90,12 @@
     grid-template-columns: var(--rail-w) minmax(0, 1fr);
   }
   .strip {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 var(--space-8);
+  }
+  .strip__brand,
+  .strip__switcher {
     display: none;
   }
   .main {

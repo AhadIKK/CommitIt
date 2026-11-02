@@ -110,6 +110,7 @@ export function AppShell({
           <button type="button" className="lookup" onClick={() => window.alert("Look up")}>
             Look up <kbd>⌘K</kbd>
           </button>
+          <UserMenu />
           <button
             type="button"
             className="ld-tab"
