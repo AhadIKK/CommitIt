@@ -156,13 +156,11 @@ export function formatSecretAlert(opts: {
   branch: string;
   sha: string;
   file: string;
-  author?: string;
 }): string {
   return cap(
     `⚠️ <b>SECRET ALERT</b> — <b>${escapeHtml(opts.repo)}</b> — <code>${escapeHtml(opts.sha.slice(0, 7))}</code>\n` +
       `Treat this as a live credential until you have checked it — rotate it if real.\n` +
-      `File: <code>${escapeHtml(opts.file)}</code> (value withheld)` +
-      (opts.author ? `\nBy: ${escapeHtml(opts.author)}` : ""),
+      `File: <code>${escapeHtml(opts.file)}</code> (value withheld)`,
   );
 }
 

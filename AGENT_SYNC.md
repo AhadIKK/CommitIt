@@ -66,7 +66,7 @@ how one agent clobbers another's work.*
 
 ### [2026-11-02] — Secret alerts look like incidents
 - **Agent:** OpenCode
-- **Summary:** `formatSecretAlert` used a key glyph and the phrase "Possible secret", which read like a normal note. It now leads with ⚠️ and bold `SECRET ALERT`, and carries the action: treat it as live until checked, rotate if real. The collapsed push line and `/recent` use the same caution glyph for consistency. Alerts were already `priority: true`, so this is presentation only.
+- **Summary:** `formatSecretAlert` used a key glyph and the phrase "Possible secret", which read like a normal note. It now leads with ⚠️ and bold `SECRET ALERT`, and carries the action: treat it as live until checked, rotate if real. The author line was dropped at the user's request — the file and commit are the useful context. The collapsed push line and `/recent` use the same caution glyph for consistency. Alerts were already `priority: true`, so this is presentation only.
 - **Why:** the alert the user received (`2033c33`) was a false positive — a key-shaped test fixture — but it was indistinguishable from a real leak. The wording now says to check rather than asserting a leak, without softening the urgency.
 - **Touched Files:** `src/formatter.ts`, `test/extras.test.ts`, `test/formatRecent.test.ts`, `changes.md`
 - **Tests:** `tsc` clean; formatter, recent and extras suites green.

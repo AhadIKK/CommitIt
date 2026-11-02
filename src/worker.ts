@@ -207,7 +207,6 @@ async function processPush(job: JobRow, payload: PushPayload): Promise<void> {
           branch,
           sha: c.id,
           file: scanned.hits[0]?.file ?? "(commit message)",
-          author,
         }),
         { priority: true },
       );

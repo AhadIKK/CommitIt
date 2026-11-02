@@ -4,6 +4,7 @@
 - The alert that arrived on Telegram was a key glyph and the words "Possible secret" — accurate, but it read like a commit note. It is the one message in the product that should stop someone mid-scroll.
 - It now opens with ⚠️ and a bold `SECRET ALERT`, names the repo and short SHA, and says what to do: *"Treat this as a live credential until you have checked it — rotate it if real."* The file path is still the only detail included; the value is never in the message, the database, or the logs.
 - The other two places a secret can appear — the collapsed push line and `/recent` — use the same caution glyph instead of the key, so the warning is consistent wherever it surfaces.
+- The author line was removed: who pushed it is secondary to which file and which commit, and the alert stays focused on the action.
 - The false positive that prompted this (`2033c33`, a test fixture) is exactly why the wording says *check it* rather than *your key is leaked*. A heuristic alert cannot tell a fixture from a live key; it can only make the check impossible to postpone.
 - Secret alerts were already `priority: true`, so they bypass digest batching and quiet hours. That part was correct and is unchanged.
 

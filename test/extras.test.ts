@@ -51,7 +51,6 @@ describe("phase 6 formatters", () => {
       branch: "main",
       sha: "abc1234",
       file: "src/auth.ts",
-      author: "x",
     });
     expect(html).toContain("⚠️");
     expect(html).toContain("SECRET ALERT");
@@ -59,6 +58,7 @@ describe("phase 6 formatters", () => {
     expect(html).toContain("rotate it if real");
     expect(html).toContain("src/auth.ts");
     expect(html).toContain("withheld");
+    expect(html).not.toContain("By:");
     expect(html).not.toContain(SECRET);
   });
 
