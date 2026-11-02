@@ -181,21 +181,32 @@ export function Today() {
   }
 
   if (status === "empty" || !data) {
+    const hasRepo = Boolean(ref || data?.repo.fullName);
     return (
       <div className="screen today">
         <h1 className="display">Nothing here yet</h1>
         <StatePanel
-          title="No goals yet."
-          body="Create a milestone on GitHub and add issues to it. It will appear here as a goal, and every finished task moves its line forward."
+          title={hasRepo ? "No goals yet." : "No repository connected."}
+          body={
+            hasRepo
+              ? "Create a milestone on GitHub and add issues to it. It will appear here as a goal, and every finished task moves its line forward."
+              : "Connect a repository to start tracking milestones and activity."
+          }
           action={
-            <a
-              className="btn btn--primary"
-              href={`https://github.com/${data?.repo.fullName ?? ref}/milestones/new`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Create a milestone on GitHub
-            </a>
+            hasRepo ? (
+              <a
+                className="btn btn--primary"
+                href={`https://github.com/${data?.repo.fullName ?? ref}/milestones/new`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Create a milestone
+              </a>
+            ) : (
+              <Link className="btn btn--primary" to="/connect/github">
+                Connect a repo
+              </Link>
+            )
           }
         />
       </div>

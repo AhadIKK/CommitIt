@@ -71,6 +71,7 @@ export interface CommitItApi {
 
   /* onboarding ------------------------------------------------------------ */
   startGitHub(): Promise<{ url: string }>;
+  logout(): Promise<{ ok: boolean }>;
   chooseRepo(fullName: string): Promise<Me>;
   /** The chat being linked is per repository, so say which one. */
   startTelegramLink(repoRef?: string): Promise<TelegramLink>;

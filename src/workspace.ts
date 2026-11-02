@@ -496,6 +496,7 @@ export async function meDto(session: SessionUser | null): Promise<Me> {
   return {
     signedIn: session !== null,
     login: session?.login ?? null,
+    avatarUrl: session?.avatarUrl ?? null,
     repos,
     telegramLinked: session ? await telegramLinked(session.id) : false,
   };

@@ -9,6 +9,7 @@
 import { useEffect, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useTheme } from "../lib/theme.js";
+import { UserMenu } from "../components/UserMenu.js";
 
 const SECTIONS = [
   { to: "/app", label: "Overview", key: "o" },
@@ -105,6 +106,7 @@ export function AppShell({
           <span className="stripbar__crumb num">
             Workspace <span className="stripbar__sep">/</span> {section}
           </span>
+          <UserMenu />
           <button type="button" className="lookup" onClick={() => window.alert("Look up")}>
             Look up <kbd>⌘K</kbd>
           </button>

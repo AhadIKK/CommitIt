@@ -1,4 +1,8 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+
+const root = fileURLToPath(new URL(".", import.meta.url));
 
 // Map NodeNext-style `.js` relative imports (e.g. `../src/verify.js`)
 // to their `.ts` sources so vite-node can resolve them in tests.
@@ -10,6 +14,9 @@ export default defineConfig({
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
   },
   resolve: {
-    alias: [{ find: /^(\.\.?\/.*)\.js$/, replacement: "$1.ts" }],
+    alias: [
+      { find: /^(\.\.?\/.*)\.js$/, replacement: "$1.ts" },
+      { find: /^@src\/(.*)\.js$/, replacement: `${path.resolve(root, "src")}/$1.ts` },
+    ],
   },
 });

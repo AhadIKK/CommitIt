@@ -16,6 +16,7 @@ import type { Repo } from "../api/types.js";
 import { Logo } from "./brand.js";
 import { SignalDot } from "./glyphs.js";
 import { IconButton } from "./controls.js";
+import { UserMenu } from "./UserMenu.js";
 import { useTheme } from "../lib/theme.js";
 
 type NavItem = { to: string; label: string; Icon: typeof Activity };
@@ -60,7 +61,11 @@ function RepoSwitcher({
         value={repoRef}
         onChange={(e) => onChange(e.target.value)}
       >
-        {repos.length === 0 ? <option value={repoRef}>{repoRef}</option> : null}
+        {repos.length === 0 ? (
+          <option value="">No repository connected</option>
+        ) : !repoRef ? (
+          <option value="">Select a repository</option>
+        ) : null}
         {repos.map((r) => (
           <option key={r.id} value={r.fullName}>
             {r.fullName}
@@ -94,26 +99,8 @@ export function AppShell({
         Skip to content
       </a>
 
-      <header className="strip">
-        <span className="strip__brand">
-          <Logo size={24} />
-          <span className="strip__word">CommitIt</span>
-        </span>
-        <RepoSwitcher repoRef={repoRef} repos={repos} onChange={onRepoChange} compact />
-        <span className="strip__spacer" />
-        {hasNew ? (
-          <span className="is-new">
-            <SignalDot />
-            New
-          </span>
-        ) : null}
-        <IconButton label={nextLabel} onClick={toggle}>
-          <ThemeIcon size={18} strokeWidth={1.6} aria-hidden="true" />
-        </IconButton>
-      </header>
-
       <aside className="rail">
-        <div className="rail__brand">
+<div className="rail__brand">
           <Logo size={32} />
           <span className="rail__word">CommitIt</span>
         </div>
@@ -140,9 +127,30 @@ export function AppShell({
         </div>
       </aside>
 
-      <main className="main" id="main" tabIndex={-1}>
-        {children}
-      </main>
+      <div className="app__content">
+        <header className="strip">
+          <span className="strip__brand">
+            <Logo size={24} />
+            <span className="strip__word">CommitIt</span>
+          </span>
+          <RepoSwitcher repoRef={repoRef} repos={repos} onChange={onRepoChange} compact />
+          <span className="strip__spacer" />
+          {hasNew ? (
+            <span className="is-new">
+              <SignalDot />
+              New
+            </span>
+          ) : null}
+          <UserMenu />
+          <IconButton label={nextLabel} onClick={toggle}>
+            <ThemeIcon size={18} strokeWidth={1.6} aria-hidden="true" />
+          </IconButton>
+        </header>
+
+        <main className="main" id="main" tabIndex={-1}>
+          {children}
+        </main>
+      </div>
 
       <nav className="tabbar" aria-label="Main">
         {TABS.map(({ to, label, Icon }) => (

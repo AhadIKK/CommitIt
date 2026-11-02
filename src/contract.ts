@@ -212,6 +212,7 @@ export type Me = {
   signedIn: boolean;
   login: string | null;
   name?: string;
+  avatarUrl?: string | null;
   /** Repos this account can see. */
   repos: Repo[];
   /** The chat linked to this account, when there is one. */

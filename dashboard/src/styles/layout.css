@@ -8,6 +8,11 @@
 /* The ground is a flat fill. The product's motif — a circle whose area is a
    weight — belongs to the Goal Track, not to a background texture, and a ruled
    page behind every table only adds lines the content did not ask for. */
+.app__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 .app {
   min-height: 100dvh;
   display: grid;

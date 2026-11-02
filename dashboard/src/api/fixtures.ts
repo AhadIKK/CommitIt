@@ -598,6 +598,7 @@ export const me: Me = {
   signedIn: true,
   login: "ahad",
   name: "Ahad I K",
+  avatarUrl: "https://avatars.githubusercontent.com/u/1055745?v=4",
   repos,
   telegramLinked: true,
 };

@@ -23,7 +23,7 @@ import type {
  * design review with ?state=error): a screen still asks about a repository and
  * reports its own error, rather than loading forever.
  */
-export const DEFAULT_REPO = "syncurateam/syncura";
+export const DEFAULT_REPO = "";
 
 export const qk = {
   me: ["me"] as const,
@@ -161,7 +161,10 @@ export function screenState<T>(
   isEmpty: (data: T) => boolean,
   isPartial?: (data: T) => boolean,
 ): ScreenState<T> {
-  const { data, isPending, isError, error, refetch, isFetching } = query;
+  const { data, isPending, isError, error, refetch, isFetching, fetchStatus } = query;
+  if (fetchStatus === "idle" && data === undefined) {
+    return { data: undefined, status: "empty", error: null, retry: () => void refetch(), refetching: false };
+  }
   if (isError) {
     return {
       data,

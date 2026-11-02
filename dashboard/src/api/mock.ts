@@ -106,7 +106,7 @@ export function createMockApi(): CommitItApi {
   return {
     async me(): Promise<Me> {
       if (currentScenario() === "empty") {
-        return delay({ signedIn: true, login: "ahad", name: "Ahad I K", repos: fx.repos, telegramLinked: false });
+        return delay({ signedIn: true, login: "ahad", name: "Ahad I K", avatarUrl: "https://avatars.githubusercontent.com/u/1055745?v=4", repos: fx.repos, telegramLinked: false });
       }
       return guard(fx.me);
     },
@@ -217,6 +217,9 @@ export function createMockApi(): CommitItApi {
 
     async startGitHub(): Promise<{ url: string }> {
       return guard({ url: "https://github.com/apps/commitit/installations/new" });
+    },
+    async logout(): Promise<{ ok: boolean }> {
+      return guard({ ok: true }, 150);
     },
 
     async chooseRepo(fullName: string): Promise<Me> {

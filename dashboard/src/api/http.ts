@@ -75,6 +75,8 @@ export function createHttpApi(): CommitItApi {
       }),
     disconnect: (repoId) => json<void>(`${repoPath(repoId)}/connection`, { method: "DELETE" }),
 
+    logout: () => json<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+
     startGitHub: () => json<{ url: string }>("/api/auth/github/start"),
     chooseRepo: (fullName: string) =>
       json<Me>("/api/auth/github/repo", { method: "POST", body: JSON.stringify({ fullName }) }),
