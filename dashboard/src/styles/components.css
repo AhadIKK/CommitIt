@@ -299,6 +299,7 @@
 
 /* --- banner (severity carries icon + word + colour) --------------------- */
 .banner {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
@@ -320,6 +321,8 @@
 .banner__body {
   flex: 1 1 18rem;
   min-width: 0;
+  /* Leave the close control its own corner on every width. */
+  padding-right: 2.75rem;
 }
 .banner__title {
   font-family: var(--font-ui);
@@ -337,10 +340,16 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
+  /* Keep the buttons clear of the close control when they share a row. */
+  padding-right: 2.75rem;
 }
 .banner__dismiss {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 1;
   flex: none;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 /* --- severity mark: glyph + word, never colour alone -------------------- */
@@ -888,6 +897,66 @@
   color: var(--muted);
 }
 
+@media (max-width: 47.999rem) {
+  /* Phones: three readable bands instead of five squeezed columns, and the row
+     stops indenting by the node column — 36px is a tenth of a 360px screen,
+     paying for an alignment nobody can see. Placed after the base rules so
+     these win without !important. */
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "cat sha"
+      "subject subject"
+      "task toggle";
+    gap: 2px var(--space-3);
+    padding: var(--space-3) 0;
+    align-items: center;
+  }
+  .row + .row {
+    margin-left: 0;
+  }
+  .row__cat {
+    grid-area: cat;
+  }
+  .row__subject {
+    grid-area: subject;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+    padding: 2px 0;
+  }
+  /* Opening the row is how a phone reads the rest of a clipped summary. */
+  .row[data-expanded="true"] .row__subject {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+  }
+  .row__sha {
+    grid-area: sha;
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+  }
+  .row__task {
+    grid-area: task;
+  }
+  .row__toggle {
+    grid-area: toggle;
+    /* A text link still needs a thumb-sized target on a phone. */
+    min-height: 2.75rem;
+    padding-inline: var(--space-2);
+    margin-right: calc(-1 * var(--space-2));
+  }
+  .row__detail {
+    grid-column: 1 / -1;
+  }
+}
+
 /* --- group head: the author, with their count beside them -------------- */
 .group {
   padding-top: var(--space-6);
@@ -917,6 +986,7 @@
 .icon-btn {
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: 2.75rem;
   height: 2.75rem;
   border: 0;

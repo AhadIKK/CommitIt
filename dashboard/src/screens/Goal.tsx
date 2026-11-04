@@ -18,7 +18,7 @@ import { useMediaQuery } from "../lib/useMedia.js";
 import { progressSentence, sizeLabel, weightOf } from "../lib/weight.js";
 import { relativeTime } from "../lib/format.js";
 
-const TRACK_QUERY = "(min-width: 60rem)";
+const TRACK_QUERY = "(min-width: 40rem)";
 
 /**
  * Who owns a task, and whether they are a person we actually know. The name is

@@ -23,7 +23,7 @@ import { useMediaQuery } from "../lib/useMedia.js";
 import { progressSentence } from "../lib/weight.js";
 import { clockTime, relativeTime } from "../lib/format.js";
 
-const TRACK_QUERY = "(min-width: 60rem)";
+const TRACK_QUERY = "(min-width: 40rem)";
 
 function repoSuffix(ref: string): string {
   return `?repo=${encodeURIComponent(ref)}`;

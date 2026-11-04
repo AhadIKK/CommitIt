@@ -92,6 +92,22 @@ for (const viewport of VIEWPORTS) {
   });
 }
 
+test("the phone tab bar gives every tab its own column", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto("/today");
+  await page.locator(".tabbar").waitFor();
+
+  const shape = await page.evaluate(() => ({
+    columns: getComputedStyle(document.querySelector(".tabbar")!).gridTemplateColumns.split(" ").length,
+    tabs: document.querySelectorAll(".tabbar .tab").length,
+  }));
+
+  // There are three tabs. The bar used to declare four columns, so the three
+  // sat left of centre with an empty quarter on the right.
+  expect(shape.tabs).toBe(3);
+  expect(shape.columns).toBe(shape.tabs);
+});
+
 test("a phone keeps the goal track readable", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto("/goals/m_auth");

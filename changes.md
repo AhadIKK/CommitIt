@@ -1,5 +1,14 @@
 # Changes
 
+## 2026-11-04 — The product reads on a phone instead of merely fitting
+- The phone layout was built from desktop pieces squeezed down: a 36px indent on every commit row, an 88px category column, five header controls competing for 360px, and a bottom bar that declared four columns for three tabs. The screenshot from the real device showed all of it at once — clipped wordmark, repo switcher reduced to `sy…`, subjects cut to twenty characters, and tabs sitting left of centre.
+- Commit rows now have three bands below 48rem: category and SHA, the subject at full width across two lines, then task and the detail toggle. The node-column indent is removed on phones; alignment that costs a tenth of the screen is not alignment. Opening a row unclamps the subject, so the rest of a long summary is readable without a hover.
+- The header drops the wordmark below 40rem and the `@handle` below 48rem, and the repo switcher takes the freed space instead of truncating to two letters. Touch input gets 44px targets for the switcher, logout and theme controls; the logout button used to be a 30px icon.
+- The bottom tab bar is now three columns for three tabs. It had been four since the nav was reduced, which pushed Today/Goals/Settings left and left an empty quarter on the right.
+- Tablets get 24px gutters at 48–60rem, and the Goal Track turns horizontal from 40rem instead of waiting for the desktop rail, so a 768px screen no longer spends half a page on vertical dots with the activity below the fold.
+- The banner close control is pinned to the corner instead of wrapping onto its own flex row, which had left a large empty band under the alert on tablets.
+- Guarded by a new responsive test that asserts the tab bar has one column per tab, plus the existing no-overflow matrix at 360 and 1280. `npm test`: 487 passed. `e2e/responsive.spec.ts`: 22 passed. Five smoke cases still fail for reasons unrelated to layout (`state=error` renders the empty state, and the default repo has no tracked goal); they fail identically with these changes stashed.
+
 ## 2026-11-02 — A secret alert now reads like an incident
 - The alert that arrived on Telegram was a key glyph and the words "Possible secret" — accurate, but it read like a commit note. It is the one message in the product that should stop someone mid-scroll.
 - It now opens with ⚠️ and a bold `SECRET ALERT`, names the repo and short SHA, and says what to do: *"Treat this as a live credential until you have checked it — rotate it if real."* The file path is still the only detail included; the value is never in the message, the database, or the logs.

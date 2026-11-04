@@ -49,6 +49,7 @@ node scripts/agent-lock.mjs note --agent OpenCode --text "context for the other 
 how one agent clobbers another's work.*
 
 <!-- notes:start -->
+- **OpenCode** (2026-11-04T17:31:51Z): Mobile/tablet pass is in and built: commit rows are 3 bands under 48rem (category+sha, 2-line subject, task+Details), the 36px indent and 88px category column are gone on phones, header drops wordmark/@handle and lets the repo switcher fill, tabbar is now 3 columns instead of 4, tablets get 24px gutters and a horizontal goal track from 40rem. Opening a row unclamps the subject. 487 unit tests + 22 responsive e2e pass. Note: 5 smoke cases fail pre-existing (state=error shows empty; default repo has no goal), confirmed with these changes stashed. Public assets rebuilt.
 - **antigravity** (2026-11-02T07:04:38Z): Removed default syncura repo (now defaults to clean empty selection); added top-right GitHub profile with avatar and confirmed logout dialog across both shells.
 - **Copilot** (2026-11-02T07:17:52Z): Secret-alert banner now has an accessible dismiss button; alert remains available on Alerts. Build and 69 dashboard tests pass.
 - **OpenCode** (2026-11-02T04:27:44Z): Dropped the author line from the secret alert (bf72b43, prod 6n85p555i). The alert now ends at the file path; repo + short sha + file + action are the whole message. 483 tests green. A corrected sample was sent to the operator's chat, marked TEST/sample.
@@ -66,6 +67,14 @@ how one agent clobbers another's work.*
 ## Handoff & Activity Log
 
 *(Newest entries at top.)*
+
+### [2026-11-04] — Phone and tablet responsive pass
+- **Agent:** OpenCode
+- **Summary:** The phone layout was desktop pieces squeezed down: a 36px row indent, an 88px category column, five header controls in 360px, and a bottom bar with four columns for three tabs. Below 48rem a commit row is now three bands — category + SHA, subject at full width over two lines, task + Details — with the indent removed and 44px targets for the switcher, logout, theme and Details. Opening a row unclamps the subject so a clipped summary can be finished. The header drops the wordmark below 40rem and the @handle below 48rem; the repo switcher takes the space instead of truncating to `sy…`.
+- **Tablet:** 24px gutters from 48rem, and the Goal Track goes horizontal from 40rem instead of waiting for the desktop rail. The banner close control is absolute, so it no longer wraps and leaves an empty band.
+- **Touched Files:** `dashboard/src/styles/layout.css`, `dashboard/src/styles/components.css`, `dashboard/src/screens/Today.tsx`, `dashboard/src/screens/Goal.tsx`, `e2e/responsive.spec.ts`, `changes.md`, rebuilt `public/`
+- **Tests:** `npm test` 487 passed; `e2e/responsive.spec.ts` 22 passed. Five smoke cases fail for pre-existing reasons (`state=error` shows the empty state; default repo has no tracked goal) — they fail identically with this work stashed.
+- **Handoff Note for Antigravity:** the mobile row uses named grid areas and removes the node-column indent under 48rem. The tab bar is `repeat(3, 1fr)`; a new test asserts columns == tabs. Built assets are refreshed, so deploy after a pull.
 
 ### [2026-11-02] — Secret alerts look like incidents
 - **Agent:** OpenCode

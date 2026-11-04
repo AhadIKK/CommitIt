@@ -80,6 +80,53 @@
   white-space: nowrap;
 }
 
+/* Phones: the wordmark and the @handle are the first things to go. The switcher
+   then takes every pixel between the mark and the account controls, instead of
+   being clipped to an unreadable "s…". */
+@media (max-width: 39.999rem) {
+  .strip__word {
+    display: none;
+  }
+  .strip__spacer {
+    display: none;
+  }
+  .strip__switcher {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+}
+@media (max-width: 47.999rem) {
+  .user-menu__login {
+    display: none;
+  }
+}
+@media (min-width: 40rem) and (max-width: 59.999rem) {
+  .strip__switcher {
+    max-width: 14rem;
+  }
+}
+
+/* Touch: the header controls are 44px even when they look like small icons. */
+@media (pointer: coarse) {
+  .field__select--strip {
+    min-height: 2.75rem;
+    height: 2.75rem;
+  }
+  .user-menu__logout-btn {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+@media (min-width: 48rem) and (max-width: 59.999rem) {
+  .main {
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
+  }
+}
+
 /* --- the rail (desktop) ------------------------------------------------- */
 .rail {
   display: none;
@@ -184,7 +231,7 @@
   bottom: 0;
   z-index: var(--z-tabbar);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   background: var(--ground);
   border-top: var(--hairline) solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
