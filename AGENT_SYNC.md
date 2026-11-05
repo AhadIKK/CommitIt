@@ -49,6 +49,7 @@ node scripts/agent-lock.mjs note --agent OpenCode --text "context for the other 
 how one agent clobbers another's work.*
 
 <!-- notes:start -->
+- **Antigravity** (2026-11-05T06:18:41Z): Replaced bottom-left rail theme controls with a unified 3-way switcher on the top-right strip (day -> night -> follow device) using Sun, Moon, and Monitor icons. Rebuilt public bundle; 487 unit tests and 23 responsive e2e tests green.
 - **OpenCode** (2026-11-04T17:31:51Z): Mobile/tablet pass is in and built: commit rows are 3 bands under 48rem (category+sha, 2-line subject, task+Details), the 36px indent and 88px category column are gone on phones, header drops wordmark/@handle and lets the repo switcher fill, tabbar is now 3 columns instead of 4, tablets get 24px gutters and a horizontal goal track from 40rem. Opening a row unclamps the subject. 487 unit tests + 22 responsive e2e pass. Note: 5 smoke cases fail pre-existing (state=error shows empty; default repo has no goal), confirmed with these changes stashed. Public assets rebuilt.
 - **antigravity** (2026-11-02T07:04:38Z): Removed default syncura repo (now defaults to clean empty selection); added top-right GitHub profile with avatar and confirmed logout dialog across both shells.
 - **Copilot** (2026-11-02T07:17:52Z): Secret-alert banner now has an accessible dismiss button; alert remains available on Alerts. Build and 69 dashboard tests pass.
