@@ -68,6 +68,13 @@ how one agent clobbers another's work.*
 
 *(Newest entries at top.)*
 
+### [2026-11-05] — Phone header: one height, one surface
+- **Agent:** OpenCode
+- **Summary:** The header mixed a 24px logo, 36px switcher, 24px avatar, bordered logout and bare theme glyph. Now every control is 44px tall with the same radius and field surface: switcher, account slot, logout, theme. Avatar is 36px inside the 44px slot; logo mark is 32px; strip is 60px.
+- **Touched Files:** `dashboard/src/components/AppShell.tsx`, `dashboard/src/styles/layout.css`, `dashboard/src/styles/components.css`, `dashboard/src/styles/tokens.css`, `e2e/responsive.spec.ts`, `changes.md`, rebuilt `public/`
+- **Tests:** `npm test` 487 passed; `e2e/responsive` 23 passed (new header-uniformity guard).
+- **Handoff Note for Antigravity:** header controls now use `--strip-h: 60px` and a 2.75rem control height. The `.strip .icon-btn` rule adds the border that used to belong only to logout. Built assets refreshed.
+
 ### [2026-11-04] — Phone and tablet responsive pass
 - **Agent:** OpenCode
 - **Summary:** The phone layout was desktop pieces squeezed down: a 36px row indent, an 88px category column, five header controls in 360px, and a bottom bar with four columns for three tabs. Below 48rem a commit row is now three bands — category + SHA, subject at full width over two lines, task + Details — with the indent removed and 44px targets for the switcher, logout, theme and Details. Opening a row unclamps the subject so a clipped summary can be finished. The header drops the wordmark below 40rem and the @handle below 48rem; the repo switcher takes the space instead of truncating to `sy…`.

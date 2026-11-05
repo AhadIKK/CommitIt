@@ -995,6 +995,12 @@
   color: var(--ink);
   cursor: pointer;
 }
+/* In the strip the theme control sits beside a bordered switcher and a bordered
+   logout; a bare glyph read as a different class of control. */
+.strip .icon-btn {
+  background: var(--field-bg);
+  border: var(--edge-width) solid var(--field-line);
+}
 .icon-btn:hover {
   background: var(--surface);
 }
@@ -1039,14 +1045,23 @@
 .user-menu__profile {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
+  height: 2.75rem;
   text-decoration: none;
   color: var(--ink);
 }
+@media (max-width: 47.999rem) {
+  /* The avatar gets the same 44px slot as the controls beside it, even though
+     it is a status rather than a button. */
+  .user-menu__profile {
+    width: 2.75rem;
+  }
+}
 
 .user-menu__avatar {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: var(--hairline) solid var(--line);
   object-fit: cover;
@@ -1097,11 +1112,14 @@
 .user-menu__logout-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  background: transparent;
-  border: var(--hairline) solid var(--line);
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  background: var(--field-bg);
+  border: var(--edge-width) solid var(--field-line);
   border-radius: var(--radius-control);
-  padding: 4px 8px;
+  padding: 0 var(--space-2);
   font-size: var(--type-micro);
   color: var(--muted);
   cursor: pointer;

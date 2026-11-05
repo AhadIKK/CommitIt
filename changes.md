@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-11-05 — The phone header is one row of one control family
+- The header had four different sizes in a 56px strip: a 24px logo, a 36px repo switcher, a 24px avatar, a bordered logout and a bare theme glyph. It read as five unrelated things sharing a line.
+- Everything that is a control is now 44px tall with the same 6px radius and the same field surface: the repo switcher, the account slot, logout and the theme toggle. The avatar is 36px inside the 44px account slot; the theme button gained the border it was missing.
+- The logo mark goes from 24px to 32px, and the strip from 56px to 60px, so 44px controls have 8px of breathing room above and below.
+- The wordmark and `@handle` still disappear on phones; the switcher still takes their width, so nothing new is competing for 360px.
+- Guarded by an e2e test that asserts all four header controls share one height, the logo is at least 32px, and the avatar at least 36px. `npm test`: 487 passed. `e2e/responsive`: 23 passed.
+
 ## 2026-11-04 — The product reads on a phone instead of merely fitting
 - The phone layout was built from desktop pieces squeezed down: a 36px indent on every commit row, an 88px category column, five header controls competing for 360px, and a bottom bar that declared four columns for three tabs. The screenshot from the real device showed all of it at once — clipped wordmark, repo switcher reduced to `sy…`, subjects cut to twenty characters, and tabs sitting left of centre.
 - Commit rows now have three bands below 48rem: category and SHA, the subject at full width across two lines, then task and the detail toggle. The node-column indent is removed on phones; alignment that costs a tenth of the screen is not alignment. Opening a row unclamps the subject, so the rest of a long summary is readable without a hover.

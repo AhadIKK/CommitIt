@@ -113,7 +113,7 @@
 
   /* --- layout ------------------------------------------------------------- */
   --rail-w: 240px;
-  --strip-h: 56px;
+  --strip-h: 60px;
   --tabbar-h: 60px;
   --content-max: 960px;
   --landing-max: 1180px;

@@ -108,6 +108,35 @@ test("the phone tab bar gives every tab its own column", async ({ page }) => {
   expect(shape.columns).toBe(shape.tabs);
 });
 
+test("the phone header controls share one height and a larger mark", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto("/today");
+  await page.locator(".strip").waitFor();
+  await page.locator(".user-menu__profile").waitFor();
+
+  const shape = await page.evaluate(() => {
+    const h = (sel: string) => Math.round(document.querySelector(sel)!.getBoundingClientRect().height);
+    const w = (sel: string) => Math.round(document.querySelector(sel)!.getBoundingClientRect().width);
+    return {
+      controls: [
+        ".field__select--strip",
+        ".user-menu__profile",
+        ".user-menu__logout-btn",
+        ".strip .icon-btn",
+      ].map(h),
+      logo: w(".strip__brand svg"),
+      avatar: w(".user-menu__avatar"),
+    };
+  });
+
+  // One row, one height. A 36px avatar inside the 44px account slot reads as
+  // the same control family as the switcher and the two buttons.
+  expect(new Set(shape.controls).size).toBe(1);
+  expect(shape.controls[0]).toBe(44);
+  expect(shape.logo).toBeGreaterThanOrEqual(32);
+  expect(shape.avatar).toBeGreaterThanOrEqual(36);
+});
+
 test("a phone keeps the goal track readable", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto("/goals/m_auth");

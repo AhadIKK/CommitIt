@@ -130,7 +130,7 @@ export function AppShell({
       <div className="app__content">
         <header className="strip">
           <span className="strip__brand">
-            <Logo size={24} />
+            <Logo size={32} />
             <span className="strip__word">CommitIt</span>
           </span>
           <RepoSwitcher repoRef={repoRef} repos={repos} onChange={onRepoChange} compact />
