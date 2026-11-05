@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type ThemeName = "night" | "day";
+export type ThemeMode = "system" | "day" | "night";
 
 const KEY = "commitit-theme";
 
@@ -31,26 +32,30 @@ function appliedTheme(): ThemeName {
 }
 
 export function useTheme() {
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    const saved = savedTheme();
+    return saved ? saved : "system";
+  });
   const [theme, setTheme] = useState<ThemeName>(appliedTheme);
-  const [overridden, setOverridden] = useState<boolean>(() => savedTheme() !== null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  // While the person has not made a choice, keep following the system.
+  // While in system mode, keep following the system media query.
   useEffect(() => {
-    if (overridden) return;
+    if (mode !== "system") return;
     if (typeof window.matchMedia !== "function") return;
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = () => setTheme(mq.matches ? "day" : "night");
+    setTheme(mq.matches ? "day" : "night");
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, [overridden]);
+  }, [mode]);
 
   const set = useCallback((next: ThemeName) => {
+    setMode(next);
     setTheme(next);
-    setOverridden(true);
     try {
       localStorage.setItem(KEY, next);
     } catch {
@@ -58,10 +63,8 @@ export function useTheme() {
     }
   }, []);
 
-  const toggle = useCallback(() => set(theme === "night" ? "day" : "night"), [theme, set]);
-
   const useSystem = useCallback(() => {
-    setOverridden(false);
+    setMode("system");
     try {
       localStorage.removeItem(KEY);
     } catch {
@@ -70,5 +73,19 @@ export function useTheme() {
     setTheme(systemTheme());
   }, []);
 
-  return { theme, toggle, set, useSystem, overridden };
+  // 3-way cycle: system -> day -> night -> system
+  const cycle = useCallback(() => {
+    if (mode === "system") {
+      set("day");
+    } else if (mode === "day") {
+      set("night");
+    } else {
+      useSystem();
+    }
+  }, [mode, set, useSystem]);
+
+  const toggle = cycle;
+  const overridden = mode !== "system";
+
+  return { theme, mode, cycle, toggle, set, useSystem, overridden };
 }

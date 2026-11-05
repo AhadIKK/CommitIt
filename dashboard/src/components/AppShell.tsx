@@ -11,7 +11,7 @@
  */
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { Activity, Bell, FolderGit2, MessageSquare, Moon, Settings2, Sun, Target, Users } from "lucide-react";
+import { Activity, Bell, FolderGit2, MessageSquare, Monitor, Moon, Settings2, Sun, Target, Users } from "lucide-react";
 import type { Repo } from "../api/types.js";
 import { Logo } from "./brand.js";
 import { SignalDot } from "./glyphs.js";
@@ -89,9 +89,14 @@ export function AppShell({
   onRepoChange: (next: string) => void;
   hasNew: boolean;
 }) {
-  const { theme, toggle, useSystem, overridden } = useTheme();
-  const nextLabel = theme === "night" ? "Switch to the day theme" : "Switch to the night theme";
-  const ThemeIcon = theme === "night" ? Moon : Sun;
+  const { mode, cycle } = useTheme();
+  const nextLabel =
+    mode === "system"
+      ? "Switch to the day theme (following device)"
+      : mode === "day"
+        ? "Switch to the night theme"
+        : "Switch to follow device theme";
+  const ThemeIcon = mode === "system" ? Monitor : mode === "day" ? Sun : Moon;
 
   return (
     <div className="app">
@@ -100,7 +105,7 @@ export function AppShell({
       </a>
 
       <aside className="rail">
-<div className="rail__brand">
+        <div className="rail__brand">
           <Logo size={32} />
           <span className="rail__word">CommitIt</span>
         </div>
@@ -113,18 +118,6 @@ export function AppShell({
             </NavLink>
           ))}
         </nav>
-        <div className="rail__foot">
-          <IconButton label={nextLabel} onClick={toggle}>
-            <ThemeIcon size={18} strokeWidth={1.6} aria-hidden="true" />
-          </IconButton>
-          {overridden ? (
-            <button type="button" className="btn btn--inline" onClick={useSystem}>
-              Follow system
-            </button>
-          ) : (
-            <span className="micro muted">Following system</span>
-          )}
-        </div>
       </aside>
 
       <div className="app__content">
@@ -142,7 +135,7 @@ export function AppShell({
             </span>
           ) : null}
           <UserMenu />
-          <IconButton label={nextLabel} onClick={toggle}>
+          <IconButton label={nextLabel} onClick={cycle}>
             <ThemeIcon size={18} strokeWidth={1.6} aria-hidden="true" />
           </IconButton>
         </header>
