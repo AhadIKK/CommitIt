@@ -11,13 +11,15 @@ export function UserMenu() {
   const user = me.data;
   if (!user || !user.signedIn || !user.login) {
     return (
-      <a
-        href="/api/auth/login"
-        className="user-menu__signin"
-        title="Sign in with GitHub"
-      >
-        Sign in
-      </a>
+      <div className="user-menu">
+        <a
+          href="/api/auth/login"
+          className="user-menu__signin"
+          title="Sign in with GitHub"
+        >
+          Sign in
+        </a>
+      </div>
     );
   }
 

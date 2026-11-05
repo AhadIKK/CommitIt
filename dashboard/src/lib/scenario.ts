@@ -5,9 +5,9 @@
  *
  * normal | slow | empty | error | partial | stale | offline | burst
  */
-export type Scenario = "normal" | "slow" | "empty" | "error" | "partial" | "stale" | "offline" | "burst";
+export type Scenario = "normal" | "slow" | "empty" | "error" | "partial" | "stale" | "offline" | "burst" | "signed-out";
 
-const ALL: Scenario[] = ["normal", "slow", "empty", "error", "partial", "stale", "offline", "burst"];
+const ALL: Scenario[] = ["normal", "slow", "empty", "error", "partial", "stale", "offline", "burst", "signed-out"];
 
 export function currentScenario(search?: string): Scenario {
   const q = search ?? (typeof window === "undefined" ? "" : window.location.search);
@@ -31,6 +31,8 @@ export function scenarioLabel(s: Scenario): string | null {
       return "Offline state: the live connection is down.";
     case "burst":
       return "100-commit burst: the busiest repo we have.";
+    case "signed-out":
+      return "Signed-out state: a new visitor without a connected account.";
     default:
       return null;
   }

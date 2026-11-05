@@ -1097,16 +1097,40 @@
 
 
 .user-menu__signin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  height: 2.75rem;
+  padding: 0 var(--space-3);
+  font-family: var(--font-ui);
   font-size: var(--type-small);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
   color: var(--ink);
-  text-decoration: none;
-  border: var(--hairline) solid var(--line);
-  padding: 4px 10px;
+  background: var(--field-bg);
+  border: var(--edge-width) solid var(--field-line);
   border-radius: var(--radius-control);
-  margin-left: auto;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition:
+    background-color var(--dur-press) var(--ease-out),
+    border-color var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out),
+    opacity var(--dur-press) var(--ease-out);
 }
 .user-menu__signin:hover {
+  background: var(--surface);
   border-color: var(--edge);
+  color: var(--ink);
+  text-decoration: none;
+}
+.user-menu__signin:active {
+  opacity: 0.8;
 }
 
 .user-menu__logout-btn {

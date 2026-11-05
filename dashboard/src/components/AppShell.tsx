@@ -62,9 +62,9 @@ function RepoSwitcher({
         onChange={(e) => onChange(e.target.value)}
       >
         {repos.length === 0 ? (
-          <option value="">No repository connected</option>
+          <option value="">{compact ? "No repo connected" : "No repository connected"}</option>
         ) : !repoRef ? (
-          <option value="">Select a repository</option>
+          <option value="">{compact ? "Select repo" : "Select a repository"}</option>
         ) : null}
         {repos.map((r) => (
           <option key={r.id} value={r.fullName}>

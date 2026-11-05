@@ -108,6 +108,82 @@ test("the phone tab bar gives every tab its own column", async ({ page }) => {
   expect(shape.columns).toBe(shape.tabs);
 });
 
+test("the phone tab bar is a floating pill hovering in front of other UI", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto("/today");
+  await page.locator(".tabbar").waitFor();
+
+  const pill = await page.evaluate(() => {
+    const el = document.querySelector(".tabbar")!;
+    const style = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    const winHeight = window.innerHeight;
+    const bottomGap = Math.round(winHeight - rect.bottom);
+    const borderRadius = parseFloat(style.borderRadius);
+
+    return {
+      columns: style.gridTemplateColumns.split(" ").length,
+      tabs: document.querySelectorAll(".tabbar .tab").length,
+      isFloating: bottomGap > 0,
+      bottomGap,
+      borderRadius,
+      hasBackdropFilter:
+        style.backdropFilter.includes("blur") ||
+        ((style as unknown as Record<string, string>)["webkitBackdropFilter"]?.includes("blur") ?? false),
+      zIndex: parseInt(style.zIndex, 10),
+      maxWidth: parseFloat(style.maxWidth),
+    };
+  });
+
+  expect(pill.tabs).toBe(3);
+  expect(pill.columns).toBe(pill.tabs);
+  expect(pill.isFloating).toBe(true);
+  expect(pill.bottomGap).toBeGreaterThanOrEqual(8);
+  expect(pill.borderRadius).toBeGreaterThanOrEqual(24);
+  expect(pill.hasBackdropFilter).toBe(true);
+  expect(pill.zIndex).toBeGreaterThanOrEqual(30);
+  expect(pill.maxWidth).toBeLessThanOrEqual(360);
+});
+
+test("the phone header controls when signed out share one 44px height with no text wrapping", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto("/connect/github?state=signed-out");
+  await page.locator(".strip").waitFor();
+  await page.locator(".field__select--strip").waitFor();
+  await page.locator(".user-menu__signin").waitFor();
+  await page.locator(".strip .icon-btn").waitFor();
+
+  const shape = await page.evaluate(() => {
+    const el = (sel: string) => document.querySelector(sel);
+    const h = (sel: string) => {
+      const target = el(sel);
+      return target ? Math.round(target.getBoundingClientRect().height) : -1;
+    };
+    const signin = document.querySelector(".user-menu__signin") as HTMLElement;
+    const select = document.querySelector(".field__select--strip") as HTMLSelectElement;
+    const root = document.documentElement;
+
+    return {
+      controls: [
+        ".field__select--strip",
+        ".user-menu__signin",
+        ".strip .icon-btn",
+      ].map(h),
+      signinText: signin?.textContent?.trim(),
+      signinWrapped: signin ? signin.clientHeight > 44 || signin.scrollHeight > signin.clientHeight + 1 : true,
+      docOverflow: root.scrollWidth - root.clientWidth,
+      selectValue: select?.selectedOptions[0]?.text,
+    };
+  });
+
+  expect(new Set(shape.controls).size).toBe(1);
+  expect(shape.controls[0]).toBe(44);
+  expect(shape.signinText).toBe("Sign in");
+  expect(shape.signinWrapped).toBe(false);
+  expect(shape.docOverflow).toBeLessThanOrEqual(1);
+  expect(shape.selectValue).toBe("No repo connected");
+});
+
 test("the phone header controls share one height and a larger mark", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto("/today");
